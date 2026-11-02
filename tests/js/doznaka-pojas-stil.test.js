@@ -1,0 +1,13 @@
+'use strict';
+const assert=require('assert'),{izvor}=require('./_izvor');
+const src=izvor();let n=0;const t=(m,f)=>{f();n++;console.log('  ok  '+m);};
+const fn=name=>{const i=src.indexOf('function '+name+'(');assert(i>=0,name);let d=0,k=src.indexOf('{',i);for(let j=k;j<src.length;j++){if(src[j]==='{')d++;else if(src[j]==='}'&&--d===0)return src.slice(i,j+1);}};
+const store={};
+const env={localStorage:{getItem:k=>store[k]??null,setItem:(k,v)=>{store[k]=v;}},_DOZ_POJAS_KEY:'k',_DOZ_POJAS_DEF:{vidljiv:true,nacin:'korisnik',col:'#4ade80',op:0.18,wt:1.5,dash:false}};
+const api=new Function(...Object.keys(env),['_dozPojasStil','_dozPojasSnimi','_dozPojasBoja'].map(fn).join('\n')+';return {_dozPojasStil,_dozPojasSnimi,_dozPojasBoja};')(...Object.values(env));
+t('zadano: vidljivo, boja po projektantu',()=>{const s=api._dozPojasStil();assert.strictEqual(s.vidljiv,true);assert.strictEqual(api._dozPojasBoja(s,'#f00'),'#f00');});
+t('jedna boja pobjeđuje boju projektanta',()=>{api._dozPojasSnimi({vidljiv:true,nacin:'jedna',col:'#123456',op:.3,wt:2,dash:true});const s=api._dozPojasStil();assert.strictEqual(api._dozPojasBoja(s,'#f00'),'#123456');assert.strictEqual(s.dash,true);});
+t('skriveno se pamti',()=>{api._dozPojasSnimi({...api._dozPojasStil(),vidljiv:false});assert.strictEqual(api._dozPojasStil().vidljiv,false);});
+t('pokvaren zapis i nevaljane vrijednosti vraćaju sigurno zadano',()=>{store.k='{{';assert.strictEqual(api._dozPojasStil().op,0.18);store.k=JSON.stringify({col:'zelena',op:9,wt:-3});const s=api._dozPojasStil();assert.strictEqual(s.col,'#4ade80');assert.strictEqual(s.op,0.7);assert.strictEqual(s.wt,0);});
+t('render pojasa poštuje skrivanje prije računice i primjenjuje stil',()=>{assert(/if \(!_dozPojasStil\(\)\.vidljiv\) return;[\s\S]{0,200}_dozComputeBands/.test(src));assert(/weight: pst\.wt/.test(src)&&/fillOpacity: pst\.op/.test(src));});
+console.log(n+' prošlo, 0 palo');

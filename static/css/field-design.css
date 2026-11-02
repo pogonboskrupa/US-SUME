@@ -1291,3 +1291,18 @@ html #tacka-nav-panel #ex-overview{flex:0 0 auto;min-height:44px;padding:0 12px}
 #loadmap-download-cards .lm-download-admin{display:flex;gap:8px;margin-top:10px}
 #loadmap-download-cards .lm-download-admin button{flex:1;min-height:44px}
 #loadmap-download-cards .lm-download-card.lm-skrivena{opacity:.55;border-style:dashed}
+
+/* Snimanje doznake: kompaktan prozor (~130 px umjesto ~300 px) — naslov+stanje u jednom
+   redu, tri mjere u redu, tri dugmeta u redu; bez broja GPS tačaka i pomoćnih tekstova. */
+.doz-gps-sheet{padding:8px 10px}
+.doz-gps-top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.doz-gps-top strong{font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doz-gps-top .doz-gps-state{flex-shrink:0;padding:3px 8px;font-size:11px}
+.doz-gps-metrics{grid-template-columns:1fr 1.2fr 1.2fr;gap:5px;margin:6px 0}
+.doz-gps-metrics>div{padding:4px 6px}
+.doz-gps-metrics strong{font-size:14px;margin-top:0}
+.doz-gps-metrics #doz-gps-modal-signal{font-size:11px}
+.doz-gps-actions{grid-template-columns:1fr 1.2fr 52px;gap:6px}
+.doz-gps-actions .doz-gps-map{width:auto;margin:0;background:var(--field-card-soft)!important;color:var(--field-ink)!important;border-color:var(--field-border)!important}
+.doz-gps-actions button:last-child{background:var(--field-card-soft);color:var(--field-ink);border-color:var(--field-border)}
+.doz-gps-actions button:nth-child(2){background:var(--field-danger-soft);color:var(--field-danger);border-color:var(--field-danger)}

@@ -5632,6 +5632,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 
         <div class="sec" id="doz-section-stats">
           <div class="sec-t">📊 Pregled odjela</div>
+          <button type="button" id="doz-pojas-quick" class="btn b" style="margin:0 0 8px;width:100%;min-height:44px;" onclick="dozPojasVidljivToggle()">👁 Sakrij poligone pojaseva</button>
           <div id="doz-stats-box" style="font-size:11px;color:#94a3b8;line-height:1.8;"></div>
         </div>
 
@@ -5734,6 +5735,21 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
             <label style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:4px;cursor:pointer;">
               <input type="checkbox" id="doz-cross-warn" checked onchange="dozCrossWarnToggle()" style="accent-color:#fbbf24;"> Upozorenje na prelaz pojasa
             </label>
+          </div>
+        </div>
+        <div class="doz-post-grupa">
+          <div class="sec-t">🖌 Stil pojasa</div>
+          <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center;">
+            <span style="font-size:11px;color:#94a3b8;">Boja:</span>
+            <select id="doz-pojas-nacin" onchange="dozPojasStilChange()" style="flex:1;min-height:36px;padding:4px 6px;background:#0f172a;border:1px solid #374151;border-radius:5px;color:#eee;font-size:12px;"><option value="korisnik">Po projektantu</option><option value="jedna">Jedna boja</option></select>
+            <input type="color" id="doz-pojas-col" value="#4ade80" oninput="dozPojasStilChange()" style="width:44px;height:36px;padding:0;border:1px solid #374151;border-radius:5px;background:#0f172a;cursor:pointer;" aria-label="Boja pojasa">
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span style="font-size:10px;color:#64748b;min-width:44px;">Ispuna</span><input type="range" id="doz-pojas-op" min="0" max="70" value="18" style="flex:1;accent-color:#4ade80;" oninput="dozPojasStilChange()"><span id="doz-pojas-op-lbl" style="font-size:10px;color:#94a3b8;min-width:26px;">18%</span></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span style="font-size:10px;color:#64748b;min-width:44px;">Obrub</span><input type="range" id="doz-pojas-wt" min="0" max="5" step="0.5" value="1.5" style="flex:1;accent-color:#4ade80;" oninput="dozPojasStilChange()"><span id="doz-pojas-wt-lbl" style="font-size:10px;color:#94a3b8;min-width:26px;">1,5</span></div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <label style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="doz-pojas-dash" onchange="dozPojasStilChange()" style="accent-color:#4ade80;"> Crtkano</label>
+            <label style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" id="doz-pojas-vidljiv" checked onchange="dozPojasVidljivToggle(this.checked)" style="accent-color:#4ade80;"> Prikaži poligone pojasa</label>
+            <button type="button" class="btn" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozPojasStilReset()">Zadano</button>
           </div>
         </div>
         <div class="doz-post-grupa">
@@ -5876,15 +5892,10 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 
 <!-- DOZ GPS CONTROLS -->
 <div id="doz-gps-modal" hidden onkeydown="dozGPSControlsKey(event)">
-  <section class="doz-gps-sheet" role="region" aria-labelledby="doz-gps-modal-title" tabindex="-1">
-    <header><div><small>DOZNAKA · GPS TRAG</small><h3 id="doz-gps-modal-title">Snimanje doznake</h3></div><button type="button" onclick="dozCloseGPSControls()" aria-label="Skloni kontrole snimanja">✕</button></header>
-    <div class="doz-gps-context"><strong id="doz-gps-modal-project"></strong><span id="doz-gps-modal-user"></span></div>
-    <div class="doz-gps-state" id="doz-gps-modal-state" role="status"></div>
-    <div class="doz-gps-metrics"><div><small>Dužina traga</small><strong id="doz-gps-modal-length">0 m</strong></div><div><small>Vrijeme snimanja</small><strong id="doz-gps-modal-time">00:00:00</strong></div><div><small>GPS tačke</small><strong id="doz-gps-modal-points">0</strong></div></div>
-    <p class="doz-gps-signal" id="doz-gps-modal-signal"></p><p class="doz-gps-note" id="doz-gps-modal-note"></p>
-    <div class="doz-gps-actions"><button id="doz-gps-modal-pause" type="button" onclick="dozPauseGPS()">⏸ Pauza</button><button id="doz-gps-modal-stop" type="button" onclick="dozFinishGPSControls()">■ Završi snimanje</button></div>
-    <button class="doz-gps-map" type="button" onclick="dozCloseGPSControls(true)"><svg class="ic"><use href="#ic-karta"/></svg> Skloni kontrole</button>
-    <small class="doz-gps-hint">Sklanjanje prozora ne prekida snimanje. Kontrole ponovo otvaraš iz trake snimanja.</small>
+  <section class="doz-gps-sheet" role="region" aria-label="Snimanje doznake" tabindex="-1">
+    <div class="doz-gps-top"><strong id="doz-gps-modal-project"></strong><span class="doz-gps-state" id="doz-gps-modal-state" role="status"></span></div>
+    <div class="doz-gps-metrics"><div><small>Dužina</small><strong id="doz-gps-modal-length">0 m</strong></div><div><small>Vrijeme</small><strong id="doz-gps-modal-time">00:00:00</strong></div><div><small>Signal</small><strong id="doz-gps-modal-signal"></strong></div></div>
+    <div class="doz-gps-actions"><button id="doz-gps-modal-pause" type="button" onclick="dozPauseGPS()">⏸ Pauza</button><button id="doz-gps-modal-stop" type="button" onclick="dozFinishGPSControls()">■ Završi</button><button class="doz-gps-map" type="button" aria-label="Skloni kontrole" title="Skloni — snimanje se ne prekida" onclick="dozCloseGPSControls(true)">▾</button></div>
   </section>
 </div>
 <!-- END DOZ GPS CONTROLS -->
@@ -6006,7 +6017,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.3.1';
+const APP_VER = 'v3.3.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima

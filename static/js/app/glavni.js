@@ -33011,6 +33011,7 @@ async function dozSelectOdjel(id) {
   document.getElementById('doz-panel-list').style.display   = 'none';
   document.getElementById('doz-panel-detail').style.display = 'flex';
   _dozRestoreBoundaryStyleUI();
+  try { _dozPojasUI(); } catch (e) {}
   _dozRestoreTreesStyleUI();
   document.getElementById('doz-detail-name').textContent = odjel.name;
   document.getElementById('doz-detail-area').textContent =
@@ -33496,18 +33497,20 @@ function _dozImeClana(uid) {
 
 function _dozRenderBands(odjel) {
   if (!_dozBandsLayer) return;
+  if (!_dozPojasStil().vidljiv) return;   // skriveni poligoni: ni računica pojaseva se ne radi za prikaz
   const bands = _dozComputeBands(odjel);
   if (!bands.length) return;
   const mIdx = {};
   _dozMembers.forEach((m, i) => { mIdx[m.user_id] = i; });
   const dates=new Intl.DateTimeFormat('bs-BA',{timeZone:'Europe/Sarajevo',dateStyle:'short'}),times=new Intl.DateTimeFormat('bs-BA',{timeZone:'Europe/Sarajevo',timeStyle:'short'});
 
+  const pst = _dozPojasStil();
   bands.forEach(b => {
-    const col = DOZ_ENG_COLORS[(mIdx[b.uid] ?? 0) % DOZ_ENG_COLORS.length];
+    const col = _dozPojasBoja(pst, DOZ_ENG_COLORS[(mIdx[b.uid] ?? 0) % DOZ_ENG_COLORS.length]);
     const name = _escHtml(_dozImeClana(b.uid));
     const start=new Date(b.startedAt),end=new Date(b.endedAt),work=Number.isFinite(start.getTime())?dates.format(start)+' · '+times.format(start)+(Number.isFinite(end.getTime())?'–'+times.format(end):''):'—';
     const lyr = L.geoJSON(b.polygon, {
-      style: { color: col, weight: 1.5, fillColor: col, fillOpacity: 0.18 },
+      style: { color: col, weight: pst.wt, opacity: pst.wt > 0 ? 1 : 0, fillColor: col, fillOpacity: pst.op, dashArray: pst.dash ? '6,4' : null },
       interactive: true
     }).addTo(_dozBandsLayer);
     lyr.bindPopup(`<div style="min-width:150px;font-size:12px;color:#1e293b;">
@@ -33578,6 +33581,56 @@ function dozFillStyleChange() {
   }
   _setDozBoundaryStyle({ col, op, wt, dash });
 }
+
+// ─── Stil i vidljivost poligona pojasa ────────────────────────────────────
+const _DOZ_POJAS_KEY = 'tvlake_doz_pojas_style';
+const _DOZ_POJAS_DEF = { vidljiv: true, nacin: 'korisnik', col: '#4ade80', op: 0.18, wt: 1.5, dash: false };
+function _dozPojasStil() {
+  try {
+    const s = JSON.parse(localStorage.getItem(_DOZ_POJAS_KEY) || 'null');
+    if (s && typeof s === 'object') {
+      return {
+        vidljiv: s.vidljiv !== false,
+        nacin: s.nacin === 'jedna' ? 'jedna' : 'korisnik',
+        col: /^#[0-9a-f]{6}$/i.test(s.col) ? s.col : _DOZ_POJAS_DEF.col,
+        op: Number.isFinite(s.op) ? Math.min(0.7, Math.max(0, s.op)) : _DOZ_POJAS_DEF.op,
+        wt: Number.isFinite(s.wt) ? Math.min(5, Math.max(0, s.wt)) : _DOZ_POJAS_DEF.wt,
+        dash: !!s.dash
+      };
+    }
+  } catch (e) {}
+  return { ..._DOZ_POJAS_DEF };
+}
+function _dozPojasSnimi(st) { try { localStorage.setItem(_DOZ_POJAS_KEY, JSON.stringify(st)); } catch (e) {} }
+// Boja pojasa: po projektantu (zadano) ili jedna zajednička boja.
+function _dozPojasBoja(st, korisnikBoja) { return st.nacin === 'jedna' ? st.col : korisnikBoja; }
+function _dozPojasUI() {
+  const st = _dozPojasStil(), $ = id => document.getElementById(id);
+  if ($('doz-pojas-nacin')) $('doz-pojas-nacin').value = st.nacin;
+  if ($('doz-pojas-col')) { $('doz-pojas-col').value = st.col; $('doz-pojas-col').disabled = st.nacin !== 'jedna'; $('doz-pojas-col').style.opacity = st.nacin === 'jedna' ? 1 : .4; }
+  if ($('doz-pojas-op')) $('doz-pojas-op').value = Math.round(st.op * 100);
+  if ($('doz-pojas-wt')) $('doz-pojas-wt').value = st.wt;
+  if ($('doz-pojas-dash')) $('doz-pojas-dash').checked = st.dash;
+  if ($('doz-pojas-vidljiv')) $('doz-pojas-vidljiv').checked = st.vidljiv;
+  if ($('doz-pojas-op-lbl')) $('doz-pojas-op-lbl').textContent = Math.round(st.op * 100) + '%';
+  if ($('doz-pojas-wt-lbl')) $('doz-pojas-wt-lbl').textContent = String(st.wt).replace('.', ',');
+  if ($('doz-pojas-quick')) $('doz-pojas-quick').textContent = st.vidljiv ? '👁 Sakrij poligone pojaseva' : '👁 Prikaži poligone pojaseva';
+}
+function dozPojasStilChange() {
+  const $ = id => document.getElementById(id), st = _dozPojasStil();
+  st.nacin = $('doz-pojas-nacin')?.value === 'jedna' ? 'jedna' : 'korisnik';
+  st.col = $('doz-pojas-col')?.value || st.col;
+  st.op = (parseInt($('doz-pojas-op')?.value || 18, 10)) / 100;
+  st.wt = parseFloat($('doz-pojas-wt')?.value || 1.5);
+  st.dash = !!$('doz-pojas-dash')?.checked;
+  _dozPojasSnimi(st); _dozPojasUI(); dozRefreshBands();
+}
+function dozPojasVidljivToggle(on) {
+  const st = _dozPojasStil();
+  st.vidljiv = typeof on === 'boolean' ? on : !st.vidljiv;
+  _dozPojasSnimi(st); _dozPojasUI(); dozRefreshBands();
+}
+function dozPojasStilReset() { _dozPojasSnimi({ ..._DOZ_POJAS_DEF }); _dozPojasUI(); dozRefreshBands(); }
 
 function dozBandOuterChange() {
   _DOZ_BAND_OUTER_M = parseInt(document.getElementById('doz-band-outer')?.value || 20);
@@ -34257,7 +34310,7 @@ function dozRenderDetail() {
         ${kpi(_dozMarkings.length, 'Zone' + (markedHa > 0 ? ' · ' + fmtHa(markedHa) : ''))}
         ${kpi(_dozMembers.length, 'Projektanti')}
         ${kpi(fmtL(totalTrackLen), 'GPS trag')}
-        ${kpi(nPts, 'GPS tačaka')}
+        ${kpi(fmtHa(Math.max(0, (bndHa || totalHa) - bandHa)), 'Preostalo', '#fbbf24')}
       </div>
       <div class="doz-kreiran">Kreiran ${created}</div>`;
     _dozPregledRender({ bndHa, bandHa, bandPct, preklopHa: pokr.preklopHa, nZona: _dozMarkings.length, trag: totalTrackLen });
@@ -34271,7 +34324,8 @@ function dozRenderDetail() {
     ? _dozMembers.map((m, i) => {
         const k = m._korisnik;
         const name = k ? (`${k.ime||''} ${k.prezime||''}`.trim() || `Projektant ${i+1}`) : `Projektant ${i+1}`;
-        const color = k?.boja || DOZ_ENG_COLORS[i % DOZ_ENG_COLORS.length];
+        // Ista boja kao poligon pojasa na karti, da lista služi kao legenda.
+        const color = _dozPojasBoja(_dozPojasStil(), DOZ_ENG_COLORS[i % DOZ_ENG_COLORS.length]);
         const tl = trackLens[m.user_id];
         return `<div class="doz-member-row">
           <div class="doz-member-dot" style="background:${color};"></div>
@@ -34381,7 +34435,6 @@ function _dozGpsControlsSync(acc) {
   const put = (id, value) => { const el=document.getElementById(id); if(el) el.textContent=value; };
   const project = _dozOdjeli.find(p=>p.id===_dozGpsProjId);
   put('doz-gps-modal-project', project?.name || 'Odjel doznake');
-  put('doz-gps-modal-user', typeof getIme==='function' ? getIme() : 'Projektant');
   const busy=_dozGpsControlsBusy || _dozGpsStopping;
   put('doz-gps-modal-state', busy ? 'Spremam završetak…' : _dozGpsPaused ? 'Snimanje pauzirano' : 'Snimanje aktivno');
   modal.classList.toggle('is-paused', _dozGpsPaused);
@@ -34389,11 +34442,9 @@ function _dozGpsControlsSync(acc) {
   const pauseMs=_dozGpsPausedTime+(_dozGpsPaused && _dozGpsPauseStart ? Date.now()-_dozGpsPauseStart : 0);
   const seconds=Math.max(0,Math.floor((Date.now()-_dozGpsStartTs-pauseMs)/1000));
   put('doz-gps-modal-time', [Math.floor(seconds/3600),Math.floor(seconds/60)%60,seconds%60].map(n=>String(n).padStart(2,'0')).join(':'));
-  put('doz-gps-modal-points', _dozGpsPts.length);
   const fresh=Date.now()-_dozGpsControlsAccuracyTs < 15000;
   const accuracy=fresh ? _dozGpsControlsAccuracy : null;
-  put('doz-gps-modal-signal', accuracy===null ? 'Čekam GPS signal' : accuracy>20 ? 'Slab signal · ±'+Math.round(accuracy)+' m' : 'GPS preciznost · ±'+Math.round(accuracy)+' m');
-  put('doz-gps-modal-note', _dozGpsPaused ? 'Kretanje tokom pauze ne dodaje se u trag. Pritisni Nastavi za nastavak doznake.' : 'Trag se čuva na telefonu. Podatke šalješ kroz Pošalji na server.');
+  put('doz-gps-modal-signal', accuracy===null ? 'Čekam…' : accuracy>20 ? 'Slab signal ±'+Math.round(accuracy)+' m' : '±'+Math.round(accuracy)+' m');
   const pause=document.getElementById('doz-gps-modal-pause'),stop=document.getElementById('doz-gps-modal-stop');
   if(pause) { pause.textContent=_dozGpsPaused ? '▶ Nastavi' : '⏸ Pauza'; pause.disabled=busy; }
   if(stop) stop.disabled=busy;

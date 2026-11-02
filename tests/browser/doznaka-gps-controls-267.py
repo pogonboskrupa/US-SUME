@@ -36,10 +36,8 @@ async def main():
   assert await page.evaluate('_activeTab==="karta" && document.getElementById("main").contains(document.getElementById("doz-gps-modal"))')
   assert not await page.locator('#rec-banner').is_visible() and not await page.locator('#action-bar').is_visible() and not await page.locator('#rec-bar').is_visible()
   assert await page.locator('#doz-gps-modal-project').inner_text()=='Una · 105'
-  assert await page.locator('#doz-gps-modal-user').inner_text()=='Emina Projektant'
   await page.evaluate('fix(44.9)');await page.evaluate('fix(44.9001)')
   assert await page.evaluate('FieldStore.count("A")')==2
-  assert await page.locator('#doz-gps-modal-points').inner_text()=='2'
   # Pause does not create points or inflate active duration.
   await page.locator('#doz-gps-modal-pause').click();await page.evaluate('_dozGpsPauseStart-=65000;_dozGpsStartTs-=65000;_dozGpsControlsSync()')
   assert await page.locator('#doz-gps-modal-time').inner_text()=='00:00:00'
@@ -52,7 +50,6 @@ async def main():
   assert not await page.locator('#doz-gps-modal').is_visible()
   assert await page.evaluate('_dozGpsOn && _activeTab==="karta" && watches===1 && clears===0 && _dozGpsControlsTimer===null')
   await page.evaluate('fix(44.9003)');await page.locator('#rb-go').click();assert await page.locator('#doz-gps-modal').is_visible()
-  assert await page.locator('#doz-gps-modal-points').inner_text()=='4'
   await page.evaluate('fix(44.901,16,45)');assert await page.evaluate('FieldStore.count("A")')==4
   assert 'Slab signal' in await page.locator('#doz-gps-modal-signal').inner_text()
   # Map remains usable above the floating controls; Escape only minimizes.
@@ -64,7 +61,8 @@ async def main():
   for theme in ['day','dark']:
    for w,h in [(320,568),(390,800),(568,320),(800,600)]:
     await page.set_viewport_size({'width':w,'height':h});await page.evaluate('(t)=>document.documentElement.dataset.fieldTheme=t',theme)
-    overflow=await page.evaluate('()=>{const e=document.querySelector(".doz-gps-sheet"),r=e.getBoundingClientRect();return {x:r.x,right:r.right,bottom:r.bottom,width:e.clientWidth,scroll:e.scrollWidth}}')
+    overflow=await page.evaluate('()=>{const e=document.querySelector(".doz-gps-sheet"),r=e.getBoundingClientRect();return {h:r.height,x:r.x,right:r.right,bottom:r.bottom,width:e.clientWidth,scroll:e.scrollWidth}}')
+    assert overflow['h']<=150 or h<=420,(theme,w,h,overflow)
     assert overflow['x']>=0 and overflow['right']<=w and overflow['bottom']<=h and overflow['scroll']<=overflow['width']+1,(theme,w,h,overflow)
     for id in ['doz-gps-modal-pause','doz-gps-modal-stop']:
      assert (await page.locator('#'+id).bounding_box())['height']>=44
