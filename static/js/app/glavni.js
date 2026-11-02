@@ -15189,6 +15189,7 @@ function _gpsStabFinish(ok) {
   _gpsStabCb = null;
   const ov = document.getElementById('gstab-overlay');
   if (ov) ov.remove();
+  document.getElementById('gstab-pill')?.remove();
   const fn = _gpsStabBeginFn;
   _gpsStabBeginFn = null;
   if (ok) { if (fn) fn(); }
@@ -15207,6 +15208,7 @@ function _buildGpsStabOverlay() {
   d.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(2,6,23,0.74);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:24px;';
   d.innerHTML = `
     <div style="background:#0f172a;border:1.5px solid #1e3a5f;border-radius:16px;padding:22px 20px 16px;max-width:330px;width:100%;box-shadow:0 14px 44px rgba(0,0,0,0.6);text-align:center;">
+      <button type="button" onclick="_gpsStabMin(true)" aria-label="Smanji — stabilizacija radi u pozadini" style="float:right;margin:-8px -6px 0 0;min-width:44px;min-height:44px;background:transparent;border:none;color:#94a3b8;font-size:22px;cursor:pointer;">▾</button>
       <div style="width:50px;height:50px;margin:2px auto 14px;border:4px solid #1e3a5f;border-top-color:#38bdf8;border-radius:50%;animation:gstabspin 0.9s linear infinite;"></div>
       <div style="font-size:15px;font-weight:bold;color:#e2e8f0;margin-bottom:4px;">📡 Stabiliziram GPS signal…</div>
       <div style="font-size:12px;color:#94a3b8;margin-bottom:14px;line-height:1.5;">Sačekaj da signal prestane lutati — snimanje počinje čim se smiri.</div>
@@ -15223,7 +15225,32 @@ function _buildGpsStabOverlay() {
   document.body.appendChild(d);
 }
 
+// Smanjen prikaz: prozor ne blokira ekran, stabilizacija i dalje teče (isti
+// _gpsStabCb), a snimanje počinje samo čim se signal smiri.
+let _gpsStabZadnje = '';
+function _gpsStabMin(on) {
+  const ov = document.getElementById('gstab-overlay');
+  if (!ov) return;
+  let pill = document.getElementById('gstab-pill');
+  if (on) {
+    ov.style.display = 'none';
+    if (!pill) {
+      pill = document.createElement('button');
+      pill.id = 'gstab-pill'; pill.type = 'button';
+      pill.style.cssText = 'position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:98000;min-height:44px;max-width:92vw;padding:0 16px;border-radius:22px;border:1.5px solid #1e3a5f;background:#0f172a;color:#e2e8f0;font:700 12px system-ui;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      pill.onclick = () => _gpsStabMin(false);
+      document.body.appendChild(pill);
+    }
+    pill.textContent = '📡 Stabiliziram GPS' + _gpsStabZadnje + ' · otvori';
+  } else {
+    ov.style.display = 'flex';
+    pill?.remove();
+  }
+}
 function _updGpsStabOverlay(ac, spread, n, ready) {
+  _gpsStabZadnje = ' · ±' + Math.round(ac) + ' m · ' + Math.min(n, GPS_STAB_NEED) + '/' + GPS_STAB_NEED;
+  const _pill = document.getElementById('gstab-pill');
+  if (_pill) _pill.textContent = '📡 Stabiliziram GPS' + _gpsStabZadnje + ' · otvori';
   const accEl = document.getElementById('gstab-acc');
   const sprEl = document.getElementById('gstab-spr');
   const cntEl = document.getElementById('gstab-cnt');
@@ -32811,8 +32838,74 @@ function _dozRenderOverview() {
   if (any) { grp.addTo(map); _dozOverviewLayer = grp; }
 }
 
+// ─── Doznaka UŽIVO: tragovi kolega koji upravo snimaju ────────────────────
+// Slanje na server je ručno (Meni → Server), pa kolegin trag inače stiže tek
+// kad ga pošalje. Zato se položaj dok snima emituje i preko Realtime BROADCAST-a
+// (bez upisa u bazu): kanal 'doz-live-<odjel>' je zajednički svim članovima koji
+// imaju odjel otvoren. Trag je samo u memoriji i nestaje 2 min poslije zadnje
+// tačke ili kad kolega završi snimanje. Nije tajnost prema ne-članu (kao i
+// Dijeljenje kretanja) — prima se samo od korisnika sa liste članova odjela.
+let _dozLiveCh = null, _dozLiveProj = null, _dozLiveReady = false, _dozLiveLayer = null, _dozLiveGc = null, _dozLiveSendTs = 0;
+const _dozLiveTrails = {};
+const _DOZ_LIVE_MAX = 400, _DOZ_LIVE_TTL = 120000;
+function _dozLiveSub(projectId) {
+  if (_dozLiveProj === projectId && _dozLiveCh) return;
+  if (_dozLiveCh) { try { sb.removeChannel(_dozLiveCh); } catch (e) {} }
+  _dozLiveCh = null; _dozLiveReady = false; _dozLiveProj = null;
+  Object.keys(_dozLiveTrails).forEach(k => delete _dozLiveTrails[k]);
+  if (_dozLiveLayer) { try { map.removeLayer(_dozLiveLayer); } catch (e) {} _dozLiveLayer = null; }
+  if (_dozLiveGc) { clearInterval(_dozLiveGc); _dozLiveGc = null; }
+  if (!projectId || typeof sb === 'undefined' || !sb || !_mrezaProbaj(true)) return;
+  _dozLiveProj = projectId;
+  _dozLiveCh = sb.channel('doz-live-' + projectId, { config: { broadcast: { self: false } } })
+    .on('broadcast', { event: 'pos' }, ({ payload }) => _dozLivePrimi(payload))
+    .on('broadcast', { event: 'stop' }, ({ payload }) => _dozLiveUkloni(payload?.uid))
+    .subscribe(st => { _dozLiveReady = st === 'SUBSCRIBED'; });
+  _dozLiveGc = setInterval(() => {
+    const sad = Date.now();
+    Object.keys(_dozLiveTrails).forEach(uid => { if (sad - _dozLiveTrails[uid].t > _DOZ_LIVE_TTL) _dozLiveUkloni(uid); });
+  }, 15000);
+}
+function _dozLiveUkloni(uid) {
+  const tr = _dozLiveTrails[uid];
+  if (!tr) return;
+  try { if (tr.line) _dozLiveLayer?.removeLayer(tr.line); if (tr.mk) _dozLiveLayer?.removeLayer(tr.mk); } catch (e) {}
+  delete _dozLiveTrails[uid];
+}
+function _dozLivePrimi(p) {
+  if (!p || !p.uid || p.uid === sbUser?.id || p.pid !== _dozLiveProj || !Number.isFinite(p.la) || !Number.isFinite(p.lo)) return;
+  const idx = _dozMembers.findIndex(m => m.user_id === p.uid);
+  if (idx < 0 || !window.map) return;
+  if (!_dozLiveLayer) _dozLiveLayer = L.layerGroup().addTo(map);
+  const col = DOZ_ENG_COLORS[idx % DOZ_ENG_COLORS.length];
+  let tr = _dozLiveTrails[p.uid];
+  if (!tr) tr = _dozLiveTrails[p.uid] = { pts: [], t: 0, line: null, mk: null };
+  tr.t = Date.now();
+  tr.pts.push([p.la, p.lo]);
+  if (tr.pts.length > _DOZ_LIVE_MAX) tr.pts.shift();
+  if (!tr.line) {
+    tr.line = L.polyline(tr.pts, { color: col, weight: 4, opacity: .9, dashArray: '2 6', interactive: false }).addTo(_dozLiveLayer);
+    tr.mk = L.circleMarker([p.la, p.lo], { radius: 7, color: '#fff', weight: 2, fillColor: col, fillOpacity: 1, interactive: false }).addTo(_dozLiveLayer);
+    tr.mk.bindTooltip(_escHtml(_dozImeClana(p.uid).split(' ')[0]), { permanent: true, direction: 'top', opacity: .9 });
+  } else {
+    tr.line.setLatLngs(tr.pts);
+    tr.mk.setLatLng([p.la, p.lo]);
+  }
+}
+function _dozLiveSalji(lat, lng, acc) {
+  if (!_dozLiveCh || !_dozLiveReady || _dozLiveProj !== _dozGpsProjId || !sbUser) return;
+  const sad = Date.now();
+  if (sad - _dozLiveSendTs < 4000) return;
+  _dozLiveSendTs = sad;
+  try { _dozLiveCh.send({ type: 'broadcast', event: 'pos', payload: { uid: sbUser.id, pid: _dozGpsProjId, la: lat, lo: lng, ac: acc, t: sad } }); } catch (e) {}
+}
+function _dozLiveStop() {
+  try { if (_dozLiveCh && _dozLiveReady && sbUser) _dozLiveCh.send({ type: 'broadcast', event: 'stop', payload: { uid: sbUser.id, pid: _dozLiveProj } }); } catch (e) {}
+}
+
 // ─── Per-project realtime subscription ───────────────────────────
 function _dozSubProject(projectId) {
+  try { _dozLiveSub(projectId); } catch (e) {}
   if (_dozActiveChannel) { sb.removeChannel(_dozActiveChannel); _dozActiveChannel = null; }
   if (!projectId || !_mrezaProbaj(true)) return;
   _dozActiveChannel = sb.channel('doz-proj-' + projectId + '-' + Date.now())
@@ -34854,6 +34947,7 @@ async function _dozProcessGpsPoint(lat, lng, alt, acc, speed, tsMs, bypassPauzu)
   // Tačka je već trajno u baferu. Slanje pokreće samo Meni → Server.
   _dozUpdGpsStats(acc);
   _dozCheckBandCross(lat, lng);
+  _dozLiveSalji(lat, lng, acc);
   if (_dozGpsProjId === _dozSelId) _dozLiveRacunMozda();
   };
   await commit();
@@ -35074,6 +35168,7 @@ async function dozStopGPS() {
   }
   if (_dozGpsWatchId !== null) { navigator.geolocation.clearWatch(_dozGpsWatchId); _dozGpsWatchId = null; }
   const wasOn = _dozGpsOn;
+  try { _dozLiveStop(); } catch (e) {}
   _dozGpsOn = false;
   _dozGpsProjId = null; _dozGpsUserId = null;
   _dozGpsPaused = false; _dozGpsPausedTime = 0; _dozGpsPauseStart = 0;
