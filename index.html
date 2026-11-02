@@ -5640,7 +5640,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         <div class="sec" id="doz-section-team">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
             <div class="sec-t" style="margin:0;">👥 Projektanti</div>
-            <button class="btn b" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozAddMember()">+ Dodaj</button>
+            <button class="btn b" id="doz-add-member-btn" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozAddMember()">+ Dodaj</button>
           </div>
           <div id="doz-members-list"><div class="doz-empty">Nema članova</div></div>
         </div>
@@ -5722,12 +5722,13 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         <div class="doz-post-grupa">
           <div class="sec-t">📐 Pojasevi</div>
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-            <span style="font-size:11px;color:#94a3b8;">Vanjski rub:</span>
+            <span style="font-size:11px;color:#94a3b8;" title="Ukupna širina pojasa: pola sa svake strane traga">Širina pojasa:</span>
             <select id="doz-band-outer" onchange="dozBandOuterChange()" style="flex:1;padding:4px 6px;background:#0f172a;border:1px solid #374151;border-radius:5px;color:#eee;font-size:11px;">
-              <option value="15">15 m</option>
-              <option value="20" selected>20 m (default)</option>
-              <option value="30">30 m</option>
-              <option value="40">40 m</option>
+              <option value="10">10 m (5 + 5)</option>
+              <option value="15">15 m (7,5 + 7,5)</option>
+              <option value="20" selected>20 m (10 + 10, zadano)</option>
+              <option value="30">30 m (15 + 15)</option>
+              <option value="40">40 m (20 + 20)</option>
             </select>
             <button class="btn b" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozRefreshBands()"><svg class="ic"><use href="#ic-osvjezi"/></svg></button>
           </div>

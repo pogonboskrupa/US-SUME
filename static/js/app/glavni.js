@@ -3996,7 +3996,12 @@ function showProjektDetalji(id) {
 
   // Pripremi dostupne projektante (bez onih koji su već članovi)
   const existingIds = new Set(allMembers.map(m => m.korisnik_id));
-  window._pdAvailable = Object.entries(kolegeMap).filter(([kid]) => !existingIds.has(kid));
+  // Samo iz šumarije projekta: pregledni/ŠPD nalog u kolegeMap ima korisnike SVIH
+  // šumarija, pa bi se u tim nalozima mogao dodati i neko izvan šumarije.
+  const _pdSum = p.sumarija || sbProfile?.sumarija || null;
+  window._pdAvailable = Object.entries(kolegeMap).filter(([kid, k]) => !existingIds.has(kid) && _pdSum && k.sumarija === _pdSum);
+  const _addSec = document.getElementById('pd-add-clan-sec');
+  if (_addSec) _addSec.style.display = isSpdField() ? 'none' : '';
   closeDodajClanPanel();
 
   // Aktiviraj / Deaktiviraj button
@@ -4194,6 +4199,7 @@ function _checkProjDistWarn(projektId) {
 // + odobrenje admina.
 
 function openDodajClanPanel() {
+  if (isSpdField()) { showToast('Terenski profil: dodavanje projektanta samo šifrom ili QR kodom'); return; }
   const panel = document.getElementById('pd-add-panel');
   const cont  = document.getElementById('pd-add-checks');
   const avail = window._pdAvailable || [];
@@ -4214,6 +4220,7 @@ function closeDodajClanPanel() {
 }
 
 async function confirmDodajClanove() {
+  if (isSpdField()) { showToast('Terenski profil: dodavanje projektanta samo šifrom ili QR kodom'); return; }
   const id = _pdProjektId;
   const p  = _projekti.find(x => x.id === id);
   if (!p || p.korisnik_id !== sbUser?.id) { showToast('Samo vlasnik projekta može dodavati članove'); return; }
@@ -33022,6 +33029,8 @@ async function dozSelectOdjel(id) {
   // Šifru za teren smije napraviti samo vlasnik doznake (isto pravilo kao na serveru).
   const _dozShareBtn = document.getElementById('doz-share-code-btn');
   if (_dozShareBtn) _dozShareBtn.style.display = (odjel.created_by && odjel.created_by === sbUser?.id) ? '' : 'none';
+  const _dozAddBtn = document.getElementById('doz-add-member-btn');
+  if (_dozAddBtn) _dozAddBtn.style.display = (typeof isSpdField === 'function' && isSpdField()) ? 'none' : '';
   const removeButton=document.getElementById('doz-project-remove');
   if(removeButton)removeButton.innerHTML='<svg class="ic"><use href="#ic-obrisi"/></svg> '+(odjel.created_by===owner?'Obriši odjel':'Ukloni sa mog spiska');
   _dozQrRenderReceived();
@@ -33313,7 +33322,10 @@ function dozRenderMapLayers() {
 }
 
 // ─── Pojasevi (Bands) — GPS track–based area assignment ─────────
+// UKUPNA širina pojasa u metrima (stvarni obuhvat projektanta), ne rub po strani:
+// 20 m znači 10 m lijevo + 10 m desno od traga. Bafer/polovina ide kroz _dozPojasPolovina().
 let _DOZ_BAND_OUTER_M = 20;
+function _dozPojasPolovina() { return Math.max(1, (_DOZ_BAND_OUTER_M || 20) / 2); }
 
 function _dozGetBoundaryGeoJSON(odjel) {
   if (!odjel?.boundary_geojson) return null;
@@ -33424,7 +33436,7 @@ function _dozComputeBands(odjel) {
   // granice) — memo po stanju tragova + vanjskom rubu + odjelu.
   const bk = (odjel.id || '') + '|' + JSON.stringify(bndFeat.geometry) + '|' + _DOZ_BAND_OUTER_M + '|' + _dozUTMemo.k;
   if (_dozBandsMemo.k === bk) return _dozBandsMemo.v;
-  const joined=typeof DozBands!=='undefined'?DozBands.build(userTracks,bndFeat,_DOZ_BAND_OUTER_M,turf):null;
+  const joined=typeof DozBands!=='undefined'?DozBands.build(userTracks,bndFeat,_dozPojasPolovina(),turf):null;
   if(joined){_dozBandsMemo={k:bk,v:joined};return joined;}
 
   const uidSet = [...new Set(userTracks.map(t => t.uid))];
@@ -33437,7 +33449,7 @@ function _dozComputeBands(odjel) {
 
     myTracks.forEach(mt => {
       try {
-        let bufDist = _DOZ_BAND_OUTER_M;
+        let bufDist = _dozPojasPolovina();
         if (otherTracks.length > 0) {
           let minDist = Infinity;
           const sampled=turf.along(mt.line,turf.length(mt.line)/2),[lon,lat]=sampled.geometry.coordinates;
@@ -35897,6 +35909,7 @@ async function dozSaveOdjel() {
 
 // ─── Add Member (šumarija lista) ──────────────────────────────────
 async function dozAddMember() {
+  if (isSpdField()) { showToast('Terenski profil: projektanta dodaješ samo šifrom ili QR kodom'); return; }
   const projectId=_dozSelId,owner=sbUser?.id;
   if (!await _projektServerSpreman('doznaka',projectId,owner) || sbUser?.id !== owner || _dozSelId !== projectId) return;
   try {
@@ -35910,7 +35923,7 @@ async function dozAddMember() {
     if (eUsers) throw eUsers;
     if (!users?.length) { showToast('Nema projektanata u šumariji'); return; }
     const vecClanovi = new Set(_dozMembers.map(m => m.user_id));
-    const dostupni = users.filter(u => !vecClanovi.has(u.id));
+    const dostupni = users.filter(u => !vecClanovi.has(u.id) && u.sumarija === me.sumarija);
     if (!dostupni.length) { showToast('Svi projektanti su već dodani'); return; }
     if(sbUser?.id!==owner||_dozSelId!==projectId)return;
     _dozShowMemberPicker(dostupni);

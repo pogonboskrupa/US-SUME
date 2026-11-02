@@ -23,6 +23,7 @@ async def main():
    else:await r.abort()
   await page.route('**/*',route);await page.goto('https://ui.test/',timeout=60000)
   assert not errors,errors
+  await page.evaluate('()=>{_DOZ_BAND_OUTER_M=40;}')  # simulacija je projektovana na pojaseve od 40 m ukupno (20+20), a zadano u app-u je 20 m ukupno
   result=await page.evaluate('''()=>{const a=_dozPokrivenost(simulation.project);return {covered:a.ukupnoHa,overlap:a.preklopHa,bandCount:_dozComputeBands(simulation.project).length,renderMs:initialRenderMs};}''')
   assert result['bandCount']==60 and abs(result['covered']-data['coveredHa'])<1e-8,result
   assert abs(result['overlap']-data['overlapHa'])<1e-8,result
