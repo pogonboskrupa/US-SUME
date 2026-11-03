@@ -25,3 +25,14 @@ vm.createContext(ctx); vm.runInContext(kod, ctx);
   assert.equal((login.match(/await prijavaIzKesa\(\)/g) || []).length, 3, 'sva tri poziva čekaju async provjeru');
   console.log('offline-prijava-poslije-odjave: OK');
 })().catch(e => { console.error(e); process.exit(1); });
+
+// Redoslijed u doLogin: stari uzorci slabe veze se čiste PRIJE odluke "keš ili server".
+(function(){
+  const src=require('./_izvor').izvor();
+  const a=src.indexOf('async function doLogin()'),b=src.indexOf('// --- Register ---');
+  const body=src.slice(a,b);
+  const ocisti=body.indexOf('_netUzorci = _netUzorci.filter(u => u.ok || sad - u.t < 20000)');
+  const gate=body.indexOf('if (!sb || !_mrezaProbaj()) {');
+  require('assert').ok(ocisti>0&&gate>0&&ocisti<gate,'čišćenje starih uzoraka mora prethoditi odluci o kešu');
+  console.log('OK: doLogin čisti stare uzorke veze prije odluke keš/server');
+})();

@@ -2021,6 +2021,14 @@ async function doLogin() {
   // v1.8.8: i IZMJERENO mrtva veza (navigator.onLine laže 'true') ide odmah na
   // keš — ranije je čekala rok RPC-a pa javila "Server nedostupan" korisniku
   // čiji je profil sve vrijeme bio na telefonu.
+  // Izričita prijava dok OS kaže da ima mreže: stari uzorci slabe/mrtve veze (do 10 min)
+  // opisuju PRIJE, ne sad. Ranije su se brisali TEK poslije ovog uslova, pa je prijava
+  // ulazila odmah sa sačuvanog profila (bez prave sesije) i admin je ostajao bez
+  // Korisnika ("server ne prepoznaje admin pristup") i poslije odjave/prijave.
+  // Prvo pokušaj server; na mrežni pad niže ionako ide prijavaIzKesa().
+  if (sb && navigator.onLine !== false && typeof _netUzorci !== 'undefined') {
+    try { const sad = Date.now(); _netUzorci = _netUzorci.filter(u => u.ok || sad - u.t < 20000); } catch (e) {}
+  }
   if (!sb || !_mrezaProbaj()) {
     if (await prijavaIzKesa()) return;
     if (!sb) { showAuthErr('Nema internet konekcije — server nedostupan'); return; }
