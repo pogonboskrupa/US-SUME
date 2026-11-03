@@ -39,4 +39,9 @@ t('stabilizacija: može se smanjiti, tok se ne prekida, pilula se čisti pri zav
   assert(/function _gpsStabFinish[\s\S]{0,400}gstab-pill/.test(src));
   assert(/onclick="_gpsStabMin\(true\)"/.test(src));
 });
+t('stabilizacija nikad ne blokira ekran: pri izgradnji odmah ide u pilulu, pilula ima otkazivanje',()=>{
+  const b=src.slice(src.indexOf('function _buildGpsStabOverlay()'));
+  assert(/document\.body\.appendChild\(d\);[\s\S]{0,160}_gpsStabMin\(true\);/.test(b));
+  assert(/pill\.lastChild\.onclick = \(\) => _gpsStabCancel\(\)/.test(src));
+});
 console.log(n+' prošlo, 0 palo');

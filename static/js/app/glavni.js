@@ -15253,11 +15253,17 @@ function _buildGpsStabOverlay() {
       </div>
     </div>`;
   document.body.appendChild(d);
+  // Nikad ne blokira ekran: odmah mala pilula, pun prozor se otvara dodirom.
+  _gpsStabMin(true);
 }
 
 // Smanjen prikaz: prozor ne blokira ekran, stabilizacija i dalje teče (isti
 // _gpsStabCb), a snimanje počinje samo čim se signal smiri.
 let _gpsStabZadnje = '';
+function _gpsStabPillTxt(pill) {
+  const b = pill && pill.querySelector('.gstab-pill-txt');
+  if (b) b.textContent = '📡 Stabiliziram GPS' + _gpsStabZadnje + ' · otvori';
+}
 function _gpsStabMin(on) {
   const ov = document.getElementById('gstab-overlay');
   if (!ov) return;
@@ -15265,13 +15271,16 @@ function _gpsStabMin(on) {
   if (on) {
     ov.style.display = 'none';
     if (!pill) {
-      pill = document.createElement('button');
-      pill.id = 'gstab-pill'; pill.type = 'button';
-      pill.style.cssText = 'position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:98000;min-height:44px;max-width:92vw;padding:0 16px;border-radius:22px;border:1.5px solid #1e3a5f;background:#0f172a;color:#e2e8f0;font:700 12px system-ui;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-      pill.onclick = () => _gpsStabMin(false);
+      pill = document.createElement('div');
+      pill.id = 'gstab-pill';
+      pill.style.cssText = 'position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:98000;display:flex;align-items:center;max-width:94vw;border-radius:22px;border:1.5px solid #1e3a5f;background:#0f172a;box-shadow:0 2px 10px rgba(0,0,0,.5);overflow:hidden;';
+      pill.innerHTML = '<button type="button" class="gstab-pill-txt" style="min-height:44px;padding:0 6px 0 16px;border:none;background:transparent;color:#e2e8f0;font:700 12px system-ui;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></button>'
+        + '<button type="button" aria-label="Odustani od snimanja" style="min-width:44px;min-height:44px;border:none;border-left:1px solid #1e3a5f;background:transparent;color:#fca5a5;font-size:18px;cursor:pointer;">✕</button>';
+      pill.firstChild.onclick = () => _gpsStabMin(false);
+      pill.lastChild.onclick = () => _gpsStabCancel();
       document.body.appendChild(pill);
     }
-    pill.textContent = '📡 Stabiliziram GPS' + _gpsStabZadnje + ' · otvori';
+    _gpsStabPillTxt(pill);
   } else {
     ov.style.display = 'flex';
     pill?.remove();
@@ -15279,8 +15288,7 @@ function _gpsStabMin(on) {
 }
 function _updGpsStabOverlay(ac, spread, n, ready) {
   _gpsStabZadnje = ' · ±' + Math.round(ac) + ' m · ' + Math.min(n, GPS_STAB_NEED) + '/' + GPS_STAB_NEED;
-  const _pill = document.getElementById('gstab-pill');
-  if (_pill) _pill.textContent = '📡 Stabiliziram GPS' + _gpsStabZadnje + ' · otvori';
+  _gpsStabPillTxt(document.getElementById('gstab-pill'));
   const accEl = document.getElementById('gstab-acc');
   const sprEl = document.getElementById('gstab-spr');
   const cntEl = document.getElementById('gstab-cnt');
@@ -17494,10 +17502,13 @@ function _locPopupCentriraj() {
 // zatvoriti ga i tražiti Tragovi tab da bi počeo snimati. fabSnimTrag() je
 // već TOGGLE (start kad ne snima, spremi/završi kad snima), pa se poziva
 // direktno — nema duple logike ovdje.
-function _locPopupDijeli() {
+// Prečice iz "Moja lokacija": lista tragova ili mjerenja (podtabovi taba Tragovi).
+// Dijeljenje kretanja ostaje u Meniju i na Terenu.
+function _locPopupTragovi(tab) {
   const pop = document.getElementById('ab-loc-popup');
   if (pop) pop.style.display = 'none';
-  shareSheetOpen();
+  switchTab('tragovi');
+  try { _tragoviSetTab(tab === 'msr' ? 'msr' : 'trg'); } catch (e) {}
 }
 
 function _locPopupSnimiTrag() {

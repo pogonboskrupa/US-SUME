@@ -1266,8 +1266,10 @@ html #ls-basemap-grid .layer-opt .lopt-sub {font-size:10px;line-height:1.3;}
 #share-pozivnica button{min-height:44px;border-radius:10px;border:none;font:700 13px system-ui;cursor:pointer;}
 #share-pozivnica .shr-pz-go{padding:0 14px;background:#22c55e;color:#052e16;}
 #share-pozivnica .shr-pz-x{width:44px;background:rgba(255,255,255,.1);color:#cbd5e1;}
-html .abp-dijeli{display:block;width:100%;margin-top:8px;}
-html #ab-loc-popup.gps-off .abp-dijeli{display:none;}
+html .abp-chips.abp-lista{margin-top:8px;grid-template-columns:1fr 1fr}
+html .abp-lista .abp-chip{min-height:44px}
+/* Liste tragova i mjerenja ne trebaju GPS — vidljive i kad je lokacija isključena */
+html #ab-loc-popup.gps-off .abp-chips.abp-lista{display:grid;}
 
 /* Explorer: kompaktan panel (~170 px umjesto ~250 px) — Pregled je prešao u red
    radnji, a ikona/oznaka odredišta i red smjera su skinuti da karta ostane vidljiva. */

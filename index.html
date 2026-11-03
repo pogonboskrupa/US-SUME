@@ -7736,7 +7736,10 @@ function _loadLocalVlake() {
         <button id="ab-loc-trag" class="abp-act abp-trag" onclick="_locPopupSnimiTrag()">
           <svg class="ic"><use href="#ic-trag"/></svg><span id="ab-loc-trag-txt">Snimi trag</span></button>
       </div>
-      <button type="button" class="abp-chip abp-dijeli" id="ab-loc-dijeli" onclick="_locPopupDijeli()" title="Dijeli kretanje sa kolegama ili preko linka / QR koda">📍 Dijeli kretanje</button>
+      <div class="abp-chips abp-lista">
+        <button type="button" class="abp-chip" id="ab-loc-tragovi" onclick="_locPopupTragovi('trg')" title="Lista tragova i snimanje">🥾 Tragovi</button>
+        <button type="button" class="abp-chip" id="ab-loc-mjerenja" onclick="_locPopupTragovi('msr')" title="Sačuvana mjerenja">📏 Mjerenja</button>
+      </div>
       <div class="abp-chips">
         <button class="abp-chip" id="compass-switch" onclick="_togCompassSwitch()" title="Kompas / pravac gledanja">🧭 Kompas</button>
         <button class="abp-chip" id="radius-switch" onclick="_togRadiusRings()" title="Krugovi udaljenosti oko tebe">⊚ Radijus</button>
