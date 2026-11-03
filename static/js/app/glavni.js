@@ -2622,6 +2622,15 @@ function _netDebugRender() {
   try { pok = JSON.parse(localStorage.getItem('tvlake_startup_zadnje') || 'null'); } catch (e) {}
   if (pok && pok.dcl) h += _netRedHtml('Zadnje pokretanje', pok.dcl + ' ms do DOM spreman' + (pok.restore ? ' · karta ' + pok.restore + ' ms' : ''),
     pok.dcl > 4000 ? '#f59e0b' : '#cbd5e1');
+  try {
+    const R = window.DendroRender, st = R && R.state;
+    if (st) {
+      const nacin = (st.lite ? 'lagani' : 'puni') + (st.userMode && st.userMode !== 'auto' ? ' (ručno)' : st.slowDetected ? ' (auto: trzanje)' : ' (auto)');
+      h += _netRedHtml('Brzina prikaza', nacin + ' · RAM ' + (st.memoryGb || '?') + ' GB · ' + (st.cores || '?') + ' jezgri', st.lite ? '#f59e0b' : '#cbd5e1');
+      const hh = (st.hist || []).slice(-4);
+      if (hh.length) h += _netRedHtml('Zadnja pomicanja', hh.map(x => x.p50 + '/' + x.p95 + ' ms').join(' · ') + ' (medijan/95. perc., 16 = glatko)', hh.some(x => x.p50 > 32) ? '#f59e0b' : '#22c55e');
+    }
+  } catch (e) {}
   h += _netRedHtml('Offline karata otvoreno', String((typeof _sqlLayers !== 'undefined' && _sqlLayers) ? _sqlLayers.length : 0));
   // Ovo je jedina brojka koja pokazuje koliko još terenskog rada STANE. Pregled
   // offline karata mjeri origin kvotu (GB) i o localStorage-u ne govori ništa.

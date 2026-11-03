@@ -130,14 +130,18 @@
     }
     function finish() {
       active = false; last = 0; const f = frames; frames = [];
-      if (f.length < 25 || state.lite || state.userMode !== 'auto') return;
+      if (f.length < 25) return;
       const sorted = f.slice().sort((a, b) => a - b), p50 = sorted[sorted.length >> 1];
+      const p95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))];
       const teski = f.filter(x => x > 50).length / f.length;
+      // Zadnjih 12 pomicanja — vidljivo adminu u Debug → Terenski rad (stvarni brojevi sa telefona).
+      (state.hist = state.hist || []).push({ n: f.length, p50: Math.round(p50), p95: Math.round(p95), lite: state.lite });
+      if (state.hist.length > 12) state.hist.shift();
       if (p50 > 32 || teski > 0.3) bad++; else good++;
-      if (bad >= 3 && bad > good) slow('p50=' + Math.round(p50) + 'ms');
+      if (!state.lite && state.userMode === 'auto' && bad >= 3 && bad > good) slow('p50=' + Math.round(p50) + 'ms');
     }
     function touch() {
-      if (!active && !state.lite) { active = true; last = 0; frames = []; root.requestAnimationFrame(tick); }
+      if (!active) { active = true; last = 0; frames = []; root.requestAnimationFrame(tick); }
       clearTimeout(quietTimer); quietTimer = setTimeout(finish, 350);
     }
     ['touchmove', 'scroll'].forEach(e => root.document.addEventListener(e, touch, { passive: true, capture: true }));
