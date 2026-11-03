@@ -7931,6 +7931,15 @@ function _loadLocalVlake() {
     <div id="ls-cache-box" hidden>
       <div id="ls-cache-info"></div>
     </div>
+    <!-- Prikaz za slabije telefone: lagani prikaz gasi blur pozadine i animacije, manji tile budžet -->
+    <div id="ls-render-mode" style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <label for="render-mode-sel" style="font-size:12px;color:#94a3b8;">⚡ Brzina prikaza</label>
+      <select id="render-mode-sel" onchange="DendroRender.setMode(this.value)" style="flex:1;min-width:150px;min-height:44px;padding:6px 10px;background:#0f172a;border:1px solid #374151;border-radius:8px;color:#e2e8f0;font-size:13px;">
+        <option value="auto">Automatski (prati trzanje)</option>
+        <option value="lite">Lagani — za slabiji telefon</option>
+        <option value="full">Puni prikaz</option>
+      </select>
+    </div>
     <!-- Granice odjela — sakriven dok nema podataka -->
     <div id="ls-granice-row" style="display:none;margin-top:10px;">
       <div class="layer-grid" style="grid-template-columns:1fr;">

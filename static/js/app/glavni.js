@@ -11864,6 +11864,7 @@ function _openLayerSheet() {
   // na Slojeve karte bez X-a), oba su se prikazivala ISTOVREMENO, jedno preko
   // drugog (potvrđeno screenshot-om s terena). Zatvori ga prije otvaranja ovog.
   if (typeof closeOznakePanel === 'function') closeOznakePanel();
+  try { const rm = document.getElementById('render-mode-sel'); if (rm) rm.value = window.DendroRender?.state?.userMode || 'auto'; } catch (e) {}
   document.getElementById('layer-sheet-bg').style.display = 'block';
   document.getElementById('layer-sheet').style.display   = 'block';
   let lastTab='karte';try { lastTab=localStorage.getItem('tvlake_layer_sheet_tab')||lastTab; } catch(e) {}
@@ -12461,12 +12462,17 @@ map.on('dragstart', () => {
 });
 
 // Ažuriraj N.V. i GPS distancu pri pomicanju karte (throttled za performanse)
-let _moveRafPending = false;
+let _moveRafPending = false, _moveZadnji = 0;
 map.on('move', () => {
   if (_moveRafPending) return;
+  // Svaki frame vuče proj4 (MGI), upis teksta u traku sa blur pozadinom i DEM — na
+  // slabijem telefonu to je zaustavljalo pomicanje. Dovoljno je ~8 puta u sekundi
+  // (lite 5), tačna vrijednost se ionako upiše na 'moveend'.
+  const razmak = window.DendroRender?.state?.lite ? 200 : 120;
+  if (performance.now() - _moveZadnji < razmak) return;
   _moveRafPending = true;
   requestAnimationFrame(() => {
-    _moveRafPending = false;
+    _moveRafPending = false; _moveZadnji = performance.now();
     _updMcdDist();
     const c = map.getCenter();
     updMGI(c.lat, c.lng);
