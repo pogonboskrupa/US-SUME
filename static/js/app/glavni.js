@@ -2543,6 +2543,7 @@ function _adminDebugRender() {
   // Kartica stanja veze se osvježava zajedno sa listom — inače bi pokazivala
   // stanje od prošlog otvaranja panela, što je na terenu gore od ničega.
   try { _netDebugRender(); } catch(e) {}
+  try { _perfDiagRender(); } catch(e) {}
   const el = document.getElementById('admin-debug-list');
   if (!el) return;
   if (!sbProfile?.is_admin) { el.innerHTML = ''; return; }
@@ -36132,4 +36133,143 @@ if (typeof AndroidDownload !== 'undefined') {
   })();
 }
 
+// ─── Dijagnostika brzine (samo admin vidi, mjeri se uvijek) ──────────────────
+// Cilj: na stvarnom (slabom) telefonu pokazati KO troši vrijeme, ne nagađati.
+// Mjeri se pasivno: duge zadatke glavne niti (PerformanceObserver longtask) sa
+// oznakom taba, kašnjenje petlje događaja, vrijeme vrućih funkcija (omotači),
+// veličinu DOM-a/slojeva/memorije. Nema mrežnih poziva i ne dira podatke.
+const _PERF = { lt: [], ltUk: 0, ltN: 0, ltMax: 0, lag: [], fn: {}, start: Date.now(), tabLt: {} };
+(function _perfDiagInit() {
+  try {
+    if (typeof PerformanceObserver === 'function' && (PerformanceObserver.supportedEntryTypes || []).includes('longtask')) {
+      new PerformanceObserver(list => {
+        for (const e of list.getEntries()) {
+          const tab = (typeof _activeTab !== 'undefined' && _activeTab) || '?';
+          _PERF.ltN++; _PERF.ltUk += e.duration; if (e.duration > _PERF.ltMax) _PERF.ltMax = e.duration;
+          const t = _PERF.tabLt[tab] || (_PERF.tabLt[tab] = { n: 0, ms: 0, max: 0 });
+          t.n++; t.ms += e.duration; if (e.duration > t.max) t.max = e.duration;
+          if (e.duration >= 120) {
+            _PERF.lt.push({ at: Math.round(e.startTime), ms: Math.round(e.duration), tab });
+            if (_PERF.lt.length > 15) _PERF.lt.shift();
+          }
+        }
+      }).observe({ type: 'longtask', buffered: true });
+    }
+  } catch (e) {}
+  // Kašnjenje petlje događaja: tajmer od 500 ms koji kasni = glavna nit je zauzeta.
+  try {
+    let last = performance.now();
+    setInterval(() => {
+      const now = performance.now(), d = now - last - 500; last = now;
+      if (document.hidden || d < 0 && d > -400) { if (document.hidden) return; }
+      if (d >= 0 && d < 20000) { _PERF.lag.push(Math.round(d)); if (_PERF.lag.length > 240) _PERF.lag.shift(); }
+    }, 500);
+  } catch (e) {}
+  // Omotači oko vrućih funkcija: broj poziva, ukupno i najduže trajanje.
+  const imena = ['rndList', 'updOvl', '_scheduleOvlRnd', '_declutterVlakaLabels', 'drawBuffers', 'switchTab',
+    '_addTragPoint', '_vlakaProcessGpsPoint', '_dozProcessGpsPoint', '_dozComputeBands', '_dozPokrivenost',
+    '_crashSaveVlaka', '_crashSaveTrag', '_processOfflineQueue', '_kmlHitTest', 'onP', '_recBarUpdate'];
+  setTimeout(() => {
+    for (const n of imena) {
+      try {
+        const f = window[n];
+        if (typeof f !== 'function' || f._perfOmotan) continue;
+        const w = function () {
+          const t0 = performance.now();
+          try { return f.apply(this, arguments); }
+          finally {
+            const d = performance.now() - t0, r = _PERF.fn[n] || (_PERF.fn[n] = { n: 0, ms: 0, max: 0 });
+            r.n++; r.ms += d; if (d > r.max) r.max = d;
+          }
+        };
+        w._perfOmotan = true;
+        window[n] = w;
+      } catch (e) {}
+    }
+  }, 1500);
+})();
 
+function _perfPerc(arr, q) {
+  if (!arr.length) return 0;
+  const s = arr.slice().sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.floor(s.length * q))];
+}
+function _perfSnimak() {
+  const o = { ver: typeof APP_VER !== 'undefined' ? APP_VER : '?', ua: (navigator.userAgent.match(/Android [\d.]+|Chrome\/[\d.]+/g) || []).join(' '),
+    jezgri: navigator.hardwareConcurrency || '?', ram: navigator.deviceMemory || '?', sekundi: Math.round((Date.now() - _PERF.start) / 1000) };
+  const nav = (performance.getEntriesByType && performance.getEntriesByType('navigation')[0]) || null;
+  if (nav) { o.domInteractive = Math.round(nav.domInteractive); o.dcl = Math.round(nav.domContentLoadedEventEnd); o.load = Math.round(nav.loadEventEnd); }
+  try { const fcp = performance.getEntriesByName('first-contentful-paint')[0]; if (fcp) o.fcp = Math.round(fcp.startTime); } catch (e) {}
+  o.dom = document.getElementsByTagName('*').length;
+  try { o.slojeva = (typeof map !== 'undefined' && map && map._layers) ? Object.keys(map._layers).length : 0; } catch (e) { o.slojeva = 0; }
+  try { o.plocica = document.querySelectorAll('.leaflet-tile').length; } catch (e) { o.plocica = 0; }
+  try { o.vlaka = (typeof vlake !== 'undefined' && vlake) ? vlake.length : 0; o.tacaka = (typeof vlake !== 'undefined' && vlake) ? vlake.reduce((a, v) => a + ((v.pts && v.pts.length) || 0), 0) : 0; } catch (e) {}
+  try { if (performance.memory) { o.heapMB = Math.round(performance.memory.usedJSHeapSize / 1048576); o.heapLimMB = Math.round(performance.memory.jsHeapSizeLimit / 1048576); } } catch (e) {}
+  try { o.lsKB = typeof _lsZauzetoKB === 'function' ? _lsZauzetoKB() : null; } catch (e) {}
+  o.dugihZadataka = _PERF.ltN; o.dugihUkupnoMs = Math.round(_PERF.ltUk); o.dugiMaxMs = Math.round(_PERF.ltMax);
+  o.lagP50 = _perfPerc(_PERF.lag, 0.5); o.lagP95 = _perfPerc(_PERF.lag, 0.95); o.lagMax = _PERF.lag.length ? Math.max(..._PERF.lag) : 0;
+  o.poTabu = Object.entries(_PERF.tabLt).map(([k, v]) => ({ tab: k, n: v.n, ms: Math.round(v.ms), max: Math.round(v.max) })).sort((a, b) => b.ms - a.ms);
+  o.funkcije = Object.entries(_PERF.fn).map(([k, v]) => ({ fn: k, n: v.n, ms: Math.round(v.ms), max: Math.round(v.max), avg: +(v.ms / Math.max(1, v.n)).toFixed(2) })).sort((a, b) => b.ms - a.ms);
+  o.najduzi = _PERF.lt.slice().sort((a, b) => b.ms - a.ms).slice(0, 8);
+  try { const R = window.DendroRender; if (R && R.state) { o.nacin = R.state.lite ? 'lagani' : 'puni'; o.pomicanja = (R.state.hist || []).map(x => x.p50 + '/' + x.p95); } } catch (e) {}
+  return o;
+}
+// Pravila: šta je izmjereno → šta bi se moglo popraviti.
+function _perfPreporuke(o) {
+  const r = [];
+  if (o.dom > 9000) r.push(['#f59e0b', 'DOM ima ' + o.dom + ' elemenata — svaki prelaz taba i stil prolaz košta više. Kandidat: odgoditi izgradnju rijetkih panela (Pomoć, modali) do prvog otvaranja.']);
+  if (o.slojeva > 4000) r.push(['#f59e0b', 'Na karti je ' + o.slojeva + ' slojeva — zum/pomak projektuje sve. Kandidat: isključiti nepotrebne KML/vlake slojeve ili ih pojednostaviti.']);
+  if (o.plocica > 160) r.push(['#f59e0b', o.plocica + ' pločica u DOM-u — previše za slab GPU. Kandidat: manji keepBuffer.']);
+  if (o.heapMB && o.heapLimMB && o.heapMB / o.heapLimMB > 0.6) r.push(['#ef4444', 'JS memorija ' + o.heapMB + ' od ' + o.heapLimMB + ' MB — blizu granice, rizik od rušenja WebView-a. Kandidat: zatvoriti velike KML/GeoJSON slojeve.']);
+  if (o.lagP95 > 100) r.push(['#ef4444', 'Glavna nit kasni (95. perc. ' + o.lagP95 + ' ms, najviše ' + o.lagMax + ' ms) — dodir reaguje sa zakašnjenjem.']);
+  if (o.dugihZadataka > 20 && o.dugihUkupnoMs / Math.max(1, o.sekundi) > 25) r.push(['#f59e0b', 'Duge radnje troše ' + Math.round(o.dugihUkupnoMs / Math.max(1, o.sekundi)) + ' ms svake sekunde.']);
+  const tab = o.poTabu[0];
+  if (tab && tab.ms > 1500) r.push(['#f59e0b', 'Najviše zastoja je na tabu „' + tab.tab + '“ (' + tab.ms + ' ms u ' + tab.n + ' zastoja, najduži ' + tab.max + ' ms) — tu tražiti prvo.']);
+  const f = o.funkcije[0];
+  if (f && f.ms > 800) r.push(['#f59e0b', 'Najskuplja funkcija: ' + f.fn + ' (' + f.ms + ' ms ukupno, ' + f.n + ' poziva, najduži ' + f.max + ' ms).']);
+  for (const x of o.funkcije) if (x.max > 150 && x !== f) { r.push(['#f59e0b', x.fn + ': jedan poziv je trajao ' + x.max + ' ms — blokira ekran.']); break; }
+  if (o.nacin === 'puni' && (o.pomicanja || []).some(s => +s.split('/')[0] > 32)) r.push(['#f59e0b', 'Pomicanje karte trza u punom prikazu — uključi Lagani prikaz (Meni → Brzina prikaza).']);
+  if (o.dcl > 4000) r.push(['#f59e0b', 'Pokretanje do DOM-a: ' + o.dcl + ' ms.']);
+  if (o.lsKB && o.lsKB > 3500) r.push(['#ef4444', 'Lokalna pohrana ' + o.lsKB + ' KB od ~5000 — blizu kvote.']);
+  if (!r.length) r.push(['#22c55e', 'Ništa alarmantno u izmjerenom. Pusti app da radi (pomjeri kartu, otvori tabove, snimaj) pa osvježi.']);
+  return r;
+}
+function _perfDiagRender() {
+  const el = document.getElementById('perf-diag-card');
+  if (!el) return;
+  if (!sbProfile?.is_admin) { el.innerHTML = ''; return; }
+  const o = _perfSnimak(), r = _perfPreporuke(o);
+  const red = (k, v, c) => '<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid #1e293b;font-size:11.5px;"><span style="color:#94a3b8;">' + k + '</span><span style="color:' + (c || '#cbd5e1') + ';text-align:right;">' + v + '</span></div>';
+  let h = '<div style="font-weight:700;color:#cbd5e1;font-size:13px;margin-bottom:8px;">⏱ Dijagnostika brzine</div>';
+  h += '<div style="font-size:10.5px;color:#64748b;margin-bottom:8px;">Mjeri se od pokretanja (' + o.sekundi + ' s). Koristi app kao na terenu pa osvježi.</div>';
+  r.forEach(x => { h += '<div style="margin-bottom:6px;padding:7px 9px;border-left:3px solid ' + x[0] + ';border-radius:4px;font-size:11px;line-height:1.45;color:#cbd5e1;">' + x[1] + '</div>'; });
+  h += '<div style="margin-top:8px;">';
+  h += red('Uređaj', o.jezgri + ' jezgri · RAM ' + o.ram + ' GB · ' + (o.ua || '?'));
+  h += red('Pokretanje', (o.domInteractive || '?') + ' ms interaktivno · ' + (o.dcl || '?') + ' ms DOM' + (o.fcp ? ' · prvi prikaz ' + o.fcp + ' ms' : ''));
+  h += red('DOM / slojevi / pločice', o.dom + ' / ' + o.slojeva + ' / ' + o.plocica);
+  h += red('Vlake', o.vlaka + ' (' + o.tacaka + ' tačaka)');
+  if (o.heapMB) h += red('JS memorija', o.heapMB + ' / ' + o.heapLimMB + ' MB');
+  h += red('Kašnjenje glavne niti', 'medijan ' + o.lagP50 + ' · p95 ' + o.lagP95 + ' · max ' + o.lagMax + ' ms', o.lagP95 > 100 ? '#ef4444' : '#22c55e');
+  h += red('Duge radnje (>50 ms)', o.dugihZadataka + ' · ukupno ' + o.dugihUkupnoMs + ' ms · najduža ' + o.dugiMaxMs + ' ms');
+  h += '</div>';
+  if (o.poTabu.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Zastoji po tabu</div>'; o.poTabu.slice(0, 6).forEach(t => { h += red(t.tab, t.n + '× · ' + t.ms + ' ms · max ' + t.max); }); }
+  if (o.funkcije.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Vruće funkcije (ukupno vrijeme)</div>'; o.funkcije.slice(0, 8).forEach(t => { h += red(t.fn, t.n + '× · ' + t.ms + ' ms · ø ' + t.avg + ' · max ' + t.max); }); }
+  if (o.najduzi.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Najduži zastoji</div>'; o.najduzi.forEach(t => { h += red('+' + Math.round(t.at / 1000) + ' s · ' + t.tab, t.ms + ' ms'); }); }
+  h += '<div style="display:flex;gap:8px;margin-top:10px;"><button onclick="_perfDiagRender()" style="flex:1;padding:9px;background:#0c4a6e;border:1px solid #38bdf8;border-radius:8px;color:#e0f2fe;font-size:12px;font-weight:700;">Osvježi</button>' +
+    '<button onclick="_perfKopiraj()" style="flex:1;padding:9px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#bbf7d0;font-size:12px;font-weight:700;">Kopiraj izvještaj</button>' +
+    '<button onclick="_perfReset()" style="flex:1;padding:9px;background:#1e293b;border:1px solid #475569;border-radius:8px;color:#cbd5e1;font-size:12px;font-weight:700;">Resetuj</button></div>';
+  el.innerHTML = h;
+}
+function _perfReset() {
+  _PERF.lt = []; _PERF.ltUk = 0; _PERF.ltN = 0; _PERF.ltMax = 0; _PERF.lag = []; _PERF.fn = {}; _PERF.tabLt = {}; _PERF.start = Date.now();
+  try { _perfDiagRender(); } catch (e) {}
+  showToast('Mjerenje resetovano');
+}
+async function _perfKopiraj() {
+  const t = JSON.stringify(_perfSnimak(), null, 1);
+  try { await navigator.clipboard.writeText(t); showToast('✓ Izvještaj kopiran'); }
+  catch (e) {
+    try { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); showToast('✓ Izvještaj kopiran'); }
+    catch (e2) { showToast('Kopiranje nije uspjelo'); }
+  }
+}

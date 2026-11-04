@@ -5341,6 +5341,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
              komentar uz _netZabiljezi. Dugme ispod je JEDINI zahtjev koji ova
              sekcija sama napravi, i to tek na izričit klik. -->
         <div id="net-debug-card" style="background:#080f1e;border:1px solid #334155;border-radius:10px;padding:12px;margin-bottom:12px;"></div>
+        <div id="perf-diag-card" style="background:#080f1e;border:1px solid #0e7490;border-radius:10px;padding:12px;margin-bottom:12px;"></div>
 
         <button onclick="_netTestSada()" id="btn-net-test"
           style="width:100%;padding:10px;margin-bottom:14px;background:#14233c;border:1px solid #3b82f6;border-radius:9px;color:#93c5fd;font-size:12px;font-weight:700;cursor:pointer;">
@@ -6018,7 +6019,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.3.8';
+const APP_VER = 'v3.3.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6092,6 +6093,11 @@ try {
   if (localStorage.getItem('tvlake_debug_ocisceno_v154') !== '1') {
     localStorage.removeItem('tvlake_admin_debug_v1');
     localStorage.setItem('tvlake_debug_ocisceno_v154', '1');
+  }
+  // v3.3.9: na zahtjev, sav sadržaj Debug sekcije se briše jednokratno.
+  if (localStorage.getItem('tvlake_debug_ocisceno_v339') !== '1') {
+    ['tvlake_admin_debug_v1', 'tvlake_startup_zadnje', 'tvlake_map_startup_diag_v1'].forEach(k => localStorage.removeItem(k));
+    localStorage.setItem('tvlake_debug_ocisceno_v339', '1');
   }
 } catch(e) {}
 
