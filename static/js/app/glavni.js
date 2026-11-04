@@ -2792,6 +2792,36 @@ function _adminDebugMapStuckNow() {
 // --- Admin: učitaj listu korisnika ---
 let _adminUsers = null; // zadnji fetch — render/filter bez ponovnog RPC poziva
 
+// Dobavlja PRAVU Supabase sesiju za isti nalog bez odjave: zapamćeni PIN, a ako
+// ga nema (ili ne važi) pita PIN u dijalogu.
+async function _sesijaPinom(pitaj) {
+  if (!sb || !sbProfile?.ime) return false;
+  const uid = sbUser?.id;
+  const probaj = async pin => {
+    try {
+      const { data: email } = await _withTimeout(sb.rpc('get_login_email', { p_ime: sbProfile.ime, p_prezime: sbProfile.prezime }), 8000);
+      if (!email) return false;
+      const { error } = await _withTimeout(sb.auth.signInWithPassword({ email, password: String(pin).padEnd(6, '0') }), 10000);
+      if (error) return false;
+      const u = (await sb.auth.getUser()).data.user;
+      if (!u || (uid && u.id !== uid)) return false;
+      sbUser = u;
+      try { await _upgradeToOnlineSession(); } catch (e) {}
+      return true;
+    } catch (e) { return false; }
+  };
+  const saved = _loadSavedUser();
+  if (saved?.pin && await probaj(saved.pin)) return true;
+  if (!pitaj) return false;
+  for (let n = 0; n < 3; n++) {
+    const pin = await _dlgPrompt('Za admin pristup treba veza sa serverom. Unesi svoj PIN (ostaješ prijavljen):', '', { title: 'Potvrdi PIN', inputType: 'password', inputMode: 'numeric', okLabel: 'Potvrdi' });
+    if (pin == null || pin === '') return false;
+    if (await probaj(pin)) return true;
+    showToast('PIN nije prihvaćen ili nema veze.');
+  }
+  return false;
+}
+
 async function adminLoadUsers() {
   if (!sbProfile?.is_admin) return;
   const el = document.getElementById('admin-panel-user-list');
@@ -2824,7 +2854,12 @@ async function adminLoadUsers() {
   const _nemaSesije = () => {
     el.innerHTML = '<div style="text-align:center;padding:16px 8px;"><p style="color:#fbbf24;font-size:13px;line-height:1.5;margin:0 0 12px;">⚠ Nisi prijavljen na server (radiš na sačuvanom profilu), pa server ne prepoznaje admin pristup.<br>Odjavi se i prijavi ponovo dok imaš internet.</p><button type="button" class="btn" onclick="doLogout()" style="padding:10px 18px;">Odjavi se i prijavi ponovo</button></div>';
   };
-  if (sbUser?._cachedStub) { _nemaSesije(); return; }
+  if (sbUser?._cachedStub) {
+    // Sesija je istekla/nema je: prvo tiho sa zapamćenim PIN-om, pa traži PIN
+    // ovdje — odjava bi bacila korisnika kroz cijeli login samo zbog PIN-a.
+    const ok = await _sesijaPinom(true);
+    if (!ok) { _nemaSesije(); return; }
+  }
   const owner=sbUser?.id,seq=(adminLoadUsers._seq||0)+1;adminLoadUsers._seq=seq;
   const [{data,error},activity]=await Promise.all([
     _withTimeout(sb.rpc('admin_get_all_users'),8000).catch(()=>({error:{message:'Server nije odgovorio. Pokušaj ponovo.'}})),
