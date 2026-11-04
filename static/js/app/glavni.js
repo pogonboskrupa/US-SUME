@@ -8109,6 +8109,7 @@ function _schedKolegeFullSync(delay = 4000) {
 }
 
 function _updKoleguLiveBar() {
+  if (typeof document !== 'undefined' && document.hidden) return;   // ekran ugašen/app u pozadini: nema šta crtati
   const bar = document.getElementById('kolege-live-bar');
   if (!bar) return;
   const now = Date.now();
@@ -9243,6 +9244,7 @@ function _trnTickStart() {
   if (_trnTick) return;
   _trnTick = setInterval(() => {
     if (_activeTab !== 'teren') { clearInterval(_trnTick); _trnTick = null; return; }
+    if (document.hidden) return;
     _trnSyncBroj(); _trnFixRender(); _trnChipsRender(); _trnSunceRender();
     if(typeof TerenWorkspace!=='undefined')TerenWorkspace.render(false);
   }, 5000);
@@ -14492,6 +14494,7 @@ function _recTrajanjeMs() {
   return _recSesijaMs + (recOn && !recPaused && _recSegStart > 0 ? Date.now() - _recSegStart : 0);
 }
 function _recTimeRender() {
+  if (typeof document !== 'undefined' && document.hidden) return;   // ekran ugašen/app u pozadini: nema šta crtati
   const el = document.getElementById('rec-time');
   if (el) el.textContent = _fmtTrajanje(_recTrajanjeMs());
 }
@@ -15122,7 +15125,7 @@ function _updCentarBtn() {
 }
 // Fiksovi zastanu bez greške (krošnja, tunel) — bez ovoga bi dugme i dalje
 // tvrdilo "ima signala". Jeftino: DOM se dira samo na promjenu stanja.
-setInterval(() => { if (gpsOn) _updLocBtn(); }, 10000);
+setInterval(() => { if (gpsOn && !document.hidden) _updLocBtn(); }, 10000);
 
 function _updGpsSwitch() {
   const sw = document.getElementById('gps-switch');
@@ -16355,6 +16358,7 @@ function _recBarStanje() {
 }
 
 function _recBarUpdate() {
+  if (typeof document !== 'undefined' && document.hidden) return;   // ekran ugašen/app u pozadini: nema šta crtati
   const s = _recBarStanje();
   if (!s) return;
   const g = id => document.getElementById(id);
@@ -34511,6 +34515,7 @@ function dozGPSControlsKey(e) {
   if(e.key==='Escape') { e.preventDefault(); e.stopPropagation(); dozCloseGPSControls(); return; }
 }
 function _dozGpsControlsSync(acc) {
+  if (typeof document !== 'undefined' && document.hidden) return;   // ekran ugašen/app u pozadini: nema šta crtati
   if (acc !== undefined) {
     _dozGpsControlsAccuracy = Number.isFinite(acc) ? acc : null;
     _dozGpsControlsAccuracyTs = Date.now();
