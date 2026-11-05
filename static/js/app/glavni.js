@@ -1780,7 +1780,7 @@ function _startupRestore() {
   _startupRestore._generation = generation;
   const alive = () => !!owner && sbUser?.id === owner && _startupRestore._generation === generation;
 
-  const korak = (ime, fn) => { if (!alive()) return; try { Promise.resolve(fn()).catch(e => console.warn('startup:' + ime, e)); } catch(e) { console.warn('startup:' + ime, e); } };
+  const korak = (ime, fn) => { if (!alive()) return; const t0 = performance.now(); try { Promise.resolve(fn()).catch(e => console.warn('startup:' + ime, e)); } catch(e) { console.warn('startup:' + ime, e); } try { (window._PERF_KORACI = window._PERF_KORACI || []).push({ ime, sync: Math.round(performance.now() - t0), at: Math.round(t0) }); } catch(e) {} };
 
   korak('bufferStyle', () => { if(typeof _bufRestorePrefs==='function')_bufRestorePrefs(); });
   korak('visibility', () => { if(typeof _tvVisibilityRestore==='function')_tvVisibilityRestore(); });
@@ -36279,7 +36279,7 @@ if (typeof AndroidDownload !== 'undefined') {
 // Mjeri se pasivno: duge zadatke glavne niti (PerformanceObserver longtask) sa
 // oznakom taba, kašnjenje petlje događaja, vrijeme vrućih funkcija (omotači),
 // veličinu DOM-a/slojeva/memorije. Nema mrežnih poziva i ne dira podatke.
-const _PERF = { lt: [], ltUk: 0, ltN: 0, ltMax: 0, lag: [], fn: {}, start: Date.now(), tabLt: {} };
+const _PERF = { lt: [], ltUk: 0, ltN: 0, ltMax: 0, lag: [], fn: {}, start: Date.now(), tabLt: {}, loaf: [] };
 (function _perfDiagInit() {
   try {
     if (typeof PerformanceObserver === 'function' && (PerformanceObserver.supportedEntryTypes || []).includes('longtask')) {
@@ -36295,6 +36295,22 @@ const _PERF = { lt: [], ltUk: 0, ltN: 0, ltMax: 0, lag: [], fn: {}, start: Date.
           }
         }
       }).observe({ type: 'longtask', buffered: true });
+    }
+  } catch (e) {}
+  // Long Animation Frames (Chrome 123+): kaže KOJA skripta/funkcija je držala nit i koliko je otišlo na stil/raspored.
+  try {
+    if (typeof PerformanceObserver === 'function' && (PerformanceObserver.supportedEntryTypes || []).includes('long-animation-frame')) {
+      new PerformanceObserver(list => {
+        for (const e of list.getEntries()) {
+          if (e.duration < 100) continue;
+          const sk = (e.scripts || []).slice().sort((a, b) => b.duration - a.duration).slice(0, 3).map(x =>
+            (x.sourceFunctionName || x.invoker || '?') + ' ' + Math.round(x.duration) + 'ms' + (x.forcedStyleAndLayoutDuration > 20 ? ' (raspored ' + Math.round(x.forcedStyleAndLayoutDuration) + ')' : ''));
+          const rend = e.styleAndLayoutStart ? Math.round(e.startTime + e.duration - e.styleAndLayoutStart) : 0;
+          _PERF.loaf.push({ at: Math.round(e.startTime), ms: Math.round(e.duration), blok: Math.round(e.blockingDuration || 0), crtanje: rend, skripte: sk,
+            tab: (typeof _activeTab !== 'undefined' && _activeTab) || '?' });
+          _PERF.loaf.sort((a, b) => b.ms - a.ms); if (_PERF.loaf.length > 10) _PERF.loaf.length = 10;
+        }
+      }).observe({ type: 'long-animation-frame', buffered: true });
     }
   } catch (e) {}
   // Kašnjenje petlje događaja: tajmer od 500 ms koji kasni = glavna nit je zauzeta.
@@ -36351,6 +36367,8 @@ function _perfSnimak() {
   o.lagP50 = _perfPerc(_PERF.lag, 0.5); o.lagP95 = _perfPerc(_PERF.lag, 0.95); o.lagMax = _PERF.lag.length ? Math.max(..._PERF.lag) : 0;
   o.poTabu = Object.entries(_PERF.tabLt).map(([k, v]) => ({ tab: k, n: v.n, ms: Math.round(v.ms), max: Math.round(v.max) })).sort((a, b) => b.ms - a.ms);
   o.funkcije = Object.entries(_PERF.fn).map(([k, v]) => ({ fn: k, n: v.n, ms: Math.round(v.ms), max: Math.round(v.max), avg: +(v.ms / Math.max(1, v.n)).toFixed(2) })).sort((a, b) => b.ms - a.ms);
+  o.loaf = _PERF.loaf.slice(0, 8);
+  o.koraci = (window._PERF_KORACI || []).filter(k => k.sync >= 20).sort((a, b) => b.sync - a.sync).slice(0, 8);
   o.najduzi = _PERF.lt.slice().sort((a, b) => b.ms - a.ms).slice(0, 8);
   try { const R = window.DendroRender; if (R && R.state) { o.nacin = R.state.lite ? 'lagani' : 'puni'; o.pomicanja = (R.state.hist || []).map(x => x.p50 + '/' + x.p95); } } catch (e) {}
   return o;
@@ -36395,6 +36413,8 @@ function _perfDiagRender() {
   h += '</div>';
   if (o.poTabu.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Zastoji po tabu</div>'; o.poTabu.slice(0, 6).forEach(t => { h += red(t.tab, t.n + '× · ' + t.ms + ' ms · max ' + t.max); }); }
   if (o.funkcije.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Vruće funkcije (ukupno vrijeme)</div>'; o.funkcije.slice(0, 8).forEach(t => { h += red(t.fn, t.n + '× · ' + t.ms + ' ms · ø ' + t.avg + ' · max ' + t.max); }); }
+  if (o.loaf && o.loaf.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Šta je držalo nit (skripta · crtanje)</div>'; o.loaf.forEach(t => { h += red('+' + Math.round(t.at / 1000) + ' s · ' + t.tab + ' · ' + t.ms + ' ms (crtanje ' + t.crtanje + ')', (t.skripte.join('; ') || 'bez skripte — stil/raspored/slike')); }); }
+  if (o.koraci && o.koraci.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Spori koraci pokretanja</div>'; o.koraci.forEach(k => { h += red(k.ime, k.sync + ' ms (sinhroni dio) · +' + k.at + ' ms'); }); }
   if (o.najduzi.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Najduži zastoji</div>'; o.najduzi.forEach(t => { h += red('+' + Math.round(t.at / 1000) + ' s · ' + t.tab, t.ms + ' ms'); }); }
   h += '<div style="display:flex;gap:8px;margin-top:10px;"><button onclick="_perfDiagRender()" style="flex:1;padding:9px;background:#0c4a6e;border:1px solid #38bdf8;border-radius:8px;color:#e0f2fe;font-size:12px;font-weight:700;">Osvježi</button>' +
     '<button onclick="_perfKopiraj()" style="flex:1;padding:9px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#bbf7d0;font-size:12px;font-weight:700;">Kopiraj izvještaj</button>' +
