@@ -86,7 +86,7 @@ t('stop i oporavak nose uređeni stil; crash snimak čuva meta', () => {
   assert.match(fn('_fabSnimTragBegin'), /_tragLiveMeta = \{\};[\s\S]*_tragLiveStil\(\)/);
 });
 t('traka snimanja traga otvara uređivanje', () => {
-  assert.match(html, /id="ab-trag-stats"[^>]*onclick="_tragUrediOtvori\(\)"/);
+  assert.match(html, /id="ab-trag-ured"[^>]*onclick="_tragUrediOtvori\(\)"/);
   assert.match(html, /id="trag-ured" class="rs-sheet"/);
 });
 t('brisanje korisnika: migracija razrješava SVAKI blokirajući FK i traži admina', () => {

@@ -36,7 +36,7 @@ t('slanje i prijem su vezani za kanal odjela, a stop se šalje pri završetku',(
 });
 t('stabilizacija: može se smanjiti, tok se ne prekida, pilula se čisti pri završetku',()=>{
   assert(/function _gpsStabMin\(on\)/.test(src));
-  assert(/function _gpsStabFinish[\s\S]{0,400}gstab-pill/.test(src));
+  assert(/function _gpsStabFinish[\s\S]{0,500}gstab-pill/.test(src));
   assert(/onclick="_gpsStabMin\(true\)"/.test(src));
 });
 t('stabilizacija nikad ne blokira ekran: pri izgradnji odmah ide u pilulu, pilula ima otkazivanje',()=>{

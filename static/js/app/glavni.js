@@ -7541,13 +7541,33 @@ const _FOTO_KEY  = 'tvlake_loc_fotos';
 
 let _fotoSnapPos = null; // GPS pozicija zabilježena kad se pritisne dugme za foto
 
+var _tragFotoCeka = false;   // sljedeća slika iz kamere pripada tragu koji se snima
 function startLocPhoto() {
+  _tragFotoCeka = false;
   if (!lastP) { showToast('Nema GPS signala — pokreni GPS prvo'); return; }
   const inp = document.getElementById('loc-photo-cam');
   if (!inp || inp.disabled) return;
   const project=(_projekti||[]).find(p=>p.id===_aktivniProjektId);
   _fotoSnapPos = { la: lastP.la, lo: lastP.lo, odjel:project?.odjel||'', gj:project?.gj||'' };
   inp.value = '';
+  inp.click();
+}
+
+function _tragFotoBroj() {
+  const n = (_tragLiveMeta && _tragLiveMeta.fotos && _tragLiveMeta.fotos.length) || 0;
+  const el = document.getElementById('ab-trag-foto-n');
+  if (el) el.textContent = n ? ' ' + n : '';
+}
+function _tragFoto() {
+  if (!_tragOn) return;
+  if (!lastP) { showToast('Nema GPS signala — slika bi bila bez pozicije'); return; }
+  if (((_tragLiveMeta && _tragLiveMeta.fotos) || []).length >= 30) { showToast('Najviše 30 slika po tragu'); return; }
+  const inp = document.getElementById('loc-photo-cam');
+  if (!inp || inp.disabled) return;
+  const project = (_projekti || []).find(p => p.id === _aktivniProjektId);
+  _fotoSnapPos = { la: lastP.la, lo: lastP.lo, odjel: project?.odjel || '', gj: project?.gj || '' };
+  inp.value = '';
+  _tragFotoCeka = true;
   inp.click();
 }
 
@@ -7574,6 +7594,16 @@ async function onLocPhotoSelected(input) {
     // a Android ubija WebView pri povratku iz kamere; bez ovoga offline foto trajno
     // izgubi punu rezoluciju. Od v1.9.6 ostaje trajno — fotografija se ne šalje sama.
     _kmlcSave('fotofull:' + ts, full).catch(() => {});
+    if (_tragFotoCeka && _tragOn) {
+      // Slika snimljena DOK se snima trag postaje dio traga (meta ide u crash snimak i u sačuvani trag).
+      _tragFotoCeka = false;
+      const meta = _tragLiveMeta || (_tragLiveMeta = {});
+      (meta.fotos = meta.fotos || []).push({ la, lo, ts, thumb });
+      try { _crashSaveTrag(true); } catch (e) {}
+      _tragFotoBroj();
+      showToast('📷 Slika je dio traga (' + meta.fotos.length + ')');
+      return;
+    }
     map.panTo([la, lo]);
     showToast('📷 Foto dodano na mapu');   // v1.9.6: ostaje na telefonu; kolegama ide samo kroz "Podijeli"
   } catch(e) {
@@ -15223,17 +15253,23 @@ let _gpsStabActive  = false;
 let _gpsStabCb      = null;   // onP zove ovo sa svakim fiksom dok čekamo stabilizaciju
 let _gpsStabWasOn   = false;  // je li GPS bio uključen prije gate-a (za povratak na odustanak)
 let _gpsStabBeginFn = null;
+var _gpsStabPending = false;   // snimanje je već počelo, a signal se još smiruje — slabije fikseve preskoči
 
 function _gpsStabilizeGate(beginFn) {
   if (_gpsStabActive) return;                          // već čekamo stabilan signal
   if (!navigator.geolocation) { beginFn(); return; }   // nema šta stabilizirati
   _gpsStabActive  = true;
-  _gpsStabBeginFn = beginFn;
+  _gpsStabPending = true;
+  _gpsStabBeginFn = null;
   _gpsStabWasOn   = gpsOn;
   if (!gpsOn) startGPS();                               // treba nam dotok fikseva za procjenu
 
   const buf = [];
   _buildGpsStabOverlay();
+  // Snimanje kreće ODMAH; stabilizacija teče u pozadini. Dok traje, fiksevi
+  // lošiji od GPS_STAB_ACC se ne upisuju (početak ne lutata), a pilula nestaje
+  // čim se signal smiri ili istekne GPS_STAB_FORCE_MS.
+  try { beginFn(); } catch (e) { console.error('begin', e); }
 
   _gpsStabCb = (la, lo, ac) => {
     buf.push({ la, lo, ac });
@@ -15246,15 +15282,13 @@ function _gpsStabilizeGate(beginFn) {
     if (ready) _gpsStabFinish(true);
   };
 
-  setTimeout(() => {
-    const f = document.getElementById('gstab-force');
-    if (f && _gpsStabActive) f.style.display = '';
-  }, GPS_STAB_FORCE_MS);
+  setTimeout(() => { if (_gpsStabActive) _gpsStabFinish(true); }, GPS_STAB_FORCE_MS);
 }
 
 function _gpsStabFinish(ok) {
   if (!_gpsStabActive) return;
   _gpsStabActive = false;
+  _gpsStabPending = false;
   _gpsStabCb = null;
   const ov = document.getElementById('gstab-overlay');
   if (ov) ov.remove();
@@ -15267,8 +15301,9 @@ function _gpsStabFinish(ok) {
     if (!_gpsStabWasOn) stopGPS();       // GPS je bio ugašen prije gate-a — vrati u prethodno stanje
   }
 }
-function _gpsStabForce()  { showToast('▶ Započeto uz nestabilan signal'); _gpsStabFinish(true); }
-function _gpsStabCancel() { _gpsStabFinish(false); showToast('✕ Snimanje otkazano'); }
+function _gpsStabForce()  { _gpsStabFinish(true); }
+// Snimanje je već počelo — "✕" samo sakriva prikaz stabilizacije (prekid ide kroz Završi).
+function _gpsStabCancel() { _gpsStabFinish(true); showToast('Snimanje se nastavlja'); }
 
 function _buildGpsStabOverlay() {
   if (document.getElementById('gstab-overlay')) return;
@@ -15280,7 +15315,7 @@ function _buildGpsStabOverlay() {
       <button type="button" onclick="_gpsStabMin(true)" aria-label="Smanji — stabilizacija radi u pozadini" style="float:right;margin:-8px -6px 0 0;min-width:44px;min-height:44px;background:transparent;border:none;color:#94a3b8;font-size:22px;cursor:pointer;">▾</button>
       <div style="width:50px;height:50px;margin:2px auto 14px;border:4px solid #1e3a5f;border-top-color:#38bdf8;border-radius:50%;animation:gstabspin 0.9s linear infinite;"></div>
       <div style="font-size:15px;font-weight:bold;color:#e2e8f0;margin-bottom:4px;">📡 Stabiliziram GPS signal…</div>
-      <div style="font-size:12px;color:#94a3b8;margin-bottom:14px;line-height:1.5;">Sačekaj da signal prestane lutati — snimanje počinje čim se smiri.</div>
+      <div style="font-size:12px;color:#94a3b8;margin-bottom:14px;line-height:1.5;">Snimanje je već počelo. Dok se signal ne smiri, slabije tačke se preskaču.</div>
       <div id="gstab-metrics" style="display:flex;gap:6px;justify-content:center;margin-bottom:16px;">
         <div class="gstab-m"><span>Tačnost</span><b id="gstab-acc" style="color:#475569;">—</b></div>
         <div class="gstab-m"><span>Lutanje</span><b id="gstab-spr" style="color:#475569;">—</b></div>
@@ -15301,7 +15336,7 @@ function _buildGpsStabOverlay() {
 let _gpsStabZadnje = '';
 function _gpsStabPillTxt(pill) {
   const b = pill && pill.querySelector('.gstab-pill-txt');
-  if (b) b.textContent = '📡 Stabiliziram GPS' + _gpsStabZadnje + ' · otvori';
+  if (b) b.textContent = '📡 Stabiliziram GPS' + _gpsStabZadnje + ' · snima se';
 }
 function _gpsStabMin(on) {
   const ov = document.getElementById('gstab-overlay');
@@ -15314,7 +15349,7 @@ function _gpsStabMin(on) {
       pill.id = 'gstab-pill';
       pill.style.cssText = 'position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:98000;display:flex;align-items:center;max-width:94vw;border-radius:22px;border:1.5px solid #1e3a5f;background:#0f172a;box-shadow:0 2px 10px rgba(0,0,0,.5);overflow:hidden;';
       pill.innerHTML = '<button type="button" class="gstab-pill-txt" style="min-height:44px;padding:0 6px 0 16px;border:none;background:transparent;color:#e2e8f0;font:700 12px system-ui;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></button>'
-        + '<button type="button" aria-label="Odustani od snimanja" style="min-width:44px;min-height:44px;border:none;border-left:1px solid #1e3a5f;background:transparent;color:#fca5a5;font-size:18px;cursor:pointer;">✕</button>';
+        + '<button type="button" aria-label="Sakrij" style="min-width:44px;min-height:44px;border:none;border-left:1px solid #1e3a5f;background:transparent;color:#fca5a5;font-size:18px;cursor:pointer;">✕</button>';
       pill.firstChild.onclick = () => _gpsStabMin(false);
       pill.lastChild.onclick = () => _gpsStabCancel();
       document.body.appendChild(pill);
@@ -15974,8 +16009,8 @@ function _vlRetraceZastita(idx) {
 function _vlakaProcessGpsPoint(la, lo, ac, alt, gpsSpeed, tsMs, bypassPauzu) {
   if (!recOn || (recPaused && !bypassPauzu) || actI === null) return;
 
-  // 1. FILTER TAČNOSTI
-  if (ac > GPS_MAX_ACC) return;
+  // 1. FILTER TAČNOSTI (dok se GPS smiruje, strože)
+  if (ac > ((typeof _gpsStabPending !== 'undefined' && _gpsStabPending) ? Math.min(GPS_MAX_ACC, GPS_STAB_ACC) : GPS_MAX_ACC)) return;
 
   // 2. SPIKE ZAŠTITA — dvofixna potvrda skoka (jedina anti-spike odbrana; medijana
   //    i Kalman su uklonjeni iz upisa jer su pravili kašnjenje/povlačenje linije).
@@ -16860,6 +16895,7 @@ function _tragRegAdd(pts, meta) {
     if (meta.color) { t.color = meta.color; t.colorRucno = true; }
     if (meta.weight) t.weight = meta.weight;
     if (meta.dashStyle) t.dashStyle = meta.dashStyle;
+    if (Array.isArray(meta.fotos) && meta.fotos.length) t.fotos = meta.fotos.slice(0, 30);
   }
   _tragRegistry.unshift(t);
   if (!_tragRegSave()) { _tragRegistry.shift(); return null; }
@@ -17462,7 +17498,7 @@ async function _tragRegRename(id) {
   }
 }
 
-function _tragToKml(t) {
+function _tragToKml(t, fotoFajlovi) {
   const coords = t.pts.map(p => `${p[1]},${p[0]},0`).join('\n              ');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -17471,9 +17507,58 @@ function _tragToKml(t) {
     <name>${_escXml(_tragIme(t))}</name>
     <Style><LineStyle><color>${_hexToKmlColor(t.color||'#f97316')}</color><width>3</width></LineStyle><PolyStyle><fill>0</fill></PolyStyle></Style>
     <LineString><tessellate>1</tessellate><coordinates>${coords}</coordinates></LineString>
-  </Placemark>
+  </Placemark>${(fotoFajlovi || []).map((f, i) => `
+  <Placemark>
+    <name>Slika ${i + 1}</name>
+    <description><![CDATA[<img src="${f.putanja}" width="320"/>]]></description>
+    <Point><coordinates>${f.lo},${f.la},0</coordinates></Point>
+  </Placemark>`).join('')}
 </Document></kml>`;
 }
+
+// ── KMZ (ZIP bez kompresije) — trag sa slikama putuje kao jedan fajl ──
+const _CRC_TAB = (() => { const t = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function _crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = _CRC_TAB[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function _zipStore(files) {   // files: [{name, data:Uint8Array}] → Uint8Array
+  const enc = new TextEncoder(), parts = [], cen = [];
+  let off = 0;
+  const u16 = v => [v & 255, (v >> 8) & 255], u32 = v => [v & 255, (v >> 8) & 255, (v >> 16) & 255, (v >>> 24) & 255];
+  for (const f of files) {
+    const nm = enc.encode(f.name), crc = _crc32(f.data), n = f.data.length;
+    const lh = new Uint8Array([0x50,0x4b,3,4, ...u16(20), ...u16(0x800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(n), ...u32(n), ...u16(nm.length), ...u16(0)]);
+    parts.push(lh, nm, f.data);
+    cen.push(new Uint8Array([0x50,0x4b,1,2, ...u16(20), ...u16(20), ...u16(0x800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(n), ...u32(n), ...u16(nm.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]), nm);
+    off += lh.length + nm.length + n;
+  }
+  const cenLen = cen.reduce((a, x) => a + x.length, 0);
+  const end = new Uint8Array([0x50,0x4b,5,6, 0,0, 0,0, ...u16(files.length), ...u16(files.length), ...u32(cenLen), ...u32(off), 0,0]);
+  const all = [...parts, ...cen, end], out = new Uint8Array(all.reduce((a, x) => a + x.length, 0));
+  let o = 0; for (const x of all) { out.set(x, o); o += x.length; }
+  return out;
+}
+function _dataUrlBajti(du) {
+  const b = atob(String(du).split(',')[1] || ''), u = new Uint8Array(b.length);
+  for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+  return u;
+}
+// Trag sa slikama → KMZ bajtovi; bez slika vraća null (ide običan KML).
+async function _tragKmzBajti(t) {
+  if (!t.fotos || !t.fotos.length) return null;
+  const fajlovi = [], dok = [];
+  for (let i = 0; i < t.fotos.length; i++) {
+    const f = t.fotos[i];
+    let du = null;
+    try { du = await _kmlcGet('fotofull:' + f.ts); } catch (e) {}
+    if (!du || typeof du !== 'string') du = f.thumb;
+    if (!du) continue;
+    const ime = 'files/slika' + (i + 1) + '.jpg';
+    fajlovi.push({ name: ime, data: _dataUrlBajti(du) });
+    dok.push({ putanja: ime, la: f.la, lo: f.lo });
+  }
+  const kml = new TextEncoder().encode(_tragToKml(t, dok));
+  return _zipStore([{ name: 'doc.kml', data: kml }, ...fajlovi]);
+}
+function _bajtiUBase64(u) { let s = ''; const K = 0x8000; for (let i = 0; i < u.length; i += K) s += String.fromCharCode.apply(null, u.subarray(i, i + K)); return btoa(s); }
 
 // Dijeljenje traga kao KML preko native share sheet-a (Bluetooth/mail/mreže...).
 // U APK-u navigator.share() NE otvara sistemski birač za fajlove (Android
@@ -17485,6 +17570,19 @@ async function _tragRegShare(id) {
   const t = _tragRegistry.find(x => x.id === id);
   if (!t) return;
   const ime = _tragIme(t);
+  let kmz = null;
+  try { kmz = await _tragKmzBajti(t); } catch (e) { console.error('kmz', e); }
+  if (kmz) {
+    const fn = _tragKmlIme(t).replace(/\.kml$/, '.kmz');
+    if (typeof AndroidShare !== 'undefined' && AndroidShare.shareFile) {
+      try { AndroidShare.shareFile(fn, 'data:application/vnd.google-earth.kmz;base64,' + _bajtiUBase64(kmz), ime, 'Trag sa slikama: ' + ime); return; } catch (e) {}
+    }
+    const file = new File([kmz], fn, { type: 'application/vnd.google-earth.kmz' });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'Trag: ' + ime }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    return _tragKmlSacuvaj(id);
+  }
   await _shareKmlOrDownload(_tragKmlIme(t), _tragToKml(t), ime, 'Trag: ' + ime, () => _tragKmlSacuvaj(id));
 }
 
@@ -17498,9 +17596,20 @@ function _tragKmlIme(t) {
 
 // Sačuvaj na uređaj: u APK-u <a download> presreće AndroidDownload most
 // (blob → Downloads), u browseru je obično preuzimanje.
-function _tragKmlSacuvaj(id) {
+async function _tragKmlSacuvaj(id) {
   const t = _tragRegistry.find(x => x.id === id);
   if (!t) return;
+  let kmz = null;
+  try { kmz = await _tragKmzBajti(t); } catch (e) {}
+  if (kmz) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([kmz], { type: 'application/vnd.google-earth.kmz' }));
+    a.download = _tragKmlIme(t).replace(/\.kml$/, '.kmz');
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    showToast('💾 Sačuvano: ' + a.download + ' (sa slikama)');
+    return;
+  }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([_tragToKml(t)], { type: 'application/vnd.google-earth.kml+xml' }));
   a.download = _tragKmlIme(t);
@@ -17830,8 +17939,8 @@ const _TRAG_AUTOPAUSE_MS = 120000; // 2 min mirovanja → auto-pauza
 function _addTragPoint(la, lo, ac, al, sp, nowOverride, bypassPauzu) {
   if (!_tragOn || (_tragPaused && !bypassPauzu)) return;
 
-  // 1. Odbaci samo katastrofalno loše fikseve
-  if (ac > 50) return;
+  // 1. Odbaci samo katastrofalno loše fikseve (dok se signal smiruje, strože)
+  if (ac > ((typeof _gpsStabPending !== 'undefined' && _gpsStabPending) ? GPS_STAB_ACC : 50)) return;
 
   // nowOverride: koristi se pri "replay-u" tačaka iz native GPS bafera
   // (_drainNativeGpsBuffer) — te tačke su prikupljene RANIJE (dok je WebView
@@ -24544,7 +24653,7 @@ function _updFabVisibility() {
 
   // Trag snimanje kontrole
   const inTrag = _tragOn;
-  show('ab-trag-pauza', false); show('ab-trag-kraj', false); show('ab-trag-stats', false);
+  show('ab-trag-pauza', false); show('ab-trag-kraj', false); show('ab-trag-foto', false); show('ab-trag-ured', false);
   if (ab) ab.classList.remove('trag-mode');
 
   const spdField = typeof isSpdField === 'function' && isSpdField();
@@ -24554,7 +24663,7 @@ function _updFabVisibility() {
     show('ab-centar', false);
     show('ab-nazad',false); show('ab-krak-l',false); show('ab-krak-d',false);
     show('ab-pauza',false); show('ab-kraj',false);
-    show('ab-trag-pauza', true); show('ab-trag-kraj', true); show('ab-trag-stats', true);
+    show('ab-trag-pauza', true); show('ab-trag-kraj', true); show('ab-trag-foto', true); show('ab-trag-ured', true); _tragFotoBroj();
     if (ab) { ab.classList.remove('rec-mode', 'paused-mode'); ab.classList.add('trag-mode'); }
     return;
   }
@@ -31417,7 +31526,7 @@ const _UPD_FAZE = {
   otkazano:    { korak:null, ton:'' },
 };
 const _UPD_ZAVRSNE = ['najnovija', 'greska', 'otkazano', 'instalacija', 'dozvola'];
-const _updStanje = { korak:0, faza:'', ver:'', uzorci:[], prim:0, uk:0 };
+const _updStanje = { korak:0, faza:'', ver:'', uzorci:[], prim:0, uk:0, min:false };
 
 function _updMB(b) {
   const mb = (Number(b) || 0) / 1048576;
@@ -31451,7 +31560,8 @@ function _updEl() {
   bg.innerHTML =
     '<div id="upd-sheet" role="dialog" aria-modal="true" aria-labelledby="upd-title">' +
       '<div class="upd-head"><div class="upd-head-ico"><svg class="ic"><use href="#ic-uvezi"/></svg></div>' +
-        '<div><div class="upd-title" id="upd-title">Ažuriranje aplikacije</div><div class="upd-ver" id="upd-ver"></div></div></div>' +
+        '<div style="flex:1;min-width:0;"><div class="upd-title" id="upd-title">Ažuriranje aplikacije</div><div class="upd-ver" id="upd-ver"></div></div>' +
+        '<button type="button" class="upd-min" id="upd-min" onclick="_updMin()" aria-label="Smanji — preuzimanje se nastavlja u pozadini" title="Smanji">&minus;</button></div>' +
       '<div class="upd-steps" id="upd-steps">' +
         _UPD_KORACI.map((k, i) => '<div class="upd-step" data-i="' + i + '"><div class="upd-dot"><svg class="ic"><use href="#' + k.ico + '"/></svg></div>' + k.label + '</div>').join('') +
       '</div>' +
@@ -31466,7 +31576,8 @@ function _updEl() {
       '<div class="upd-btns" id="upd-btns"></div>' +
     '</div>';
   bg.addEventListener('click', e => {
-    if (e.target === bg && _UPD_ZAVRSNE.includes(_updStanje.faza)) _updZatvori();
+    if (e.target !== bg) return;
+    if (_UPD_ZAVRSNE.includes(_updStanje.faza)) _updZatvori(); else _updMin();
   });
   document.body.appendChild(bg);
   return bg;
@@ -31475,6 +31586,31 @@ function _updEl() {
 function _updZatvori() {
   const bg = _updId('upd-bg');
   if (bg) bg.classList.remove('show');
+  _updStanje.min = false;
+  _updPillSync();
+}
+
+// Smanjenje: preuzimanje teče dalje (native nit), a ekran se oslobađa — mala
+// pilula pokazuje napredak i dodirom vraća pun prozor.
+function _updMin() {
+  if (_UPD_ZAVRSNE.includes(_updStanje.faza)) { _updZatvori(); return; }
+  const bg = _updId('upd-bg');
+  if (bg) bg.classList.remove('show');
+  _updStanje.min = true;
+  _updPillSync();
+}
+function _updPillSync() {
+  let pill = _updId('upd-pill');
+  const st = _updStanje;
+  if (!st.min || _UPD_ZAVRSNE.includes(st.faza)) { if (pill) pill.remove(); return; }
+  if (!pill) {
+    pill = document.createElement('button');
+    pill.id = 'upd-pill'; pill.type = 'button';
+    pill.onclick = () => { st.min = false; const bg = _updId('upd-bg'); if (bg) bg.classList.add('show'); _updPillSync(); };
+    document.body.appendChild(pill);
+  }
+  const uk = st.uk, proc = uk > 0 ? Math.min(100, Math.floor(st.prim / uk * 100)) : null;
+  pill.textContent = (st.faza === 'provjera' ? '🔄 Provjera ažuriranja' : '⬇ Preuzimanje' + (proc != null ? ' ' + proc + '%' : '')) + ' · otvori';
 }
 
 function _updOtkazi() {
@@ -31569,7 +31705,11 @@ function _azurirajNapredak(p) {
   } else if (p.faza === 'ponovo') {
     st.uzorci = [];
   }
-  bg.classList.add('show');
+  if (p.faza === 'provjera') st.min = false;
+  if (st.min && !_UPD_ZAVRSNE.includes(p.faza)) bg.classList.remove('show');
+  else { st.min = false; bg.classList.add('show'); }
+  const mn = _updId('upd-min');
+  if (mn) mn.style.display = ['provjera', 'preuzimanje', 'ponovo'].includes(p.faza) ? '' : 'none';
 
   const lok = String(typeof APP_VER === 'string' ? APP_VER : '').replace(/^v/, '');
   _updId('upd-ver').textContent = st.ver
@@ -31635,6 +31775,7 @@ function _azurirajNapredak(p) {
     btns = _updDugme('', '', 'Zatvori', '_updZatvori()') + _updDugme('pri', 'ic-ponovi', 'Pokušaj ponovo', '_updPonovo()');
   }
   _updId('upd-btns').innerHTML = btns;
+  _updPillSync();
 }
 
 // ─── PROVJERA NAJNOVIJE VERZIJE (posebno bitno za APK) ───────────────────────

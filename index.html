@@ -2101,6 +2101,9 @@ select:focus { outline:none; border-color:#3b82f6; }
 /* === AŽURIRANJE APLIKACIJE (panel preuzimanja/instalacije) === */
 #upd-bg { position:fixed; inset:0; background:rgba(2,6,23,0.62); z-index:99990; display:none; align-items:flex-end; justify-content:center; }
 #upd-bg.show { display:flex; }
+.upd-min { flex:0 0 auto; width:44px; height:44px; border-radius:12px; border:1px solid #0f3460; background:#0f3460; color:#e2e8f0; font-size:24px; line-height:1; cursor:pointer; }
+#upd-pill { position:fixed; top:62px; left:50%; transform:translateX(-50%); z-index:99991; max-width:94vw; min-height:44px; padding:0 18px; border-radius:22px;
+  border:1.5px solid #38bdf8; background:#0f1b33; color:#e2e8f0; font:700 12px system-ui; white-space:nowrap; box-shadow:0 4px 14px rgba(0,0,0,.5); cursor:pointer; }
 #upd-sheet { width:100%; max-width:440px; background:#16213e; border:1px solid #0f3460; border-bottom:none; border-radius:18px 18px 0 0;
   padding:18px 18px calc(18px + env(safe-area-inset-bottom,0px)); box-shadow:0 -10px 30px rgba(0,0,0,0.45); color:#e2e8f0;
   transform:translateY(0); animation:updUp .22s ease-out; box-sizing:border-box; }
@@ -6019,7 +6022,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.3.9';
+const APP_VER = 'v3.4.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7765,10 +7768,14 @@ function _loadLocalVlake() {
     <span class="ab-ico"><svg class="ic"><use href="#ic-stop"/></svg></span>
     <span>Završi</span>
   </button>
-  <div id="ab-trag-stats" style="display:none;" onclick="_tragUrediOtvori()" role="button" title="Uredi trag dok snimaš">
-    <div class="ab-ts-lbl">SNIMANJE TRAGA <span class="ab-ts-ured">✎ Uredi</span></div>
-    <span id="ab-trag-info">0 tač. · 0 m</span>
-  </div>
+  <button id="ab-trag-foto" onclick="_tragFoto()" title="Uslikaj lokaciju — slika postaje dio traga" style="display:none;">
+    <span class="ab-ico" style="--c1:#38bdf8;--c2:#0284c7;--sh:rgba(2,132,199,0.4);"><svg class="ic"><use href="#ic-kamera"/></svg></span>
+    <span>Slikaj<span id="ab-trag-foto-n"></span></span>
+  </button>
+  <button id="ab-trag-ured" onclick="_tragUrediOtvori()" title="Uredi trag dok snimaš" style="display:none;">
+    <span class="ab-ico"><svg class="ic"><use href="#ic-uredjaj"/></svg></span>
+    <span>Uredi</span>
+  </button>
 </div>
 
 
