@@ -21200,6 +21200,8 @@ function applyKmlStyle(i) {
     patUrl=_ensureKmlPattern(i);canvasPattern=_kmlCanvasPattern(k);
   }
 
+  // Jednom po sloju (ranije po svakom poligonu: Object.keys nad hiljadama objekata za svaki → O(n²)).
+  const _velik = !!(k.grp && k.grp._layers && Object.keys(k.grp._layers).length >= (typeof _KML_CULL_MIN === 'number' ? _KML_CULL_MIN : 1500));
   const styleLayer = l => {
     // SHP GeoJSON i MultiGeometry sadrže dodatne grupe; stilizuj stvarne elemente.
     if (l.eachLayer && !l._kmlIsPolygon && !l._kmlIsPoint) { l.eachLayer(styleLayer); return; }
@@ -21209,7 +21211,6 @@ function applyKmlStyle(i) {
       // Hit-test cijele površine ostaje (fill:true i kad je prozirno) — osim za veliki sloj: tamo je
       // prozirna ispuna samo trošak crtanja hiljada poligona, a klik unutar poligona i dalje hvata
       // _kmlHitTest u map.on('click').
-      const _velik = !!(k.grp && k.grp._layers && Object.keys(k.grp._layers).length >= (typeof _KML_CULL_MIN === 'number' ? _KML_CULL_MIN : 1500));
       lo.fill = _velik ? !!(k.fill && (k.fillOpacity ?? 0.35) > 0) : true;
       lo.fillOpacity = k.fill ? (k.fillOpacity ?? 0.35) : 0;
       lo.fillColor = k.fillCol || k.col;

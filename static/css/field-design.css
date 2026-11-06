@@ -1369,3 +1369,27 @@ html[data-field-theme=day] #dijag-panel .dg-r.lose span{color:#b91c1c}
 #dijag-panel .dg-akcije{display:flex;gap:8px;margin-top:10px}
 #dijag-panel .dg-akcije button{flex:1;min-height:44px;border-radius:10px;border:1px solid var(--field-border,#1e3a5f);background:transparent;color:inherit;font:700 13px system-ui;cursor:pointer}
 #dijag-panel .dg-akcije .pri{background:#16a34a;border-color:#15803d;color:#fff}
+/* Popup KML objekta (v3.5.1): zaglavlje u boji sloja, pločice mjera, kartice, akcije sa ikonama. */
+.le-pop2{display:grid;gap:10px;font-size:13px}
+.le-pop2 .le-heading{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:10px;align-items:center;margin:0 26px 0 0;padding:0 0 10px;border-bottom:1px solid var(--field-border)}
+.le-pop2 .le-sw{grid-row:span 2;width:30px;height:30px;border-radius:9px;border:3px solid var(--le-col);background:color-mix(in srgb,var(--le-fill) 35%,transparent);box-sizing:border-box}
+.le-pop2 .le-sw-linija{border-width:0;background:linear-gradient(135deg,transparent 42%,var(--le-col) 42% 58%,transparent 58%)}
+.le-pop2 .le-sw-tačka{border-radius:50%;background:var(--le-col)}
+.le-pop2 .le-heading>span{font-size:11px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--field-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.le-pop2 .le-heading>b{font-size:18px;line-height:1.3;margin:2px 0 0}
+html .le-pop2 .le-object-measure{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;padding:0;margin:0;background:none;border:0}
+.le-pop2 .le-object-measure>div{display:grid;gap:2px;padding:9px 11px;border-radius:11px;background:var(--field-bg);border:1px solid var(--field-border);border-left:4px solid var(--le-col)}
+.le-pop2 .le-object-measure span{font-size:11px;color:var(--field-muted);font-weight:600}
+.le-pop2 .le-object-measure b{font-size:17px;line-height:1.25;font-variant-numeric:tabular-nums;color:var(--field-ink)}
+.le-pop2 .le-description{margin:0;padding:9px 11px;border-radius:11px;background:var(--field-bg);border:1px solid var(--field-border);color:var(--field-ink);max-height:120px}
+.le-pop2 .le-attributes{margin:0;border:1px solid var(--field-border);border-radius:11px;overflow:hidden}
+.le-pop2 .le-attributes summary{padding:11px 12px;display:flex;align-items:center;gap:8px;min-height:44px;box-sizing:border-box;background:var(--field-bg)}
+.le-pop2 .le-attributes summary em{font-style:normal;font-size:11px;font-weight:800;min-width:22px;text-align:center;padding:1px 7px;border-radius:999px;background:var(--field-card);border:1px solid var(--field-border)}
+.le-pop2 .le-attributes dl{max-height:200px;padding:0 12px}
+.le-pop2 .le-attributes dl>div{grid-template-columns:minmax(0,.9fr) minmax(0,1.3fr);padding:8px 0;font-size:13px}
+.le-pop2 .le-attributes dl>div:last-child{border-bottom:0}
+.le-pop2 .le-attributes dd{font-weight:600}
+.le-pop2 .le-pop-act{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:0}
+.le-pop2 .le-pop-act button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:58px;padding:6px 2px;font-size:11px;line-height:1.15;border-radius:11px}
+.le-pop2 .le-pop-act .ic{width:20px;height:20px}
+@media(max-width:340px){.le-pop2 .le-pop-act{grid-template-columns:repeat(2,minmax(0,1fr))}}

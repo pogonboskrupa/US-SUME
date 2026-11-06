@@ -97,18 +97,44 @@ function _layerInfo(layer) {
   }
   return {attrs:[...attrs],text};
 }
+// Mjere objekta iz geometrije (turf): poligon = površina + obim, linija = dužina, tačka = koordinate.
+function _layerMjere(layer) {
+  const out=[];
+  try{
+    if(layer._kmlIsPoint&&layer.getLatLng){const p=layer.getLatLng();out.push(['Širina',p.lat.toFixed(6)],['Dužina',p.lng.toFixed(6)]);return out;}
+    if(typeof turf==='undefined')return out;
+    const f=layer.toGeoJSON(),m=turf.length(f,{units:'kilometers'})*1000,len=m>=1000?(m/1000).toFixed(2).replace('.',',')+' km':Math.round(m)+' m';
+    if(layer._kmlIsPolygon){const ha=turf.area(f)/10000;out.push(['Površina',(ha>=100?ha.toFixed(1):ha.toFixed(2)).replace('.',',')+' ha'],['Obim',len]);}
+    else out.push(['Dužina',len]);
+  }catch(e){}
+  return out;
+}
 function _layerPopupHtml(layer,uid) {
   const esc=s=>_escHtml(String(s??'')),i=_kmlPopFindIdx(uid),k=kmlLs[i],info=_layerInfo(layer),attrs=info.attrs;
   const type=layer._kmlIsPolygon?'Poligon':layer._kmlIsPoint?'Tačka':'Linija';
-  let measure='';
-  try{const feature=layer.toGeoJSON();if(layer._kmlIsPolygon&&typeof turf!=='undefined')measure=(turf.area(feature)/10000).toFixed(2).replace('.',',')+' ha';else if(!layer._kmlIsPoint&&typeof turf!=='undefined')measure=Math.round(turf.length(feature,{units:'kilometers'})*1000)+' m';}catch(e){}
-  return '<article class="le-popup" onclick="event.stopPropagation()"><header class="le-heading"><span>'+type+' · '+esc(k?.name||'Učitani sloj')+'</span><b id="'+uid+'-nm">'+esc(layer._kmlName||'Bez naziva')+'</b></header>'+
-    (measure?'<div class="le-object-measure">'+esc(measure)+'<span>Izračunato iz geometrije</span></div>':'')+
+  const col=/^#[0-9a-f]{3,8}$/i.test(String(layer.options?.color||k?.col||''))?(layer.options?.color||k.col):'#2563eb';
+  const fill=/^#[0-9a-f]{3,8}$/i.test(String(layer.options?.fillColor||k?.fillCol||''))?(layer.options?.fillColor||k.fillCol):col;
+  const mjere=_layerMjere(layer),ic=n=>'<svg class="ic" aria-hidden="true"><use href="#ic-'+n+'"/></svg>';
+  const btn=(fn,icon,txt,cls)=>'<button type="button"'+(cls?' class="'+cls+'"':'')+' onclick="'+fn+'(\''+uid+'\')">'+ic(icon)+'<span>'+txt+'</span></button>';
+  return '<article class="le-popup le-pop2" onclick="event.stopPropagation()" style="--le-col:'+col+';--le-fill:'+fill+'">'+
+    '<header class="le-heading"><i class="le-sw le-sw-'+type.toLowerCase()+'" aria-hidden="true"></i><span>'+type+' · '+esc(k?.name||'Učitani sloj')+'</span><b id="'+uid+'-nm">'+esc(layer._kmlName||'Bez naziva')+'</b></header>'+
+    (mjere.length?'<div class="le-object-measure">'+mjere.map(([n,v])=>'<div><span>'+n+'</span><b>'+esc(v)+'</b></div>').join('')+'</div>':'')+
     (info.text?'<p class="le-description">'+esc(info.text)+'</p>':'')+
-    (attrs.length?'<details class="le-attributes" open><summary>Informacije o objektu ('+attrs.length+')</summary><dl>'+attrs.map(([key,value])=>'<div><dt>'+esc(key)+'</dt><dd>'+esc(value||'—')+'</dd></div>').join('')+'</dl></details>':'')+
-    '<div class="le-actions"><button type="button" onclick="_kmlPopEditStart(\''+uid+'\')">Naziv i opis</button><button type="button" onclick="_kmlPopStyleToggle(\''+uid+'\')">Stil fajla</button><button type="button" onclick="_kmlPopZoom(\''+uid+'\')">Približi</button></div>'+
+    (attrs.length?'<details class="le-attributes" open><summary>Podaci o objektu <em>'+attrs.length+'</em></summary><dl>'+attrs.map(([key,value])=>'<div><dt>'+esc(key)+'</dt><dd>'+esc(value||'—')+'</dd></div>').join('')+'</dl></details>':'')+
+    '<div class="le-actions le-pop-act">'+btn('_kmlPopZoom','meta','Približi')+btn('_kmlPopEditStart','crtaj','Naziv i opis')+btn('_kmlPopStyleToggle','boja','Stil fajla')+btn('_kmlPopKopiraj','kopiraj','Kopiraj')+'</div>'+
     '<div id="'+uid+'-edit" class="le-fields" style="display:none"><label>Naziv objekta<input id="'+uid+'-name-in" maxlength="160" value="'+esc(layer._kmlName)+'"></label><label>Opis / napomena<textarea id="'+uid+'-desc-in" rows="3" maxlength="2000">'+esc(layer._kmlDesc)+'</textarea></label><small>'+(k?._key?'Izmjena naziva i opisa važi za ovaj prikaz server fajla.':'Naziv i opis čuvaju se u lokalnom fajlu.')+'</small><div class="le-actions"><button type="button" onclick="_kmlPopSave(\''+uid+'\')">'+(k?._key?'Primijeni':'Sačuvaj')+'</button><button type="button" onclick="_kmlPopCancel(\''+uid+'\')">Odustani</button></div></div>'+
     '<div id="'+uid+'-style" style="display:none">'+_layerStyleControls(i)+'</div></article>';
+}
+// Tekst za poruku/izvještaj: naziv, sloj, mjere i atributi objekta.
+async function _kmlPopKopiraj(uid) {
+  const layer=_kmlPopFindLayer(uid);if(!layer)return;
+  const k=kmlLs[_kmlPopFindIdx(uid)],info=_layerInfo(layer);
+  const txt=[(layer._kmlName||'Bez naziva')+(k?.name?' ('+k.name+')':''),..._layerMjere(layer).map(([n,v])=>n+': '+v),info.text,...info.attrs.map(([a,v])=>a+': '+(v||'—'))].filter(Boolean).join('\n');
+  try{
+    if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(txt);
+    else{const ta=document.createElement('textarea');ta.value=txt;ta.style.cssText='position:fixed;left:-9999px;';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}
+    showToast('📋 Podaci objekta kopirani');
+  }catch(e){showToast('⚠ Kopiranje nije uspjelo');}
 }
 
 // Leaflet update() ponovo postavlja HTML i uklanja otvorene kontrole.
