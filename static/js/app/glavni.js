@@ -2269,7 +2269,9 @@ async function doLogout() {
   // uspjela, `sb` je null pa `sb.auth` baci SINHRONO — .catch() na promise-u tu
   // ne pomaže, a neuhvaćena greška bi preskočila cijelo čišćenje ispod.
   try {
-    const pso = sb.auth.signOut(navigator.onLine ? undefined : { scope: 'local' })
+    // Prebacivanje računa: 'global' bi poništio refresh token zapamćenog računa na serveru.
+    const lokalno = window._odjavaLokalno === true; window._odjavaLokalno = false;
+    const pso = sb.auth.signOut((navigator.onLine && !lokalno) ? undefined : { scope: 'local' })
                   .catch(() => {});
     await Promise.race([pso, new Promise(r => setTimeout(r, 2000))]);
   } catch(e) {}
@@ -37060,7 +37062,16 @@ async function _dijagKopiraj() {
 const _RACUNI_KEY = 'tvlake_racuni_v1';
 function _racuniUcitaj() { try { const a = JSON.parse(localStorage.getItem(_RACUNI_KEY) || '[]'); return Array.isArray(a) ? a.filter(x => x && x.uid && x.rt) : []; } catch (e) { return []; } }
 function _racuniSpremi(a) { try { localStorage.setItem(_RACUNI_KEY, JSON.stringify(a.slice(0, 4))); return true; } catch (e) { return false; } }
-function _racuniMoze() { return _imeNorm() === 'nedim cehic' || _racuniUcitaj().some(x => x.uid === sbUser?.id); }
+const _RACUNI_OCEKUJE = 'tvlake_racuni_ocekuje';
+// Jednokratno uparivanje: vlasnik je izričito krenuo da doda administratorski račun. Sljedeći ADMIN
+// račun koji se prijavi u narednih 30 min (a samo admin) postaje dio para — bez toga račun koji se
+// ne zove isto kao vlasnik nikad ne bi dobio dugme za povratak.
+function _racuniOcekuje() {
+  try { const o = JSON.parse(localStorage.getItem(_RACUNI_OCEKUJE) || 'null'); return !!(o && Date.now() - o.t < 30 * 60000); } catch (e) { return false; }
+}
+function _racuniMoze() {
+  return _imeNorm() === 'nedim cehic' || _racuniUcitaj().some(x => x.uid === sbUser?.id) || (_racuniOcekuje() && !!sbProfile?.is_admin);
+}
 // Zapamti TRENUTNU sesiju (svježi tokeni; stari refresh token je jednokratan).
 async function _racuniSnimiTrenutni(sesija) {
   try {
@@ -37069,7 +37080,7 @@ async function _racuniSnimiTrenutni(sesija) {
     if (!ss || ss.user?.id !== sbUser.id || !ss.refresh_token) return;
     const a = _racuniUcitaj().filter(x => x.uid !== sbUser.id);
     a.unshift({ uid: sbUser.id, ime: ((sbProfile.ime || '') + ' ' + (sbProfile.prezime || '')).trim(), admin: !!sbProfile.is_admin, at: ss.access_token, rt: ss.refresh_token, t: Date.now() });
-    _racuniSpremi(a);
+    if (_racuniSpremi(a)) { try { localStorage.removeItem(_RACUNI_OCEKUJE); } catch (e) {} }
   } catch (e) {}
   _racuniMeniSync();
 }
@@ -37090,7 +37101,12 @@ async function racuniPrebaci() {
     const i = await _dlgActions('Profil administratora', [
       { label: 'Odjavi se i prijavi administratorski račun<br><span style="font-size:11px;opacity:.7;">Samo ovaj put — poslije toga prebacivanje je jednim dodirom</span>' },
     ]);
-    if (i === 0) { await _racuniSnimiTrenutni(); doLogout(); }
+    if (i === 0) {
+      await _racuniSnimiTrenutni();
+      try { localStorage.setItem(_RACUNI_OCEKUJE, JSON.stringify({ t: Date.now(), od: sbUser?.id })); } catch (e) {}
+      window._odjavaLokalno = true;   // ne poništavaj sesiju ovog računa na serveru — treba za povratak
+      doLogout();
+    }
     return;
   }
   if (!await _dlgConfirm('Prebaciti na račun „' + drugi.ime + '“' + (drugi.admin ? ' (administrator)' : '') + '?\nTvoji lokalni podaci ostaju na telefonu i vraćaju se kad se vratiš na ovaj račun.', { title: 'Prebaci račun', okLabel: 'Prebaci' })) return;

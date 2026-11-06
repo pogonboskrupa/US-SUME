@@ -39,6 +39,16 @@ function api(env) {
   const m3 = mk({ id: 'u9', ime: 'Ana', prezime: 'Anić' });
   m3.env.sb = { auth: { getSession: async () => ({ data: { session: { user: { id: 'u9' }, access_token: 'a', refresh_token: 'r' } } }) } };
   x = api(m3.env); await x._racuniSnimiTrenutni(); assert.strictEqual(x._racuniUcitaj().length, 0, 'ne-vlasnik se ne pamti');
+  // uparivanje: admin račun koji se zove drugačije postaje dio para SAMO nakon izričitog zahtjeva, samo ako je admin
+  const mk4 = (prof, flag) => { const m = mk(prof, flag ? { tvlake_racuni_ocekuje: JSON.stringify({ t: Date.now(), od: 'u1' }) } : {}); m.env.sb = { auth: { getSession: async () => ({ data: { session: { user: { id: prof.id }, access_token: 'a', refresh_token: 'r' } } }) } }; return m; };
+  let q = mk4({ id: 'adm', ime: 'Admin', prezime: 'Račun', is_admin: true }, true); x = api(q.env);
+  assert(x._racuniMoze(), 'admin posle zahtjeva smije'); await x._racuniSnimiTrenutni();
+  assert.strictEqual(x._racuniUcitaj().length, 1); assert.strictEqual(q.ls.tvlake_racuni_ocekuje, undefined, 'zahtjev je potrošen');
+  q = mk4({ id: 'obican', ime: 'Ana', prezime: 'Anić', is_admin: false }, true); x = api(q.env);
+  assert(!x._racuniMoze(), 'ne-admin ne može ući u par čak ni sa zahtjevom');
+  const stari = mk({ id: 'adm', ime: 'A', prezime: 'B', is_admin: true }, { tvlake_racuni_ocekuje: JSON.stringify({ t: Date.now() - 31 * 60000 }) });
+  assert(!api(stari.env)._racuniMoze(), 'istekao zahtjev (30 min)');
+  assert(/_odjavaLokalno = true/.test(src) && /lokalno = window\._odjavaLokalno === true/.test(src), 'odjava pri uparivanju je lokalna');
   // izvor: switch ne zove global signOut (ne poništava sesiju tog računa), setSession prije reload-a, neuspjeh ne dira tekuću
   const sw = src.slice(src.indexOf('async function racuniPrebaci'));
   assert(!/signOut/.test(sw) && /setSession/.test(sw) && /location\.reload/.test(sw));
