@@ -20543,6 +20543,95 @@ function ldK(file) {
   const owner=sbUser?.id;
   return file.text().then(content=>_localLayerKml(file.name,content,owner)).catch(e=>showToast('⚠ Greška KML: '+e.message));
 }
+// ─── Veliki KML sloj: na kartu ide samo ono što je u prikazu ────────────────
+// Sloj sa hiljadama objekata (npr. taksacija od 13 MB, ~20 000 poligona) je na sporijem telefonu
+// pri svakom pomicanju karte crtao SVE objekte, pa se karta nije dala pomjerati, a dodiri na meni
+// su kasnili. Grupa i dalje sadrži sve objekte (stil, pretraga, granice, izvoz rade nad svima), ali
+// na kartu dodaje samo one u prikazu (+50 % ruba), u malim porcijama između dva frame-a.
+const _KML_CULL_MIN = 1500;
+let _KmlCullGroup = null;
+function _kmlGrupa() {
+  if (!_KmlCullGroup && window.L) {
+    _KmlCullGroup = L.FeatureGroup.extend({
+      onAdd(map) {
+        this._map = map;
+        this._cull = Object.keys(this._layers).length >= _KML_CULL_MIN;
+        if (!this._cull) return L.FeatureGroup.prototype.onAdd.call(this, map);
+        this._prikazano = new Set(); this._idx = null;
+        map.on('moveend', this._cullZakazi, this);
+        this._cullSad();
+      },
+      onRemove(map) {
+        if (!this._cull) return L.FeatureGroup.prototype.onRemove.call(this, map);
+        map.off('moveend', this._cullZakazi, this);
+        this._cullGen = (this._cullGen || 0) + 1;
+        this._prikazano.forEach(l => map.removeLayer(l));
+        this._prikazano.clear();
+      },
+      addLayer(layer) {
+        if (!(this._map && this._cull)) return L.FeatureGroup.prototype.addLayer.call(this, layer);
+        if (this.hasLayer(layer)) return this;
+        layer.addEventParent(this);
+        this._layers[this.getLayerId(layer)] = layer;
+        this._idx = null; this._cullZakazi();
+        return this.fire('layeradd', { layer });
+      },
+      removeLayer(layer) {
+        const l = this._layers[layer] || layer;
+        if (this._prikazano) this._prikazano.delete(l);
+        this._idx = null;
+        return L.FeatureGroup.prototype.removeLayer.call(this, layer);
+      },
+      _cullZakazi() {
+        if (this._cullT) return;
+        this._cullT = setTimeout(() => { this._cullT = null; this._cullSad(); }, 60);
+      },
+      _idxGradi() {
+        const C = 0.02, idx = new Map(), svuda = [];
+        this.eachLayer(l => {
+          let b = null;
+          try { b = l.getBounds ? l.getBounds() : (l.getLatLng ? L.latLngBounds(l.getLatLng(), l.getLatLng()) : null); } catch (e) {}
+          if (!b || !b.isValid()) { svuda.push(l); return; }
+          const x0 = Math.floor(b.getWest() / C), x1 = Math.floor(b.getEast() / C), y0 = Math.floor(b.getSouth() / C), y1 = Math.floor(b.getNorth() / C);
+          if ((x1 - x0 + 1) * (y1 - y0 + 1) > 400) { svuda.push(l); return; }
+          for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) { const k = x + ':' + y; let a = idx.get(k); if (!a) idx.set(k, a = []); a.push(l); }
+        });
+        this._idx = { C, idx, svuda };
+      },
+      _cullSad() {
+        const map = this._map;
+        if (!map || !this._cull) return;
+        if (!this._idx) this._idxGradi();
+        const { C, idx, svuda } = this._idx, b = map.getBounds().pad(0.5);
+        const x0 = Math.floor(b.getWest() / C), x1 = Math.floor(b.getEast() / C), y0 = Math.floor(b.getSouth() / C), y1 = Math.floor(b.getNorth() / C);
+        let cand;
+        if ((x1 - x0 + 1) * (y1 - y0 + 1) > 6000) cand = new Set(Object.values(this._layers));   // daleko odzumirano: sve
+        else {
+          cand = new Set(svuda);
+          for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) { const a = idx.get(x + ':' + y); if (a) for (const l of a) cand.add(l); }
+        }
+        const ops = [];
+        this._prikazano.forEach(l => { if (!cand.has(l)) ops.push([0, l]); });
+        cand.forEach(l => { if (!this._prikazano.has(l)) ops.push([1, l]); });
+        const gen = this._cullGen = (this._cullGen || 0) + 1;
+        let i = 0;
+        const korak = () => {
+          if (gen !== this._cullGen || this._map !== map) return;
+          const t0 = performance.now();
+          while (i < ops.length && performance.now() - t0 < 10) {
+            const [dodaj, l] = ops[i++];
+            if (dodaj) { if (this._layers[L.stamp(l)]) { map.addLayer(l); this._prikazano.add(l); } }
+            else { map.removeLayer(l); this._prikazano.delete(l); }
+          }
+          if (i < ops.length) requestAnimationFrame(korak);
+        };
+        korak();
+      },
+    });
+  }
+  return _KmlCullGroup ? new _KmlCullGroup() : L.featureGroup();
+}
+
 // Veliki KML (preko ~1,2 MB) se ne parsira odjednom: puni DOMParser + pkml je na slabom telefonu
 // zamrzavao nit sekundama ("trokira totalno"). Sadržaj se dijeli po Placemark-ovima i obrađuje u
 // paketima uz predah za iscrtavanje ekrana između njih. Ako dio ne može samostalno (npr. prefiks
@@ -20554,7 +20643,7 @@ async function _kmlGrupaIzSadrzaja(content, col) {
   const dijelovi = content.split(/(?=<Placemark[\s>])/i), pm = [];
   for (let i = 1; i < dijelovi.length; i++) { const j = dijelovi[i].lastIndexOf('</Placemark>'); if (j >= 0) pm.push(dijelovi[i].slice(0, j + 12)); }
   if (!pm.length) return cijeli();
-  const g = L.featureGroup();
+  const g = _kmlGrupa();
   g.on('click', _kmlGrpClick); g.on('mouseover', _kmlGrpTip);
   const gust = content.length / 28 > 60000;
   let t = performance.now();
@@ -20568,7 +20657,7 @@ async function _kmlGrupaIzSadrzaja(content, col) {
 }
 function pkml(doc, col, op, opts) {
   op = op ?? 0.9;
-  const g = (opts && opts.grp) || L.featureGroup();
+  const g = (opts && opts.grp) || (typeof _kmlGrupa === 'function' ? _kmlGrupa() : L.featureGroup());
   if (!(opts && opts.grp)) {
     g.on('click', _kmlGrpClick);   // tačke: jedan listener na grupi (vidi pkmlStyled)
     g.on('mouseover', _kmlGrpTip);
@@ -20932,7 +21021,7 @@ function _kmlLabelMarker(pos, text) {
 
 // Stilizovani KML parser — prima options za boju/debljinu/crtanje
 function pkmlStyled(doc, opts) {
-  const g = L.featureGroup();
+  const g = (typeof _kmlGrupa === 'function' ? _kmlGrupa() : L.featureGroup());
   // Tačke dobijaju događaje JEDNIM listenerom na grupi (propagacija iz sloja), ne po
   // tački: za 50 000 tačaka to je ~0,4 s i desetine MB manje (tooltip + klik po tački).
   g.on('click', _kmlGrpClick);
@@ -21344,6 +21433,12 @@ async function _localKmlRestore() {
     const store = JSON.parse(localStorage.getItem(_LOCAL_KML_KEY) || '{}');
     if (!Object.keys(store).length) return;
     const owner=sbUser?.id;
+    // Sigurnosni start: ako prethodni start nije stigao do kraja (app zamrznuta/ugašena dok su se
+    // vraćali veliki slojevi), veliki slojevi se ovaj put učitaju SAKRIVENI — inače bi se telefon
+    // zamrzavao pri svakom pokretanju i ne bi se dalo ni odjaviti ni ažurirati.
+    const _ZAPELO_KEY = 'tvlake_kml_start_u_toku';
+    let zapelo = false; try { zapelo = !!localStorage.getItem(_ZAPELO_KEY); localStorage.setItem(_ZAPELO_KEY, String(Date.now())); } catch(e) {}
+    const sakriveni = [];
     for(const [origName,data] of Object.entries(store)) {
       if (kmlLs.find(k => (k._origName || k.name) === origName && !k._key)) continue;
       try {
@@ -21365,10 +21460,14 @@ async function _localKmlRestore() {
         };
         layer.onlyPolygon=globalThis.GithubLayers?.defaultOnlyPolygon(layer)??layer.onlyPolygon;
         kmlLs.push(layer);
+        if (zapelo && layer.vis && content.length >= _KML_PO_DIJELOVIMA_MIN) { layer.vis = false; sakriveni.push(layer.name); }
         if(layer.vis&&(!layer.onlyPolygon||globalThis.GithubLayers?.selecting()))grp.addTo(map);
         applyKmlStyle(kmlLs.length - 1);
       } catch(e) { console.warn('KML restore greška:', origName, e); }
     }
+    if (sakriveni.length) showToast('⚠ Prošli start je zapeo — veliki sloj sakriven: ' + sakriveni.join(', ') + '. Uključi ga u Slojevima kad želiš.');
+    // Start je uspio ako app 20 s poslije i dalje radi (tajmer ne opali u zamrznutoj/ugašenoj app).
+    setTimeout(() => { try { localStorage.removeItem(_ZAPELO_KEY); } catch(e) {} }, 20000);
     _glCollapsed.delete('Lokalni / —');
     rndGraniceModal();
     if (document.getElementById('oznake-panel')?.style.display !== 'none') _rndOznakePanel();
