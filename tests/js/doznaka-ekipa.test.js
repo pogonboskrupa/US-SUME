@@ -31,3 +31,6 @@ assert.strictEqual(api._dozSmjer(44, 16, 44.01, 16), 'S'); assert.strictEqual(ap
 // bez veze: pozicija se pamti i šalje po povratku
 assert(/_dozLiveMoja = \{ la: lat/.test(src) && /Date\.now\(\) - _dozLiveMoja\.t < 5 \* 60000/.test(src));
 console.log('doznaka-ekipa: ok');
+// IndexedDB: veliki tekst ide kao Blob (nema kloniranja na glavnoj niti), stari zapisi se jednom migriraju
+assert(/_KMLC_BLOB_MIN = 200000/.test(src) && /new Blob\(\[data\], \{ type: 'text\/plain' \}\)/.test(src) && /v instanceof Blob\) v\.text\(\)/.test(src) && /st\.getKey\(key\)/.test(src));
+console.log('doznaka-ekipa + idb blob: ok');

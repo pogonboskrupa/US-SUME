@@ -32357,6 +32357,21 @@ function _bucketFileUrl(bucketName, filePath) {
 // ── KML/SHP offline cache (IndexedDB) ─────────────────────────────────────────
 const _KMLC_DB    = 'tvlake-kml-cache-v1';
 const _KMLC_STORE = 'files';
+const _KMLC_BLOB_MIN = 200000;
+const _kmlcMigrirano = new Set();
+// Postojeći veliki tekstualni zapisi se jednom prepišu u Blob (samo ako ključ još postoji).
+function _kmlcMigrirajUBlob(key, str) {
+  if (_kmlcMigrirano.has(key) || typeof Blob !== 'function') return;
+  _kmlcMigrirano.add(key);
+  setTimeout(async () => {
+    try {
+      const db = await _kmlcOpen();
+      const tx = db.transaction(_KMLC_STORE, 'readwrite'), st = tx.objectStore(_KMLC_STORE);
+      const g = st.getKey(key);
+      g.onsuccess = () => { if (g.result !== undefined) st.put(new Blob([str], { type: 'text/plain' }), key); };
+    } catch (e) {}
+  }, 4000);
+}
 let   _kmlcDB   = null;
 let   _kmlcKeys = new Set(); // all keys currently stored in IDB
 
@@ -32375,7 +32390,10 @@ async function _kmlcSave(key, data) {
     const db = await _kmlcOpen();
     await new Promise((resolve, reject) => {
       const tx = db.transaction(_KMLC_STORE, 'readwrite');
-      tx.objectStore(_KMLC_STORE).put(data, key);
+      // Veliki tekst se čuva kao Blob: IndexedDB tada pri čitanju ne klonira cijeli string na
+      // glavnoj niti (izmjereno 340-400 ms zastoja po čitanju na brzom telefonu), nego vrati
+      // ručku, a sadržaj se čita asinhrono (blob.text()).
+      tx.objectStore(_KMLC_STORE).put((typeof data === 'string' && data.length > _KMLC_BLOB_MIN && typeof Blob === 'function') ? new Blob([data], { type: 'text/plain' }) : data, key);
       tx.onabort = () => reject(tx.error || new Error('Čuvanje prekinuto'));
       tx.oncomplete = resolve;
       tx.onerror    = e => reject(e.target.error);
@@ -32391,7 +32409,21 @@ async function _kmlcGet(key) {
     return new Promise((resolve, reject) => {
       const tx = db.transaction(_KMLC_STORE, 'readonly');
       const req = tx.objectStore(_KMLC_STORE).get(key);
-      req.onsuccess = e => resolve(e.target.result ?? null);
+      const t0 = performance.now();
+      const gotovo = v => {
+        try {
+          const rec = (window._PERF_IDB = window._PERF_IDB || {}), k = String(key).split(':')[0], ms = Math.round(performance.now() - t0);
+          const r = rec[k] || (rec[k] = { n: 0, ms: 0, max: 0, kb: 0 });
+          r.n++; r.ms += ms; if (ms > r.max) r.max = ms; if (typeof v === 'string') r.kb = Math.max(r.kb, Math.round(v.length / 1024));
+        } catch (e) {}
+        if (typeof v === 'string' && v.length > _KMLC_BLOB_MIN) _kmlcMigrirajUBlob(key, v);
+        resolve(v ?? null);
+      };
+      req.onsuccess = e => {
+        const v = e.target.result;
+        if (v && typeof v === 'object' && typeof Blob === 'function' && v instanceof Blob) v.text().then(gotovo, reject);
+        else gotovo(v);
+      };
       req.onerror   = e => reject(e.target.error);
     });
   } catch { return null; }
@@ -36479,6 +36511,7 @@ function _perfSnimak() {
   o.lagP50 = _perfPerc(_PERF.lag, 0.5); o.lagP95 = _perfPerc(_PERF.lag, 0.95); o.lagMax = _PERF.lag.length ? Math.max(..._PERF.lag) : 0;
   o.poTabu = Object.entries(_PERF.tabLt).map(([k, v]) => ({ tab: k, n: v.n, ms: Math.round(v.ms), max: Math.round(v.max) })).sort((a, b) => b.ms - a.ms);
   o.funkcije = Object.entries(_PERF.fn).map(([k, v]) => ({ fn: k, n: v.n, ms: Math.round(v.ms), max: Math.round(v.max), avg: +(v.ms / Math.max(1, v.n)).toFixed(2) })).sort((a, b) => b.ms - a.ms);
+  o.idb = Object.entries(window._PERF_IDB || {}).map(([k, v]) => ({ vrsta: k, n: v.n, ms: v.ms, max: v.max, kbMax: v.kb })).sort((a, b) => b.ms - a.ms);
   o.loaf = _PERF.loaf.slice(0, 8);
   o.koraci = (window._PERF_KORACI || []).filter(k => k.sync >= 20).sort((a, b) => b.sync - a.sync).slice(0, 8);
   o.najduzi = _PERF.lt.slice().sort((a, b) => b.ms - a.ms).slice(0, 8);
@@ -36526,6 +36559,7 @@ function _perfDiagRender() {
   if (o.poTabu.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Zastoji po tabu</div>'; o.poTabu.slice(0, 6).forEach(t => { h += red(t.tab, t.n + '× · ' + t.ms + ' ms · max ' + t.max); }); }
   if (o.funkcije.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Vruće funkcije (ukupno vrijeme)</div>'; o.funkcije.slice(0, 8).forEach(t => { h += red(t.fn, t.n + '× · ' + t.ms + ' ms · ø ' + t.avg + ' · max ' + t.max); }); }
   if (o.loaf && o.loaf.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Šta je držalo nit (skripta · crtanje)</div>'; o.loaf.forEach(t => { h += red('+' + Math.round(t.at / 1000) + ' s · ' + t.tab + ' · ' + t.ms + ' ms (crtanje ' + t.crtanje + ')', (t.skripte.join('; ') || 'bez skripte — stil/raspored/slike')); }); }
+  if (o.idb && o.idb.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Čitanja IndexedDB (vrsta zapisa)</div>'; o.idb.slice(0, 6).forEach(t => { h += red(t.vrsta, t.n + '× · ' + t.ms + ' ms · max ' + t.max + (t.kbMax ? ' · do ' + t.kbMax + ' KB' : '')); }); }
   if (o.koraci && o.koraci.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Spori koraci pokretanja</div>'; o.koraci.forEach(k => { h += red(k.ime, k.sync + ' ms (sinhroni dio) · +' + k.at + ' ms'); }); }
   if (o.najduzi.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Najduži zastoji</div>'; o.najduzi.forEach(t => { h += red('+' + Math.round(t.at / 1000) + ' s · ' + t.tab, t.ms + ' ms'); }); }
   h += '<div style="display:flex;gap:8px;margin-top:10px;"><button onclick="_perfDiagRender()" style="flex:1;padding:9px;background:#0c4a6e;border:1px solid #38bdf8;border-radius:8px;color:#e0f2fe;font-size:12px;font-weight:700;">Osvježi</button>' +
