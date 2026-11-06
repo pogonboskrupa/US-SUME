@@ -29,7 +29,7 @@ assert(a > 0 && b > a);
 })();
 // veliki sloj: na kartu samo objekti u prikazu; sigurnosni start sakriva velike slojeve poslije zaglavljenog starta
 (function () {
-  assert(/const _KML_CULL_MIN = 1500/.test(src) && /function _kmlGrupa\(\)/.test(src) && /map\.on\('moveend', this\._cullZakazi, this\)/.test(src));
+  assert(/const _KML_CULL_MIN = 800/.test(src) && /function _kmlGrupa\(\)/.test(src) && /map\.on\('moveend', this\._cullZakazi, this\)/.test(src));
   assert(/typeof _kmlGrupa === 'function' \? _kmlGrupa\(\)/.test(src), 'pkml/pkmlStyled koriste grupu sa izborom prikaza');
   assert(/tvlake_kml_start_u_toku/.test(src) && /layer\.vis = false; sakriveni\.push/.test(src), 'sigurnosni start');
   console.log('cull + sigurnosni start: ok');

@@ -11520,25 +11520,30 @@ function _terrariumDecodeTile(bitmapOrImg) {
   }
   return elev;
 }
+// Više DEM pločica zna stići odjednom, pa se njihovo računanje (65 536 piksela svaka) izvrši u
+// jednom potezu i zamrzne nit; red pušta po jednu pločicu po zadatku, između njih ide dodir/crtanje.
+const _demPredah = (() => { let red = Promise.resolve(); return () => (red = red.then(() => new Promise(r => setTimeout(r, 0)))); })();
 function _makeDemCanvasLayer(mode) {
   return L.GridLayer.extend({
     createTile(coords, done) {
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = 256;
-      _getTerrariumTile(coords.z, coords.x, coords.y).then(src => {
+      _getTerrariumTile(coords.z, coords.x, coords.y).then(async src => {
         if (!src) { done(null, canvas); return; }
+        await _demPredah();
         const elev = (()=>{try{return _terrariumDecodeTile(src);}finally{if(src.close)src.close();}})();
         const ctx = canvas.getContext('2d');
         const out = ctx.createImageData(256, 256);
         const od  = out.data;
         for (let py=0; py<256; py++) {
+          const metresRed = mode === 'nv' ? 0 : Math.cos(_tile2lat(coords.y+(py+.5)/256,coords.z)*Math.PI/180)*156543.03392/2**coords.z;   // isto za cijeli red
           for (let px=0; px<256; px++) {
             const idx = py*256+px;
             let rgba;
             if (mode === 'nv') {
               rgba = Number.isFinite(elev[idx])?_nvColor(elev[idx]):[0,0,0,0];
             } else {
-              const metres=Math.cos(_tile2lat(coords.y+(py+.5)/256,coords.z)*Math.PI/180)*156543.03392/2**coords.z;
+              const metres=metresRed;
               const g=DemQuality.gradient(elev,px,py,metres);
               rgba=Number.isFinite(g.percent)&&g.percent>.01?_aspColor(g.bearing,1.5):[0,0,0,0];
             }
@@ -11618,7 +11623,7 @@ const DemContour = L.GridLayer.extend({
   createTile(coords, done) {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 256;
-    _getTerrariumTile(coords.z, coords.x, coords.y).then(src => {
+    _getTerrariumTile(coords.z, coords.x, coords.y).then(async src => { if (src) await _demPredah();
       if (!src) { done(null, canvas); return; }
       const elev = (()=>{try{return _terrariumDecodeTile(src);}finally{if(src.close)src.close();}})();
       _drawContours(canvas.getContext('2d'), elev, 256, 256, _CONTOUR_STEP);
@@ -11656,7 +11661,7 @@ const DemSlopeClass = L.GridLayer.extend({
   createTile(coords, done) {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 256;
-    _getTerrariumTile(coords.z, coords.x, coords.y).then(src => {
+    _getTerrariumTile(coords.z, coords.x, coords.y).then(async src => { if (src) await _demPredah();
       if (!src) { done(null, canvas); return; }
       const elev = (()=>{try{return _terrariumDecodeTile(src);}finally{if(src.close)src.close();}})();
       // Geografska veličina piksela u metrima na ovoj geografskoj širini
@@ -20548,7 +20553,7 @@ function ldK(file) {
 // pri svakom pomicanju karte crtao SVE objekte, pa se karta nije dala pomjerati, a dodiri na meni
 // su kasnili. Grupa i dalje sadrži sve objekte (stil, pretraga, granice, izvoz rade nad svima), ali
 // na kartu dodaje samo one u prikazu (+50 % ruba), u malim porcijama između dva frame-a.
-const _KML_CULL_MIN = 1500;
+const _KML_CULL_MIN = 800;
 let _KmlCullGroup = null;
 function _kmlGrupa() {
   if (!_KmlCullGroup && window.L) {
@@ -21450,6 +21455,14 @@ async function _localKmlRestore() {
         if(sbUser?.id!==owner)return;
         if(kmlLs.some(k=>(k._origName||k.name)===origName&&!k._key))continue;
         if(typeof content!=='string')throw new Error('Nedostaje lokalni sadržaj sloja');
+        // Veliki sloj se ne obrađuje u prvim sekundama: karta i meni prvo postanu upotrebljivi, pa tek onda
+        // ide teško parsiranje u pozadini (sakriven sloj čeka duže — ne vidi se ionako).
+        if (content.length >= _KML_PO_DIJELOVIMA_MIN && !_localKmlRestore._odgodio) {
+          _localKmlRestore._odgodio = true;
+          await new Promise(r => setTimeout(r, data.vis === false ? 8000 : 2000));
+          if(sbUser?.id!==owner)return;
+          if(kmlLs.some(k=>(k._origName||k.name)===origName&&!k._key))continue;
+        }
         const col = data.col || KCOLS[kmlCI % KCOLS.length]; kmlCI++;
         const grp = await _kmlGrupaIzSadrzaja(content, col);
         if(sbUser?.id!==owner)return;
