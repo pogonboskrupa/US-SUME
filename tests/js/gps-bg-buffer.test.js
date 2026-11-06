@@ -113,6 +113,7 @@ console.log('_crashCheck — dopuna oporavljenog snimanja iz native bafera:');
 
 const SRC_CRASH = [
   extractFn('_nativeBufUzmi'),
+  extractFn('_nativeRijetko'),
   extractFn('_crashClearVlaka'),
   extractFn('_crashClearTrag'),
   extractFn('_crashCheck'),
@@ -393,4 +394,13 @@ t('snimak sa 0 tačaka i bez native tačaka se tiho čisti, bez dijaloga', async
   await fn();
   assert.equal(dijalog, 0, 'nema dijaloga za prazan snimak');
   assert.equal(sandbox.localStorage.getItem('tvlake_crash_vlaka_v2'), null, 'snimak je očišćen');
+});
+t('_nativeRijetko: 56 000 fiksova u mjestu → nekoliko tačaka; kretanje i zadnji fiks se čuvaju', () => {
+  const fn = new Function(extractFn('_nativeRijetko') + '\nreturn _nativeRijetko;')();
+  const stoji = Array.from({ length: 56000 }, (_, i) => ({ t: i, la: 44 + (i % 3) * 1e-7, lo: 16 + (i % 2) * 1e-7 }));
+  const r = fn(stoji, 1.5);
+  assert(r.length <= 3, 'šum u mjestu se sažima, ostalo ' + r.length);
+  assert.strictEqual(r[r.length - 1].t, 55999, 'zadnji fiks ostaje');
+  const hoda = Array.from({ length: 100 }, (_, i) => ({ t: i, la: 44 + i * 1e-4, lo: 16 }));   // ~11 m razmaka
+  assert.strictEqual(fn(hoda, 1.5).length, 100, 'hodanje se ne rijedi');
 });

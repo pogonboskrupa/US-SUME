@@ -10650,10 +10650,12 @@ async function _crashCheck() {
       // historijski timestamp — inače bi speed-gate cijeli period vidio kao
       // jedan ogroman skok i odbio sve.
       const prijeDopune = _tragPts.length;
-      for (const p of bufPts) {
+      let _n = 0;
+      for (const p of _nativeRijetko(bufPts.filter(q => q.t > _tragLastT), 1.5)) {
         // bypassPauzu: auto-pauza okinuta usred dopune ne smije odbaciti ostatak
         // pozadinskog snimanja (hladan start nema zabilježenih pauza).
         if (p.t > _tragLastT && !_uPauziIntervalu(pauze.trag, p.t)) _addTragPoint(p.la, p.lo, p.ac, p.al, p.sp, p.t, true);
+        if ((++_n & 127) === 0) await new Promise(r => setTimeout(r, 0));   // predah za ekran
       }
       const dodatoT = _tragPts.length - prijeDopune;
       _updTragStats();
@@ -18149,6 +18151,18 @@ function _nativeBufUzmi() {
     }
   }
   return pts.sort((a,b) => a.t - b.t);
+}
+// Gusti niz iz native bafera (npr. 56 000 fiksova dok je telefon mirovao satima) ne smije se
+// puštati kroz _addTragPoint tačku po tačku: izmjereno 7,5 s zamrznute niti. Fiksevi bliži od
+// minM prethodno zadržanog su GPS šum u mjestu i ne nose geometriju; zadnji fiks se uvijek čuva.
+function _nativeRijetko(pts, minM) {
+  const out = [], k = 111320;
+  let last = null;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    if (!last || i === pts.length - 1 || Math.hypot((p.la - last.la) * k, (p.lo - last.lo) * k * Math.cos(p.la * Math.PI / 180)) >= minM) { out.push(p); last = p; }
+  }
+  return out;
 }
 function _nativeBufPotvrdi() {
   // Call only after all active consumers have persisted their state.
