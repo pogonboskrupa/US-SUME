@@ -24,7 +24,9 @@ function mk(opts) {
     _localSetKriticno: (k, v) => { store[k] = v; return true; }, _shareKolege: () => [{ id: 'k1', ime: 'Kolega Jedan' }], _dlgActions: async () => 0,
     _escHtml: x => x, _isNetworkErr: () => false, _sesijaPinom: async () => true,
   };
-  const api = new Function(...Object.keys(env), kod + ';return {_primljeniSync,_primljeniUcitaj,podaciPosalji,_kmlJeIspravan};')(...Object.values(env));
+  env._dlgPrompt = async () => opts.sifraUnos ?? null; env._dlgActions = opts.akcije || (async () => 0); env.navigator = { clipboard: { writeText: async () => {} } };
+  const rpcOrig = sb.rpc; sb.rpc = async (n, p) => { log.rpcs = (log.rpcs || []); log.rpcs.push({ n, p }); if (opts.rpcFn) return opts.rpcFn(n, p); return rpcOrig(n, p); };
+  const api = new Function(...Object.keys(env), kod + ';return {_primljeniSync,_primljeniUcitaj,podaciPosalji,_kmlJeIspravan,primljeniPreuzmiSifrom};')(...Object.values(env));
   return { api, log, store };
 }
 (async () => {
@@ -51,9 +53,29 @@ function mk(opts) {
   t = mk({}); await t.api.podaciPosalji('trag', 'Moj trag', KML);
   assert.strictEqual(t.log.rpc.n, 'posalji_podatke'); assert.strictEqual(t.log.rpc.p.p_to, 'k1'); assert.strictEqual(t.log.rpc.p.p_vrsta, 'trag');
   t = mk({ rpcErr: { message: 'Could not find the function public.posalji_podatke' } }); await t.api.podaciPosalji('trag', 'T', KML);
-  assert(t.log.toasts.some(m => /migraciju/.test(m)), 'objašnjenje kad migracija nije pokrenuta');
+  assert(t.log.toasts.some(m => /migracije/.test(m)), 'objašnjenje kad migracija nije pokrenuta');
   // prevelik
   t = mk({}); await t.api.podaciPosalji('kml', 'Veliki', 'x'.repeat(3000000)); assert.strictEqual(t.log.rpc, null);
+  // šifra: opcija iza kolega; šalje bez p_to, prikazuje šifru
+  let prikazano = null;
+  t = mk({ akcije: async (naslov, lista) => { if (/Šifra:/.test(naslov)) { prikazano = naslov; return 2; } return lista.length - 2; }, rpcFn: async (n) => n === 'posalji_podatke_sifrom' ? { data: 'ABCD2345' } : { data: null } });
+  await t.api.podaciPosalji('trag', 'Moj trag', KML);
+  assert.strictEqual(t.log.rpcs[0].n, 'posalji_podatke_sifrom'); assert(!('p_to' in t.log.rpcs[0].p)); assert(/ABCD 2345/.test(prikazano));
+  // bez kolega (terenski profil) šifra je i dalje dostupna
+  const t0 = mk({ akcije: async (naslov, lista) => { assert.strictEqual(lista.length, 3, 'kolega + šifra + odustani'); return 2; }, rpcFn: async () => ({ data: 'ZZZZ2222' }) });
+  // preuzimanje: lokalno spremi PRIJE potvrde; neispravna šifra → nema upisa
+  t = mk({ sifraUnos: 'abcd-2345', rpcFn: async (n) => n === 'preuzmi_podatke_sifrom' ? { data: [{ vrsta: 'trag', naziv: 'Sifrom', sadrzaj: KML, od_ime: 'Neko Treći' }] } : { data: null } });
+  await t.api.primljeniPreuzmiSifrom();
+  assert.deepStrictEqual(t.log.rpcs.map(x => x.n), ['preuzmi_podatke_sifrom', 'potvrdi_preuzimanje_sifrom']);
+  assert.strictEqual(t.log.rpcs[0].p.p_sifra, 'ABCD2345'); assert.strictEqual(t.api._primljeniUcitaj()[0].odIme, 'Neko Treći');
+  assert(t.log.order[0].startsWith('save:primljeno:sifra_ABCD2345'), 'upis lokalno prije potvrde');
+  t = mk({ sifraUnos: 'ABCD2345', rpcFn: async () => ({ data: [] }) });
+  await t.api.primljeniPreuzmiSifrom();
+  assert.strictEqual(t.api._primljeniUcitaj().length, 0); assert(t.log.toasts.some(m => /nije ispravna/.test(m)));
+  t = mk({ sifraUnos: 'ABCD2345', saveFail: true, rpcFn: async (n) => n === 'preuzmi_podatke_sifrom' ? { data: [{ vrsta: 'trag', naziv: 'X', sadrzaj: KML }] } : { data: null } });
+  await t.api.primljeniPreuzmiSifrom();
+  assert(!t.log.rpcs.some(x => x.n === 'potvrdi_preuzimanje_sifrom'), 'neuspjeh lokalnog upisa NE potvrđuje (podatak ostaje na serveru)');
+  t = mk({ sifraUnos: 'kratko' }); await t.api.primljeniPreuzmiSifrom(); assert(t.log.toasts.some(m => /8 znakova/.test(m)));
   // _msrToKml
   const m = src.slice(src.indexOf('function _msrToKml'), src.indexOf('function _msrPosalji'));
   const toKml = new Function('_hexToKmlColor', '_escXml', m + ';return _msrToKml;')(() => 'ff0000ff', x => x);
@@ -62,6 +84,8 @@ function mk(opts) {
   assert(/<LineString>/.test(toKml({ name: 'L', mode: 'dist', pts: [{ lat: 1, lng: 2 }, { lat: 1, lng: 3 }] })));
   // migracija: nema insert politike, provjera šumarije na serveru
   const sql = require('fs').readFileSync(__dirname + '/../../supabase/migrations/20261106_primljeni_podaci.sql', 'utf8');
+  const sql2 = require('fs').readFileSync(__dirname + '/../../supabase/migrations/20261107_primljeni_sifrom.sql', 'utf8');
+  assert(/claimed_by <> auth\.uid\(\)/.test(sql2) && /podaci_sifre_pokusaji/.test(sql2) && /interval '2 days'/.test(sql2) && /enable row level security/.test(sql2) && !/create policy/i.test(sql2), 'šifre: bez politika, 2 dana, ograničenje pokušaja');
   assert(/distinct from v_ja_sum/.test(sql) && !/for insert/i.test(sql) && /to_id = auth\.uid\(\)/.test(sql) && /zzz_odobren/.test(sql));
   console.log('primljeni-podaci: ok');
 })().catch(e => { console.error(e); process.exit(1); });

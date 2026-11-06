@@ -36692,12 +36692,9 @@ async function _primljeniSync(force) {
           try { await sb.from('primljeni_podaci').delete().eq('id', row.id); } catch (e) {}
           continue;
         }
-        const ok = await _kmlcSave('primljeno:' + row.id, row.sadrzaj);
-        if (!ok) continue;                                        // nije sačuvano lokalno → ne briši sa servera
-        const stavka = { id: row.id, vrsta: row.vrsta, naziv: String(row.naziv || 'Podatak').slice(0, 120), od: row.from_id,
-          odIme: (kolegeMap && kolegeMap[row.from_id]?.ime) || 'Kolega', t: Date.parse(row.created_at) || sad, kb: Math.round(row.sadrzaj.length / 1024), vidjeno: false };
-        lista.unshift(stavka);
-        if (!_primljeniSpremi(lista)) { lista.shift(); try { await _kmlcDelete('primljeno:' + row.id); } catch (e) {} continue; }
+        const stavka = await _primljeniSnimiLokalno(lista, row.id, row.vrsta, row.naziv, row.from_id,
+          (kolegeMap && kolegeMap[row.from_id]?.ime) || 'Kolega', Date.parse(row.created_at) || sad, row.sadrzaj);
+        if (!stavka) continue;                                    // nije sačuvano lokalno → ne briši sa servera
         novi.push(stavka); spremljen = true;
       }
       if (spremljen) { try { await sb.from('primljeni_podaci').delete().eq('id', row.id); } catch (e) {} }   // sa servera nestaje tek poslije lokalnog upisa
@@ -36709,25 +36706,89 @@ async function _primljeniSync(force) {
   finally { _primljeniBusy = false; }
 }
 
+// Lokalni upis primljenog podatka: sadržaj u IndexedDB, metapodaci u listu. Vraća stavku ili null.
+async function _primljeniSnimiLokalno(lista, id, vrsta, naziv, odId, odIme, t, sadrzaj) {
+  if (!(await _kmlcSave('primljeno:' + id, sadrzaj))) return null;
+  const stavka = { id, vrsta, naziv: String(naziv || 'Podatak').slice(0, 120), od: odId, odIme: odIme || 'Kolega', t, kb: Math.round(sadrzaj.length / 1024), vidjeno: false };
+  lista.unshift(stavka);
+  if (!_primljeniSpremi(lista)) { lista.shift(); try { await _kmlcDelete('primljeno:' + id); } catch (e) {} return null; }
+  return stavka;
+}
+
 // ── Slanje ──
 async function podaciPosalji(vrsta, naziv, kml) {
   if (!sbUser || !sbProfile) { showToast('Prijavi se da šalješ podatke'); return; }
   if (typeof kml !== 'string' || !kml) { showToast('Nema podataka za slanje'); return; }
   if (new Blob([kml]).size > _PRIM_MAX_BAJTA) { showToast('Podatak je prevelik za slanje (najviše ~2,8 MB)'); return; }
   const kolege = _shareKolege();
-  if (!kolege.length) { showToast('Nema kolega iz tvoje šumarije na ovom uređaju'); return; }
-  const i = await _dlgActions('📤 Pošalji kolegi: ' + naziv, kolege.map(k => ({ label: _escHtml(k.ime) })).concat([{ label: 'Odustani' }]));
-  if (i == null || i < 0 || i >= kolege.length) return;
+  const akcije = kolege.map(k => ({ label: _escHtml(k.ime) }));
+  akcije.push({ label: '🔑 Pošalji šifrom — bilo ko, drugi profil ili šumarija (važi 2 dana)' });
+  akcije.push({ label: 'Odustani' });
+  const i = await _dlgActions('📤 Pošalji: ' + naziv, akcije);
+  if (i == null || i < 0 || i > kolege.length) return;
   if (typeof _mrezaSila === 'function') _mrezaSila(30000);
   if (sbUser._cachedStub && !(await _sesijaPinom(true))) { showToast('Slanje traži vezu sa serverom'); return; }
+  const poruka = e => {
+    const m = String(e?.message || e);
+    if (/posalji_podatke|PGRST202|does not exist/i.test(m)) return '⚠ Server još nema ovu mogućnost — admin treba pokrenuti migracije 20261106_primljeni_podaci.sql i 20261107_primljeni_sifrom.sql';
+    if (typeof _isNetworkErr === 'function' && _isNetworkErr(e)) return '⚠ Nema veze — pošalji ponovo kad imaš signal';
+    return '⚠ ' + m;
+  };
+  if (i === kolege.length) {
+    try {
+      const r = await _withTimeout(sb.rpc('posalji_podatke_sifrom', { p_vrsta: vrsta, p_naziv: String(naziv).slice(0, 120), p_sadrzaj: kml }), 25000);
+      if (r.error) throw r.error;
+      _sifraPrikazi(String(r.data), naziv);
+    } catch (e) { showToast(poruka(e)); }
+    return;
+  }
   try {
     const r = await _withTimeout(sb.rpc('posalji_podatke', { p_to: kolege[i].id, p_vrsta: vrsta, p_naziv: String(naziv).slice(0, 120), p_sadrzaj: kml }), 25000);
     if (r.error) throw r.error;
     showToast('✓ Poslano: ' + kolege[i].ime + ' će ga dobiti čim bude online. Na serveru ne ostaje.');
+  } catch (e) { showToast(poruka(e)); }
+}
+// Šifra za preuzimanje: velika, uz kopiranje i dijeljenje porukom.
+async function _sifraPrikazi(sifra, naziv) {
+  const lijepa = sifra.slice(0, 4) + ' ' + sifra.slice(4);
+  const txt = 'Dendro Map — podatak „' + naziv + '“. Šifra za preuzimanje: ' + sifra + ' (važi 2 dana). U aplikaciji: Meni → Primljeni podaci → Preuzmi šifrom.';
+  const i = await _dlgActions('🔑 Šifra: ' + lijepa + '\nVaži 2 dana, preuzima je jedna osoba. Poslije preuzimanja nestaje sa servera.', [
+    { label: '📋 Kopiraj šifru' }, { label: '📤 Podijeli porukom (Viber, WhatsApp…)' }, { label: 'Zatvori' },
+  ]);
+  if (i === 0) { try { await navigator.clipboard.writeText(sifra); showToast('📋 Šifra kopirana: ' + sifra); } catch (e) { showToast('Šifra: ' + sifra); } }
+  else if (i === 1) {
+    try { if (window.AndroidShare && AndroidShare.shareText) { AndroidShare.shareText('Dendro Map — šifra', txt); return; } } catch (e) {}
+    try { if (navigator.share) { await navigator.share({ text: txt }); return; } } catch (e) {}
+    try { await navigator.clipboard.writeText(txt); showToast('📋 Poruka kopirana'); } catch (e) { showToast('Šifra: ' + sifra); }
+  }
+}
+// Primalac unosi šifru: preuzmi → spremi LOKALNO → tek onda potvrdi (briše se sa servera).
+async function primljeniPreuzmiSifrom() {
+  if (!sb || !sbUser || !sbProfile) { showToast('Prijavi se da preuzmeš podatak'); return; }
+  const unos = await _dlgPrompt('Unesi šifru koju si dobio (8 znakova):', '', { title: 'Preuzmi šifrom', okLabel: 'Preuzmi' });
+  if (unos == null) return;
+  const sifra = String(unos).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (sifra.length !== 8) { showToast('Šifra ima 8 znakova (slova i brojevi)'); return; }
+  if (typeof _mrezaSila === 'function') _mrezaSila(30000);
+  if (sbUser._cachedStub && !(await _sesijaPinom(true))) { showToast('Preuzimanje traži vezu sa serverom'); return; }
+  try {
+    const r = await _withTimeout(sb.rpc('preuzmi_podatke_sifrom', { p_sifra: sifra }), 25000);
+    if (r.error) throw r.error;
+    const red = Array.isArray(r.data) ? r.data[0] : r.data;
+    if (!red || typeof red.sadrzaj !== 'string') { showToast('⚠ Šifra nije ispravna, istekla je ili je već preuzeta'); return; }
+    if (!_kmlJeIspravan(red.sadrzaj)) { showToast('⚠ Podatak nije ispravan KML'); try { await sb.rpc('potvrdi_preuzimanje_sifrom', { p_sifra: sifra }); } catch (e) {} return; }
+    const lista = _primljeniUcitaj();
+    const id = 'sifra_' + sifra + '_' + Date.now().toString(36);
+    const stavka = await _primljeniSnimiLokalno(lista, id, red.vrsta, red.naziv, null, red.od_ime || 'Nepoznat pošiljalac', Date.now(), red.sadrzaj);
+    if (!stavka) { showToast('⚠ Nije sačuvano na telefonu (memorija?) — na serveru je ostalo, pokušaj ponovo'); return; }
+    try { await sb.rpc('potvrdi_preuzimanje_sifrom', { p_sifra: sifra }); } catch (e) { /* sadržaj je lokalno; red na serveru istekne sam */ }
+    _primljeniBadge();
+    showToast('✓ Preuzeto: ' + stavka.naziv);
+    if (document.getElementById('primljeni-panel')) _primljeniRender();
   } catch (e) {
     const m = String(e?.message || e);
-    if (/posalji_podatke|PGRST202|does not exist/i.test(m)) showToast('⚠ Server još nema ovu mogućnost — admin treba pokrenuti migraciju 20261106_primljeni_podaci.sql');
-    else if (typeof _isNetworkErr === 'function' && _isNetworkErr(e)) showToast('⚠ Nema veze — pošalji ponovo kad imaš signal');
+    if (/preuzmi_podatke_sifrom|PGRST202|does not exist/i.test(m)) showToast('⚠ Server još nema ovu mogućnost — admin treba pokrenuti migraciju 20261107_primljeni_sifrom.sql');
+    else if (typeof _isNetworkErr === 'function' && _isNetworkErr(e)) showToast('⚠ Nema veze — pokušaj kad imaš signal');
     else showToast('⚠ ' + m);
   }
 }
@@ -36768,7 +36829,7 @@ function _primljeniRender(oznaciVidjeno) {
   const el = document.getElementById('primljeni-panel');
   if (!el) return;
   const lista = _primljeniUcitaj(), sad = Date.now();
-  let h = '<div class="prm-head"><button type="button" class="prm-x" onclick="_primljeniZatvori()" aria-label="Zatvori">‹</button><div><b>📥 Primljeni podaci</b><small>Od kolega iz tvoje šumarije · čuvaju se samo na ovom telefonu</small></div></div><div class="prm-body">';
+  let h = '<div class="prm-head"><button type="button" class="prm-x" onclick="_primljeniZatvori()" aria-label="Zatvori">‹</button><div><b>📥 Primljeni podaci</b><small>Čuvaju se samo na ovom telefonu</small></div></div><div class="prm-body"><button type="button" class="prm-sifra" onclick="primljeniPreuzmiSifrom()">🔑 Preuzmi šifrom</button>';
   if (!lista.length) h += '<p class="prm-prazno">Još ništa nije primljeno. Kad ti kolega pošalje trag, poligon ili KML, stiže ovdje i dobiješ obavijest. Kolegama šalješ iz kartice traga, mjerenja ili Dodaj fajl na kartu → Pošalji.</p>';
   lista.forEach(x => {
     h += '<div class="prm-red' + (!x.vidjeno ? ' novo' : '') + '"><div class="prm-info"><b>' + (_PRIM_IKONA[x.vrsta] || '🗺') + ' ' + _escHtml(x.naziv) + (!x.vidjeno ? ' <i>NOVO</i>' : '') + '</b>' +
