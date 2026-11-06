@@ -20701,7 +20701,9 @@ function _kmlGrupa() {
         const map = this._map;
         if (!map || !this._cull) return;
         if (!this._idx) this._idxGradi();
-        const { C, idx, svuda } = this._idx, b = map.getBounds().pad(0.5);
+        // Rub 15 % (ne 50 %): na kraju zuma Leaflet ponovo projektuje SVE što je na karti — sa 50 % je to
+        // bila površina 4× veća od ekrana (izmjereno 452 ms na Redmi Note); ostatak dođe na moveend.
+        const { C, idx, svuda } = this._idx, b = map.getBounds().pad(0.15);
         const x0 = Math.floor(b.getWest() / C), x1 = Math.floor(b.getEast() / C), y0 = Math.floor(b.getSouth() / C), y1 = Math.floor(b.getNorth() / C);
         let cand;
         if ((x1 - x0 + 1) * (y1 - y0 + 1) > 6000) cand = new Set(Object.values(this._layers).filter(l => !(this._tackeZasebno && l._kmlIsPoint)));   // daleko odzumirano: sve
@@ -20738,7 +20740,8 @@ function _kmlGrupa() {
 const _KML_PO_DIJELOVIMA_MIN = 1200000;
 async function _kmlGrupaIzSadrzaja(content, col) {
   const cijeli = () => pkml(new DOMParser().parseFromString(content, 'text/xml'), col);
-  if (typeof content !== 'string' || content.length < _KML_PO_DIJELOVIMA_MIN) return cijeli();
+  // Po dijelovima već od ~100 KB: fajl od 1 MB odjednom je na Redmi Note bio blok od ~140 ms.
+  if (typeof content !== 'string' || content.length < 100000) return cijeli();
   // Placemark-ovi se traže redom (indexOf), ne split-om cijelog fajla odjednom: split 13 MB
   // stringa je na Redmi Note bio jedan blok od ~240 ms. Porcija je ograničena i BAJTIMA
   // (~48 KB), ne samo brojem — 20 velikih poligona je inače jedan DOMParser poziv od 165 ms.
