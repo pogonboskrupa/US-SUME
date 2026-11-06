@@ -6023,7 +6023,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.4.2';
+const APP_VER = 'v3.4.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6251,6 +6251,7 @@ function _loadLocalVlake() {
   <div class="mdrop-scroll"><section class="mdrop-section mdrop-server-section">
   <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg>Server</div>
   <button type="button" class="mdrop-item" id="mdrop-server"  onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg></span>Pošalji na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;flex-shrink:0;white-space:nowrap;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;white-space:nowrap;display:inline-block;"></span></span></button>
+  <button type="button" class="mdrop-item" id="mdrop-primljeni" onclick="closeMenuDropdown();primljeniOtvori()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-folders"/></svg></span>Primljeni podaci<span id="mdrop-primljeni-cnt" style="display:none;margin-left:auto;padding-left:8px;flex-shrink:0;"><span style="background:#22c55e;color:#04210f;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;display:inline-block;"></span></span></button>
 </section><div id="spd-menu-launch" hidden aria-label="ŠPD prečice">
     <button type="button" onclick="SpdProfile.open()"><svg class="ic" aria-hidden="true"><use href="#ic-korisnik"/></svg><span>Moj ŠPD profil<small>Zapisi, karte i sigurnosna kopija</small></span>›</button>
     <button type="button" onclick="closeMenuDropdown();switchTab('teren')">Otvori Teren</button>

@@ -182,6 +182,7 @@ function layerImportRenderList(){
       +'<button type="button" onclick="layerImportStil('+i+')" aria-expanded="'+stil+'" aria-label="Linija i ispuna sloja '+esc(k.name)+'">'+(stil?'Zatvori stil':'Linija i ispuna')+'</button>'
       +'<button type="button" onclick="layerImportToggle('+i+')" aria-label="'+(k.vis?'Sakrij':'Prikaži')+' sloj '+esc(k.name)+'">'+(k.vis?'Sakrij':'Prikaži')+'</button>'
       +'<button type="button" onclick="layerImportZoom('+i+')" aria-label="Prikaži sloj '+esc(k.name)+' na karti">Na karti</button>'
+      +'<button type="button" onclick="_layerPosalji('+i+')" aria-label="Pošalji sloj '+esc(k.name)+' kolegi">Pošalji</button>'
       +'<button type="button" class="layer-del" onclick="layerImportDelete('+i+')" aria-label="Ukloni sloj '+esc(k.name)+'">Ukloni</button>'
       +'</span>'+(stil?'<div class="layer-row-style">'+_layerStyleControls(i)+'</div>':'')+'</div>';
   }).join('')+(rows.length>MAX?'<button type="button" class="layer-more" onclick="_layerListSve=!_layerListSve;layerImportRenderList()">'+(_layerListSve?'Prikaži manje':'Prikaži sve ('+rows.length+')')+'</button>':'');
