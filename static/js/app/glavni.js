@@ -29788,6 +29788,34 @@ function _wTileScheduleCall(msg, pri) {
   });
 }
 
+// Offline karta sa RIJETKOM pokrivenošću: pločice na ovom zumu mogu postojati samo
+// dijelom, pa je ostatak prikazivao sivu pozadinu karte (druge aplikacije tu
+// prikažu zamućen, uvećan roditeljski sloj). Kad pločice nema, uzima se izrezan
+// i uvećan dio roditeljske pločice (do 3 nivoa više) — zamućeno, ali nije prazno.
+const _SQL_RODITELJ_NIVOA = 3;
+async function _sqlTileUvecaj(data, dz, ox, oy) {
+  const bmp = await createImageBitmap(new Blob([data], { type: _tileMime(data) }));
+  try {
+    const dim = bmp.width, sz = dim / (1 << dz), c = document.createElement('canvas');
+    c.width = c.height = 256;
+    const g = c.getContext('2d');
+    if (!g) return null;
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(bmp, ox * sz, oy * sz, sz, sz, 0, 0, 256, 256);
+    return await new Promise(r => c.toBlob(r, 'image/jpeg', 0.85));
+  } finally { try { bmp.close(); } catch (e) {} }
+}
+async function _sqlTileRoditelj(citaj, z, x, y, minZ) {
+  for (let dz = 1; dz <= _SQL_RODITELJ_NIVOA && z - dz >= Math.max(0, minZ || 0); dz++) {
+    let d = null;
+    try { d = await citaj(z - dz, x >> dz, y >> dz); } catch (e) {}
+    if (d) {
+      try { const b = await _sqlTileUvecaj(d, dz, x & ((1 << dz) - 1), y & ((1 << dz) - 1)); if (b) return b; } catch (e) {}
+    }
+  }
+  return null;
+}
+
 function _zoomBounds(meta) {
   let a = (meta?.minzoom!=null) ? parseInt(meta.minzoom,10) : 0;
   let b = (meta?.maxzoom!=null) ? parseInt(meta.maxzoom,10) : 18;
@@ -29811,7 +29839,17 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
       if (!inst) { done(); return img; }
       const gen = _mainTileGen;
       _mainTileSchedule(() => inst.mini.tile(z,x,y), gen, () => _sqlTilePrio(this, coords, img)).then(data => {
-        if (!data) { done(); return; }
+        if (!data) {
+          // Nema pločice → uvećan roditelj (umjesto sive rupe).
+          _sqlTileRoditelj((zz, xx, yy) => _mainTileSchedule(() => inst.mini.tile(zz,xx,yy), gen, () => _sqlTilePrio(this, coords, img)), z, x, y, minNative).then(blob => {
+            if (!blob) { done(); return; }
+            const url2 = URL.createObjectURL(blob);
+            img.onload = () => { URL.revokeObjectURL(url2); done(); };
+            img.onerror = () => { URL.revokeObjectURL(url2); done(); };
+            img.src = url2;
+          }).catch(() => done());
+          return;
+        }
         const url = URL.createObjectURL(new Blob([data], {type:_tileMime(data)}));
         img.onload = () => { URL.revokeObjectURL(url); done(); };
         img.onerror = () => { URL.revokeObjectURL(url); done(); };
@@ -30485,7 +30523,15 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
           }
           if (res && res.error === 'timeout' && tries < 3) { _tryRead(tries + 1); return; }
           if (res && res.error === 'timeout') _tileProf.timeout++; else _tileProf.nullData++;
-          _doneP();   // nema podataka → prazna/transparentna; Leaflet keepBuffer pokriva zoom
+          if (res && res.error === 'timeout') { _doneP(); return; }
+          // Nema pločice na ovom zumu → uvećan roditelj (umjesto sive rupe).
+          _sqlTileRoditelj((zz, xx, yy) => _wTileScheduleCall({type:'tile', name, z:zz, x:xx, y:yy}, _pri).then(r => (r && r.data) || null), z, x, y, minNative).then(blob => {
+            if (!blob) { _doneP(); return; }
+            const url2 = URL.createObjectURL(blob);
+            img.onload = () => { URL.revokeObjectURL(url2); _doneP(); };
+            img.onerror = () => { URL.revokeObjectURL(url2); _doneP(); };
+            img.src = url2;
+          }).catch(() => _doneP());
         }).catch(() => { if (tries < 3) _tryRead(tries + 1); else { _tileProf.err++; _doneP(); } });
       };
       _tryRead(0);
