@@ -20554,6 +20554,93 @@ function ldK(file) {
 // su kasnili. Grupa i dalje sadrži sve objekte (stil, pretraga, granice, izvoz rade nad svima), ali
 // na kartu dodaje samo one u prikazu (+50 % ruba), u malim porcijama između dva frame-a.
 const _KML_CULL_MIN = 800;
+// Sloj sa stotinama/hiljadama TAČAKA (npr. KML sa 5578 tačaka) je ranije pravio jedan Leaflet sloj
+// po tački na karti: svaki zum/pomak je projektovao i crtao svaki posebno. Sad grupa i dalje drži
+// tačke kao objekte (popup, pretraga, stil, izvoz rade isto), ali ih na kartu crta JEDAN canvas.
+// Canvas ne prima dodir (pointer-events:none) — klik na tačku hvata postojeći _kmlHitTest u
+// map.on('click'), pa ovaj sloj ne krade klikove slojevima ispod (zamka v3.101.0).
+const _KML_TACKE_MIN = 300;
+let _KmlTackeSloj = null;
+function _kmlTackeKlasa() {
+  if (_KmlTackeSloj) return _KmlTackeSloj;
+  _KmlTackeSloj = L.Layer.extend({
+    initialize(grp) { this._grp = grp; this._pz = null; },
+    onAdd(map) {
+      const c = this._c = L.DomUtil.create('canvas', 'kml-tacke-canvas leaflet-zoom-hide');
+      c.style.pointerEvents = 'none'; c.style.position = 'absolute';
+      map.getPanes().overlayPane.appendChild(c);
+      map.on('moveend zoomend resize viewreset', this._crtaj, this);
+      // Naziv tačke na prelazak mišem (na dodirnom ekranu ga nema ni kod pojedinačnih tačaka).
+      if (window.matchMedia?.('(hover:hover)').matches) map.on('mousemove', this._hover, this);
+      this._crtaj();
+    },
+    _hover(e) {
+      const now = performance.now();
+      if (now - (this._hT || 0) < 60 || !this._pz) return;
+      this._hT = now;
+      const p = this._map.project(e.latlng, this._pz.z);
+      let best = null, bd = 100;
+      for (const g of this._pz.grupe) for (let i = 0; i < g.xy.length; i += 2) {
+        const dx = g.xy[i] - p.x, dy = g.xy[i + 1] - p.y, d = dx * dx + dy * dy;
+        if (d < bd) { bd = d; best = g.ls[i >> 1]; }
+      }
+      if (best === this._hL) return;
+      this._hL = best;
+      if (this._tip) { this._map.removeLayer(this._tip); this._tip = null; }
+      if (best && best._kmlName) this._tip = L.tooltip({ direction: 'top', offset: [0, -6] }).setLatLng(best.getLatLng()).setContent(_escHtml(best._kmlName)).addTo(this._map);
+    },
+    onRemove(map) {
+      map.off('moveend zoomend resize viewreset', this._crtaj, this);
+      map.off('mousemove', this._hover, this);
+      if (this._tip) { map.removeLayer(this._tip); this._tip = null; } this._hL = null;
+      this._c?.remove(); this._c = null; this._pz = null;
+    },
+    osvjezi() { this._pz = null; if (this._map && !this._t) this._t = setTimeout(() => { this._t = null; this._crtaj(); }, 50); },
+    redraw() { this._pz = null; this._crtaj(); return this; },
+    // Projekcija svih tačaka jednom po zumu (piksel CRS-a), grupisano po stilu.
+    _projektuj(z) {
+      const map = this._map, grupe = new Map();
+      this._grp.eachLayer(l => {
+        if (!l._kmlIsPoint || !l.getLatLng) return;
+        const o = l.options || {}, key = (o.color || '#3388ff') + '|' + (o.fillColor || o.color || '#3388ff') + '|' + (o.radius || 5) + '|' + (o.opacity ?? 1) + '|' + (o.fillOpacity ?? 0.2) + '|' + (o.weight ?? 3);
+        let g = grupe.get(key);
+        if (!g) grupe.set(key, g = { o, xy: [], ls: [] });
+        const p = map.project(l.getLatLng(), z); g.xy.push(p.x, p.y); g.ls.push(l);
+      });
+      this._pz = { z, grupe: [...grupe.values()] };
+    },
+    _crtaj() {
+      const map = this._map, c = this._c;
+      if (!map || !c) return;
+      const z = map.getZoom(), sz = map.getSize(), pad = 0.3;
+      const w = Math.round(sz.x * (1 + 2 * pad)), h = Math.round(sz.y * (1 + 2 * pad)), dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const tl = map.containerPointToLayerPoint([-sz.x * pad, -sz.y * pad]).round();
+      L.DomUtil.setPosition(c, tl);
+      if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); c.style.width = w + 'px'; c.style.height = h + 'px'; }
+      const ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+      if (!this._pz || this._pz.z !== z) this._projektuj(z);
+      const org = map.getPixelOrigin(), ox = tl.x + org.x, oy = tl.y + org.y;
+      // Na malom zumu stotine tačaka padnu u isti piksel — crta se jedna po ćeliji od 2 px.
+      const cw = Math.ceil(w / 2), zauzeto = new Uint8Array(cw * Math.ceil(h / 2));
+      for (const g of this._pz.grupe) {
+        const o = g.o, r = o.radius || 5, xy = g.xy;
+        ctx.beginPath();
+        for (let i = 0; i < xy.length; i += 2) {
+          const x = xy[i] - ox, y = xy[i + 1] - oy;
+          if (x < -r || y < -r || x > w + r || y > h + r) continue;
+          const ci = (x >> 1) + (y >> 1) * cw;
+          if (x >= 0 && y >= 0 && x < w && y < h) { if (zauzeto[ci]) continue; zauzeto[ci] = 1; }
+          ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, 6.2832);
+        }
+        if (o.fill !== false) { ctx.globalAlpha = o.fillOpacity ?? 0.2; ctx.fillStyle = o.fillColor || o.color || '#3388ff'; ctx.fill(); }
+        if (o.stroke !== false && (o.weight ?? 3) > 0) { ctx.globalAlpha = o.opacity ?? 1; ctx.strokeStyle = o.color || '#3388ff'; ctx.lineWidth = o.weight ?? 3; ctx.stroke(); }
+      }
+      ctx.globalAlpha = 1;
+    },
+  });
+  return _KmlTackeSloj;
+}
 let _KmlCullGroup = null;
 function _kmlGrupa() {
   if (!_KmlCullGroup && window.L) {
@@ -20561,6 +20648,10 @@ function _kmlGrupa() {
       onAdd(map) {
         this._map = map;
         this._cull = Object.keys(this._layers).length >= _KML_CULL_MIN;
+        // Mnogo tačaka: jedan canvas za sve (vidi _KmlTackeSloj), tačke ne idu na kartu kao slojevi.
+        let nT = 0; for (const id in this._layers) if (this._layers[id]._kmlIsPoint) nT++;
+        this._tackeZasebno = nT >= _KML_TACKE_MIN;
+        if (this._tackeZasebno) { this._cull = true; this._tackeSloj = new (_kmlTackeKlasa())(this); map.addLayer(this._tackeSloj); }
         if (!this._cull) return L.FeatureGroup.prototype.onAdd.call(this, map);
         this._prikazano = new Set(); this._idx = null;
         map.on('moveend', this._cullZakazi, this);
@@ -20569,6 +20660,7 @@ function _kmlGrupa() {
       onRemove(map) {
         if (!this._cull) return L.FeatureGroup.prototype.onRemove.call(this, map);
         map.off('moveend', this._cullZakazi, this);
+        if (this._tackeSloj) { map.removeLayer(this._tackeSloj); this._tackeSloj = null; }
         this._cullGen = (this._cullGen || 0) + 1;
         this._prikazano.forEach(l => map.removeLayer(l));
         this._prikazano.clear();
@@ -20578,13 +20670,13 @@ function _kmlGrupa() {
         if (this.hasLayer(layer)) return this;
         layer.addEventParent(this);
         this._layers[this.getLayerId(layer)] = layer;
-        this._idx = null; this._cullZakazi();
+        this._idx = null; this._cullZakazi(); this._tackeSloj?.osvjezi();
         return this.fire('layeradd', { layer });
       },
       removeLayer(layer) {
         const l = this._layers[layer] || layer;
         if (this._prikazano) this._prikazano.delete(l);
-        this._idx = null;
+        this._idx = null; this._tackeSloj?.osvjezi();
         return L.FeatureGroup.prototype.removeLayer.call(this, layer);
       },
       _cullZakazi() {
@@ -20593,7 +20685,9 @@ function _kmlGrupa() {
       },
       _idxGradi() {
         const C = 0.02, idx = new Map(), svuda = [];
+        const bezTacaka = this._tackeZasebno;
         this.eachLayer(l => {
+          if (bezTacaka && l._kmlIsPoint) return;
           let b = null;
           try { b = l.getBounds ? l.getBounds() : (l.getLatLng ? L.latLngBounds(l.getLatLng(), l.getLatLng()) : null); } catch (e) {}
           if (!b || !b.isValid()) { svuda.push(l); return; }
@@ -20610,7 +20704,7 @@ function _kmlGrupa() {
         const { C, idx, svuda } = this._idx, b = map.getBounds().pad(0.5);
         const x0 = Math.floor(b.getWest() / C), x1 = Math.floor(b.getEast() / C), y0 = Math.floor(b.getSouth() / C), y1 = Math.floor(b.getNorth() / C);
         let cand;
-        if ((x1 - x0 + 1) * (y1 - y0 + 1) > 6000) cand = new Set(Object.values(this._layers));   // daleko odzumirano: sve
+        if ((x1 - x0 + 1) * (y1 - y0 + 1) > 6000) cand = new Set(Object.values(this._layers).filter(l => !(this._tackeZasebno && l._kmlIsPoint)));   // daleko odzumirano: sve
         else {
           cand = new Set(svuda);
           for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) { const a = idx.get(x + ':' + y); if (a) for (const l of a) cand.add(l); }
@@ -20932,15 +21026,24 @@ function _kmlPopEditName(uid, el) {
   setTimeout(() => document.getElementById(uid + '-name-in')?.focus(), 50);
 }
 
-function _kmlPopEditStart(uid) {
-  const ed = document.getElementById(uid + '-edit');
-  if (ed) {ed.style.display = '';_layerPopupLayout();}
+// Podprikaz popupa: dok je otvoren Naziv i opis ili Stil fajla, osnovni podaci (naziv, mjere,
+// atributi, akcije) se sakriju — vidi se samo taj dio, sa "Nazad" na vrhu.
+function _kmlPopMod(uid, mod) {
+  const art = document.getElementById(uid + '-edit')?.closest('.le-popup');
+  if (!art) return;
+  art.classList.toggle('le-mod-edit', mod === 'edit');
+  art.classList.toggle('le-mod-style', mod === 'style');
+  const ed = document.getElementById(uid + '-edit'), st = document.getElementById(uid + '-style');
+  if (ed) ed.style.display = mod === 'edit' ? '' : 'none';
+  if (st) st.style.display = mod === 'style' ? '' : 'none';
+  art.closest('.leaflet-popup-content')?.scrollTo?.(0, 0);
+  _layerPopupLayout();
 }
 
-function _kmlPopCancel(uid) {
-  const ed = document.getElementById(uid + '-edit');
-  if (ed) ed.style.display = 'none';
-}
+function _kmlPopEditStart(uid) { _kmlPopMod(uid, 'edit'); }
+
+function _kmlPopCancel(uid) { _kmlPopMod(uid, null); }
+function _kmlPopNazad(uid) { _kmlPopMod(uid, null); }
 
 async function _kmlPopSave(uid) {
   const layer=_kmlPopFindLayer(uid),i=_kmlPopFindIdx(uid),k=kmlLs[i];
@@ -20973,13 +21076,10 @@ function _kmlPopStyleToggle(uid) {
   const el = document.getElementById(uid + '-style');
   if (!el) return;
   if (el.style.display === 'none') {
-    el.style.display = '';
     const i = _kmlPopFindIdx(uid);
-    if (i >= 0) el.innerHTML = _kmlPopStylePanel(uid, null, i);
-    _layerPopupLayout();
-  } else {
-    el.style.display = 'none';
-  }
+    if (i >= 0) el.innerHTML = '<div class="le-sub-bar"><button type="button" class="le-nazad" onclick="_kmlPopNazad(\'' + uid + '\')"><svg class="ic" aria-hidden="true"><use href="#ic-nazad"/></svg><span>Nazad</span></button><b>Stil fajla</b></div>' + _kmlPopStylePanel(uid, null, i);
+    _kmlPopMod(uid, 'style');
+  } else _kmlPopMod(uid, null);
 }
 
 function _kmlPopStylePanel(uid, layer, idx) { return _layerStyleControls(idx!==undefined?idx:_kmlPopFindIdx(uid)); }
@@ -21226,6 +21326,7 @@ function applyKmlStyle(i) {
     if(l._kmlIsPolygon&&l._path)l._path.style.pointerEvents='all';
   };
   k.grp?.eachLayer(styleLayer);
+  k.grp?._tackeSloj?.redraw();
 }
 
 // Leaflet Canvas ne razumije SVG url(#pattern). Mali ponovljivi raster ostaje
