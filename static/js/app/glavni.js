@@ -20739,19 +20739,36 @@ const _KML_PO_DIJELOVIMA_MIN = 1200000;
 async function _kmlGrupaIzSadrzaja(content, col) {
   const cijeli = () => pkml(new DOMParser().parseFromString(content, 'text/xml'), col);
   if (typeof content !== 'string' || content.length < _KML_PO_DIJELOVIMA_MIN) return cijeli();
-  const dijelovi = content.split(/(?=<Placemark[\s>])/i), pm = [];
-  for (let i = 1; i < dijelovi.length; i++) { const j = dijelovi[i].lastIndexOf('</Placemark>'); if (j >= 0) pm.push(dijelovi[i].slice(0, j + 12)); }
-  if (!pm.length) return cijeli();
+  // Placemark-ovi se traže redom (indexOf), ne split-om cijelog fajla odjednom: split 13 MB
+  // stringa je na Redmi Note bio jedan blok od ~240 ms. Porcija je ograničena i BAJTIMA
+  // (~48 KB), ne samo brojem — 20 velikih poligona je inače jedan DOMParser poziv od 165 ms.
+  const RE = /<Placemark[\s>]/ig, KRAJ = '</Placemark>', MAX_B = 48000, MAX_N = 20;
+  if (!RE.test(content)) return cijeli();
+  RE.lastIndex = 0;
   const g = _kmlGrupa();
   g.on('click', _kmlGrpClick); g.on('mouseover', _kmlGrpTip);
   const gust = content.length / 28 > 60000;
-  let t = performance.now();
-  for (let i = 0; i < pm.length; i += 20) {
-    const d = new DOMParser().parseFromString('<kml xmlns="http://www.opengis.net/kml/2.2"><Document>' + pm.slice(i, i + 20).join('') + '</Document></kml>', 'text/xml');
-    if (d.getElementsByTagName('parsererror').length) return cijeli();
-    pkml(d, col, undefined, { grp: g, gust, pmOffset: i });
-    if (performance.now() - t > 20) { await new Promise(r => setTimeout(r, 0)); t = performance.now(); }
+  let t = performance.now(), off = 0, m = RE.exec(content), dio = [], bajta = 0;
+  const predah = async () => { if (performance.now() - t > 8) { await new Promise(r => setTimeout(r, 0)); t = performance.now(); } };
+  const isprazni = () => {
+    if (!dio.length) return true;
+    const d = new DOMParser().parseFromString('<kml xmlns="http://www.opengis.net/kml/2.2"><Document>' + dio.join('') + '</Document></kml>', 'text/xml');
+    if (d.getElementsByTagName('parsererror').length) return false;
+    pkml(d, col, undefined, { grp: g, gust, pmOffset: off });
+    off += dio.length; dio = []; bajta = 0;
+    return true;
+  };
+  while (m) {
+    const start = m.index, j = content.indexOf(KRAJ, start);
+    if (j < 0) break;
+    const pm = content.slice(start, j + KRAJ.length);
+    RE.lastIndex = j + KRAJ.length;
+    m = RE.exec(content);
+    if (dio.length && (dio.length >= MAX_N || bajta + pm.length > MAX_B)) { if (!isprazni()) return cijeli(); await predah(); }
+    dio.push(pm); bajta += pm.length;
   }
+  if (!isprazni()) return cijeli();
+  if (!off) return cijeli();
   return g;
 }
 function pkml(doc, col, op, opts) {
@@ -37011,13 +37028,19 @@ async function _primljeniSync(force) {
   _primljeniBusy = true; _primljeniZadnji = sad;
   const owner = sbUser.id;
   try {
-    const r = await _withTimeout(sb.from('primljeni_podaci').select('id,from_id,vrsta,naziv,sadrzaj,created_at').eq('to_id', owner).order('created_at', { ascending: true }).limit(20), 15000);
+    // Prvo samo zaglavlja (bez sadržaja): sadržaj (do 3 MB) se preuzima SAMO za ono čega još nema
+    // na telefonu. Ranije je svaka provjera na 20 s preuzimala i parsirala cijeli sadržaj
+    // (izmjereno 212 ms na Redmi Note) čak i kad je stavka već bila sačuvana.
+    const r = await _withTimeout(sb.from('primljeni_podaci').select('id,from_id,vrsta,naziv,created_at').eq('to_id', owner).order('created_at', { ascending: true }).limit(20), 15000);
     if (r.error) _primLog('sync', false, 0, r.error.message || 'greška upita');
     if (r.error || !Array.isArray(r.data) || !r.data.length || sbUser?.id !== owner) return;
     const lista = _primljeniUcitaj(), novi = [];
     for (const row of r.data) {
       let spremljen = lista.some(x => x.id === row.id);
       if (!spremljen) {
+        const rs = await _withTimeout(sb.from('primljeni_podaci').select('sadrzaj').eq('id', row.id).maybeSingle(), 30000);
+        if (rs.error || sbUser?.id !== owner) continue;
+        row.sadrzaj = rs.data?.sadrzaj;
         if (typeof row.sadrzaj !== 'string' || !_kmlJeIspravan(row.sadrzaj)) {
           // neispravan sadržaj nema smisla čuvati — samo ga ukloni sa servera
           try { await sb.from('primljeni_podaci').delete().eq('id', row.id); } catch (e) {}

@@ -21,7 +21,7 @@ assert(a > 0 && b > a);
 // veliki KML se ne parsira odjednom (paketi uz predah), restore ne duplira sloj
 (function () {
   assert(/_KML_PO_DIJELOVIMA_MIN = 1200000/.test(src) && /async function _kmlGrupaIzSadrzaja/.test(src));
-  assert(/i \+= 20/.test(src) && /setTimeout\(r, 0\)/.test(src), 'paketi + predah');
+  assert(/MAX_B = 48000, MAX_N = 20/.test(src) && /content\.indexOf\(KRAJ, start\)/.test(src) && /setTimeout\(r, 0\)/.test(src), 'paketi (broj + bajti) + predah, bez split-a cijelog fajla');
   assert(/_kmlJeIspravan\(content\)/.test(require('fs').readFileSync(__dirname + '/../../static/js/local-layer-import.js', 'utf8')), 'uvoz ne parsira veliki KML dvaput');
   assert(/drugi paralelni restore je u međuvremenu dodao/.test(src));
   assert(!/function _kmlJeIspravan[\s\S]{0,200}DOMParser/.test(src), 'primanje ne parsira DOM');

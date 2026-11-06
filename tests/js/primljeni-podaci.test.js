@@ -11,7 +11,10 @@ function mk(opts) {
   const rows = opts.rows || [];
   const sb = {
     from: () => ({
-      select: () => ({ eq: () => ({ order: () => ({ limit: async () => ({ data: rows }) }) }) }),
+      select: (cols) => ({ eq: (_, v) => ({
+        order: () => ({ limit: async () => { log.cols = cols; return { data: rows.map(r => { const { sadrzaj, ...z } = r; return z; }) }; } }),
+        maybeSingle: async () => { log.sadrzajZa = (log.sadrzajZa || []).concat(v); const r = rows.find(x => x.id === v); return { data: r ? { sadrzaj: r.sadrzaj } : null }; }
+      }) }),
       delete: () => ({ eq: async (_, id) => { log.deleted.push(id); log.order.push('server-delete:' + id); return {}; } })
     }),
     rpc: async (n, p) => { log.rpc = { n, p }; return opts.rpcErr ? { error: opts.rpcErr } : { data: 'x' }; }
@@ -34,6 +37,9 @@ function mk(opts) {
   let t = mk({ rows: [{ id: 'r1', from_id: 'k1', vrsta: 'trag', naziv: 'Trag 1', sadrzaj: KML, created_at: new Date().toISOString() }] });
   await t.api._primljeniSync(true);
   assert.deepStrictEqual(t.log.order, ['save:primljeno:r1', 'server-delete:r1']);
+  // zaglavlja bez sadržaja; sadržaj se preuzima samo za stavku koje nema na telefonu
+  assert(!/sadrzaj/.test(t.log.cols)); assert.deepStrictEqual(t.log.sadrzajZa, ['r1']);
+  await t.api._primljeniSync(true); assert.deepStrictEqual(t.log.sadrzajZa, ['r1'], 'već sačuvano se ne preuzima ponovo');
   const l = t.api._primljeniUcitaj(); assert.strictEqual(l.length, 1); assert.strictEqual(l[0].odIme, 'Kolega Jedan'); assert(!l[0].vidjeno);
   // neuspjeli lokalni upis → NE briše se sa servera (podatak ne smije nestati)
   t = mk({ saveFail: true, rows: [{ id: 'r2', from_id: 'k1', vrsta: 'kml', naziv: 'X', sadrzaj: KML, created_at: new Date().toISOString() }] });
