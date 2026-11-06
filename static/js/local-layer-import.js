@@ -102,12 +102,15 @@ function _localLayerKml(name,content,owner=sbUser?.id,driveSource=null,fmt='') {
 }
 async function _localLayerKmlImpl(name,content,owner,driveSource,fmt='') {
   if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; uvoz je prekinut');
-  const doc=new DOMParser().parseFromString(content,'text/xml');
-  if(doc.querySelector('parsererror') || !doc.querySelector('kml'))throw Error('Neispravan KML fajl');
+  const velik=typeof _KML_PO_DIJELOVIMA_MIN==='number'&&content.length>=_KML_PO_DIJELOVIMA_MIN&&typeof _kmlJeIspravan==='function';
+  let doc=null;
+  if(velik){if(!_kmlJeIspravan(content))throw Error('Neispravan KML fajl');}
+  else{doc=new DOMParser().parseFromString(content,'text/xml');if(doc.querySelector('parsererror') || !doc.querySelector('kml'))throw Error('Neispravan KML fajl');}
   const store=JSON.parse(localStorage.getItem(_LOCAL_KML_KEY)||'{}');
   let unique=name,n=2;
   while(Object.prototype.hasOwnProperty.call(store,unique)||kmlLs.some(k=>!k._key&&(k._origName||k.name)===unique))unique=name.replace(/\.kml$/i,'')+' ('+(n++)+').kml';
-  const col=KCOLS[kmlCI%KCOLS.length],grp=pkml(doc,col);
+  const col=KCOLS[kmlCI%KCOLS.length],grp=velik?await _kmlGrupaIzSadrzaja(content,col):pkml(doc,col);
+  if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; uvoz je prekinut');
   if(!grp.getLayers().length)throw Error('KML nema tačaka, linija ili poligona za prikaz');
   if(!await _localKmlSaveContent(unique,content,col,owner,driveSource,fmt))throw Error('Sloj nije trajno sačuvan — provjeri slobodnu memoriju');
   if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; uvoz je prekinut');

@@ -2,7 +2,7 @@ const assert = require('assert');
 const { izvor } = require('./_izvor');
 const src = izvor();
 const a = src.indexOf('const _PERF = {');
-const b = src.indexOf('function _perfDiagRender()');
+const b = src.indexOf('function _perfDiagRender(');
 assert(a > 0 && b > a);
 const kod = src.slice(a, b);
 const doc = { hidden: false, getElementsByTagName: () => ({ length: 1234 }), querySelectorAll: () => ({ length: 90 }) };

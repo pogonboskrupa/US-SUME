@@ -18,3 +18,12 @@ assert(a > 0 && b > a);
   assert(/_sqlTileRoditelj\(\(zz, xx, yy\) => _wTileScheduleCall/.test(src) && /_sqlTileRoditelj\(\(zz, xx, yy\) => _mainTileSchedule/.test(src));
   console.log('sqlmap-roditelj: ok');
 })().catch(e => { console.error(e); process.exit(1); });
+// veliki KML se ne parsira odjednom (paketi uz predah), restore ne duplira sloj
+(function () {
+  assert(/_KML_PO_DIJELOVIMA_MIN = 1200000/.test(src) && /async function _kmlGrupaIzSadrzaja/.test(src));
+  assert(/i \+= 20/.test(src) && /setTimeout\(r, 0\)/.test(src), 'paketi + predah');
+  assert(/_kmlJeIspravan\(content\)/.test(require('fs').readFileSync(__dirname + '/../../static/js/local-layer-import.js', 'utf8')), 'uvoz ne parsira veliki KML dvaput');
+  assert(/drugi paralelni restore je u međuvremenu dodao/.test(src));
+  assert(!/function _kmlJeIspravan[\s\S]{0,200}DOMParser/.test(src), 'primanje ne parsira DOM');
+  console.log('veliki KML po dijelovima: ok');
+})();

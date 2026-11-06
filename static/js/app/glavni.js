@@ -1453,6 +1453,8 @@ async function initAuth() {
     if (event === 'TOKEN_REFRESHED' && sbUser) {
       try { sbStartRealtime(); } catch(e) {}
     }
+    // Zapamćena kopija računa za prebacivanje mora pratiti rotaciju refresh tokena (jednokratan).
+    if ((event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') && session && sbUser && typeof _racuniSnimiTrenutni === 'function') _racuniSnimiTrenutni(session);
   });
 
   // Sesija je pronađena lokalno prije auth callbacka. Ne čekaj mrežu niti
@@ -1634,6 +1636,7 @@ function _primijeniUlogeUI(data) {
   if (vlkBtn)      vlkBtn.style.display      = isFld ? 'none' : '';
   if (dozTab)      dozTab.style.display      = (isAdm || isFld) ? 'none' : '';
 
+  try { if (typeof _racuniMeniSync === 'function') _racuniMeniSync(); if (typeof _dijagMeniSync === 'function') _dijagMeniSync(); if (typeof _racuniSnimiTrenutni === 'function') _racuniSnimiTrenutni(); } catch(e) {}
   // Meni stavke
   const adminItem = document.getElementById('menu-admin-item');
   if (adminItem) adminItem.style.display = isAdm ? 'block' : 'none';
@@ -10514,6 +10517,21 @@ async function _crashCheck() {
     (() => { try { const r = localStorage.getItem(_DOZ_LIVE_KEY); return r ? JSON.parse(r) : null; } catch { return null; } })();
   if (!snapV && !snapT && !snapD) return;
 
+  // Snimci SA STARTA bez ijedne tačke (v3.0.1 piše snimak odmah pri startu): dijalog za njih nema
+  // smisla, a ako je izlaz iz njega ikad izostao, vraćao se pri svakom pokretanju. Ako ni native
+  // servis nije ništa prikupio, tiho se očiste; inače ide uobičajeni oporavak.
+  const prazan = s => !s || !(s.pts || []).length;
+  if (prazan(snapV) && prazan(snapT) && prazan(snapD)) {
+    let nb = [];
+    try { nb = _nativeBufUzmi(); } catch (e) { nb = []; }
+    if (!nb.length) {
+      try { if (typeof FieldStore !== 'undefined' && snapD?.id) await FieldStore.finish(snapD.id, sbUser?.id); } catch (e) {}
+      _crashClearVlaka(); _crashClearTrag(); try { localStorage.removeItem(_DOZ_LIVE_KEY); } catch (e) {}
+      try { _nativeBufPotvrdi(); } catch (e) {}
+      return;
+    }
+  }
+
   // Prikaži dijalog oporavka
   const age = (snap) => {
     const m = Math.round((Date.now() - snap.ts) / 60000);
@@ -10537,8 +10555,10 @@ async function _crashCheck() {
   // Drain je destruktivan pa se uzima JEDNOM i usmjerava u obje grane oporavka;
   // ako korisnik odbaci oporavak, bafer se odbacuje s njim (pripada baš toj
   // prekinutoj sesiji i ne smije iscuriti u sljedeće snimanje).
-  let bufPts;
-  try { bufPts = _nativeBufUzmi(); } catch(e) { showToast('⚠ Oporavak čeka slobodnu memoriju'); return; }
+  // Greška pri čitanju bafera NE smije prekinuti oporavak/odbacivanje (ranije: return → isti dijalog
+  // pri svakom pokretanju, šta god korisnik izabrao). Bez bafera se nastavlja; journal ostaje.
+  let bufPts = [];
+  try { bufPts = _nativeBufUzmi(); } catch(e) { _nativeBufUzmi.nepotpun = true; showToast('⚠ Pozadinske tačke nisu pročitane — ostaju sačuvane'); }
 
   if (!ok) {
     if (typeof FieldStore !== 'undefined' && snapD?.id) await FieldStore.finish(snapD.id,sbUser?.id);
@@ -18087,17 +18107,34 @@ function _tragLiveClear() {
 // kroz njega, a _crashCheck rezultat usmjerava u obje grane oporavka.
 function _nativeBufUzmi() {
   const key = 'tvlake_native_journal';
-  let batches = JSON.parse(localStorage.getItem(key) || '[]');
+  // Oštećen/neočekivan zapis journala NE smije baciti izuzetak: _crashCheck bi tada svaki put
+  // stao prije Odbaci/Oporavi i isti dijalog ("nađeno nedovršeno snimanje") vraćao se pri
+  // svakom pokretanju. Neupotrebljiv sadržaj se sačuva u 'tvlake_native_damaged' (za izvoz).
+  const sacuvajOstecen = x => { try { const o = JSON.parse(localStorage.getItem('tvlake_native_damaged') || '[]'); o.push({ token: 'ostecen_' + Date.now(), raw: typeof x === 'string' ? x : JSON.stringify(x) }); localStorage.setItem('tvlake_native_damaged', JSON.stringify(o.slice(-5))); } catch (e) {} };
+  let batches = [];
+  try {
+    const sirovo = localStorage.getItem(key);
+    const parsed = sirovo ? JSON.parse(sirovo) : [];
+    batches = Array.isArray(parsed) ? parsed.filter(b => { const ok = b && typeof b.raw === 'string'; if (!ok) sacuvajOstecen(b); return ok; }) : [];
+    if (!Array.isArray(parsed)) sacuvajOstecen(sirovo);
+  } catch (e) { try { sacuvajOstecen(localStorage.getItem(key)); } catch (e2) {} batches = []; }
+  _nativeBufUzmi.nepotpun = false;
   if (typeof AndroidGps !== 'undefined' && typeof AndroidGps.readNativeBuffer === 'function') {
-    const raw = AndroidGps.readNativeBuffer();
-    if (raw) {
-      const batch = JSON.parse(raw);
-      if (batch.token && !batches.some(b => b.token === batch.token)) {
-        batches.push(batch);
-        localStorage.setItem(key, JSON.stringify(batches)); // may throw: native file stays
+    try {
+      const raw = AndroidGps.readNativeBuffer();
+      if (raw) {
+        const batch = JSON.parse(raw);
+        if (batch && batch.token && typeof batch.raw === 'string' && !batches.some(b => b.token === batch.token)) {
+          batches.push(batch);
+          let sacuvano = true;
+          try { localStorage.setItem(key, JSON.stringify(batches)); } catch (e) { sacuvano = false; }
+          // Puna memorija: tačke se koriste iz memorije u ovom prolazu, ali native fajl se NE potvrđuje
+          // (tačke ostaju sigurne u njemu) i journal se ne briše — pokušaj ponovo kad ima mjesta.
+          if (!sacuvano) { _nativeBufUzmi.nepotpun = true; }
+          else AndroidGps.ackNativeBuffer(batch.token);
+        } else if (batch && batch.token) AndroidGps.ackNativeBuffer(batch.token);
       }
-      if (batch.token) AndroidGps.ackNativeBuffer(batch.token);
-    }
+    } catch (e) { _nativeBufUzmi.nepotpun = true; }
   }
   const pts = [], seen = new Set();
   for (const batch of batches) {
@@ -18113,11 +18150,12 @@ function _nativeBufUzmi() {
   }
   return pts.sort((a,b) => a.t - b.t);
 }
-
 function _nativeBufPotvrdi() {
   // Call only after all active consumers have persisted their state.
+  if (_nativeBufUzmi.nepotpun) return;   // native fajl nije potvrđen — journal se ne briše
   const key = 'tvlake_native_journal';
-  const batches = JSON.parse(localStorage.getItem(key) || '[]');
+  let batches = [];
+  try { const p = JSON.parse(localStorage.getItem(key) || '[]'); batches = Array.isArray(p) ? p.filter(b => b && typeof b.raw === 'string') : []; } catch (e) { batches = []; }
   const broken = batches.filter(b => b.raw.split('\n').some(line => {
     if (!line.trim()) return false;
     try { const p = JSON.parse(line); return !p || !Number.isFinite(p.t) || !Number.isFinite(p.la) || !Number.isFinite(p.lo); }
@@ -20489,23 +20527,64 @@ function ldK(file) {
   const owner=sbUser?.id;
   return file.text().then(content=>_localLayerKml(file.name,content,owner)).catch(e=>showToast('⚠ Greška KML: '+e.message));
 }
-function pkml(doc, col, op) {
-  op = op ?? 0.9;
+// Veliki KML (preko ~1,2 MB) se ne parsira odjednom: puni DOMParser + pkml je na slabom telefonu
+// zamrzavao nit sekundama ("trokira totalno"). Sadržaj se dijeli po Placemark-ovima i obrađuje u
+// paketima uz predah za iscrtavanje ekrana između njih. Ako dio ne može samostalno (npr. prefiks
+// imenskog prostora), pada na staro, cjelovito parsiranje.
+const _KML_PO_DIJELOVIMA_MIN = 1200000;
+async function _kmlGrupaIzSadrzaja(content, col) {
+  const cijeli = () => pkml(new DOMParser().parseFromString(content, 'text/xml'), col);
+  if (typeof content !== 'string' || content.length < _KML_PO_DIJELOVIMA_MIN) return cijeli();
+  const dijelovi = content.split(/(?=<Placemark[\s>])/i), pm = [];
+  for (let i = 1; i < dijelovi.length; i++) { const j = dijelovi[i].lastIndexOf('</Placemark>'); if (j >= 0) pm.push(dijelovi[i].slice(0, j + 12)); }
+  if (!pm.length) return cijeli();
   const g = L.featureGroup();
-  g.on('click', _kmlGrpClick);   // tačke: jedan listener na grupi (vidi pkmlStyled)
-  g.on('mouseover', _kmlGrpTip);
+  g.on('click', _kmlGrpClick); g.on('mouseover', _kmlGrpTip);
+  const gust = content.length / 28 > 60000;
+  let t = performance.now();
+  for (let i = 0; i < pm.length; i += 20) {
+    const d = new DOMParser().parseFromString('<kml xmlns="http://www.opengis.net/kml/2.2"><Document>' + pm.slice(i, i + 20).join('') + '</Document></kml>', 'text/xml');
+    if (d.getElementsByTagName('parsererror').length) return cijeli();
+    pkml(d, col, undefined, { grp: g, gust, pmOffset: i });
+    if (performance.now() - t > 20) { await new Promise(r => setTimeout(r, 0)); t = performance.now(); }
+  }
+  return g;
+}
+function pkml(doc, col, op, opts) {
+  op = op ?? 0.9;
+  const g = (opts && opts.grp) || L.featureGroup();
+  if (!(opts && opts.grp)) {
+    g.on('click', _kmlGrpClick);   // tačke: jedan listener na grupi (vidi pkmlStyled)
+    g.on('mouseover', _kmlGrpTip);
+  }
+  const _off = (opts && opts.pmOffset) || 0;
   const tag1 = (el, t) => el.getElementsByTagName(t)[0];
   const pms = doc.getElementsByTagName('Placemark');
-  for (let pmIndex = 0; pmIndex < pms.length; pmIndex++) {
-    const pm = pms[pmIndex];
+  // Gust sloj (stotine hiljada tjemena) za prikaz se pojednostavi na ~1 piksel pri zumu 17 (≈0,85 m):
+  // izmjereno uz usporen procesor, Leaflet inače crta i projektuje svako tjeme pri svakom zumu.
+  // Izvorni KML ostaje netaknut u memoriji telefona (izvoz, slanje); mijenja se samo prikaz.
+  let _pk = 0;
+  try { const cc = doc.getElementsByTagName('coordinates'); for (let i = 0; i < cc.length; i++) _pk += cc[i].textContent.length; } catch (e) {}
+  const _gust = ((opts && opts.gust != null) ? opts.gust : _pk / 28 > 60000) && !!(window.L && L.LineUtil && typeof map !== 'undefined' && map);
+  const _jednostavi = pts => {
+    if (!_gust || pts.length < 12) return pts;
+    try {
+      const crs = map.options.crs, P = pts.map(c => crs.latLngToPoint(L.latLng(c[0], c[1]), 17));
+      const out = L.LineUtil.simplify(P, 1).map(q => { const ll = crs.pointToLatLng(q, 17); return [ll.lat, ll.lng]; });
+      return out.length >= 2 ? out : pts;
+    } catch (e) { return pts; }
+  };
+  for (let _i = 0; _i < pms.length; _i++) {
+    const pm = pms[_i], pmIndex = _i + _off;
     const name = tag1(pm, 'name')?.textContent?.trim() || '';
     const desc = tag1(pm, 'description')?.textContent?.trim() || '';
     const extData = pm.getElementsByTagName('ExtendedData').length ? _parseKmlExtData(pm) : {};
-    pm.querySelectorAll('Polygon').forEach(pg => {
-      const cs = pcs(pg.querySelector('outerBoundaryIs coordinates,coordinates')?.textContent);
+    Array.from(pm.getElementsByTagName('Polygon')).forEach(pg => {
+      let cs = pcs(tag1(pg, 'coordinates')?.textContent);
       if (cs.length > 2) {
+        cs = _jednostavi(cs); if (cs.length < 3) cs = pcs(tag1(pg, 'coordinates')?.textContent);
         // fill:true čuva hit-test i kad je površina potpuno prozirna.
-        const holes = [...pg.querySelectorAll('innerBoundaryIs coordinates')].map(c=>pcs(c.textContent)).filter(r=>r.length>2);
+        const holes = Array.from(pg.getElementsByTagName('innerBoundaryIs')).map(b=>_jednostavi(pcs(tag1(b, 'coordinates')?.textContent))).filter(r=>r.length>2);
         const l = L.polygon(holes.length?[cs,...holes]:cs, {color:col, weight:2, opacity:op, fill:true, fillOpacity:0});
         l._kmlIsPolygon = true;
         l._kmlPmIndex=pmIndex;l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
@@ -20514,8 +20593,8 @@ function pkml(doc, col, op) {
         l.addTo(g);
       }
     });
-    pm.querySelectorAll('LineString').forEach(ls => {
-      const cs = pcs(ls.querySelector('coordinates')?.textContent);
+    Array.from(pm.getElementsByTagName('LineString')).forEach(ls => {
+      const cs = _jednostavi(pcs(tag1(ls, 'coordinates')?.textContent));
       if (cs.length > 1) {
         const l = L.polyline(cs, {color:col, weight:2, dashArray:'6,4', opacity:op});
         l._kmlPmIndex=pmIndex;l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
@@ -21257,8 +21336,9 @@ async function _localKmlRestore() {
         if(kmlLs.some(k=>(k._origName||k.name)===origName&&!k._key))continue;
         if(typeof content!=='string')throw new Error('Nedostaje lokalni sadržaj sloja');
         const col = data.col || KCOLS[kmlCI % KCOLS.length]; kmlCI++;
-        const doc = new DOMParser().parseFromString(content, 'text/xml');
-        const grp = pkml(doc, col);
+        const grp = await _kmlGrupaIzSadrzaja(content, col);
+        if(sbUser?.id!==owner)return;
+        if(kmlLs.some(k=>(k._origName||k.name)===origName&&!k._key))continue;   // drugi paralelni restore je u međuvremenu dodao isti sloj
         const layer={
           name: data.displayName || origName, _origName: origName, _driveSource: data._driveSource || null, fmt: data.fmt || '',
           grp, col, dash: data.dash || '', weight: data.weight || 2,
@@ -36574,6 +36654,7 @@ function _perfSnimak() {
   o.poTabu = Object.entries(_PERF.tabLt).map(([k, v]) => ({ tab: k, n: v.n, ms: Math.round(v.ms), max: Math.round(v.max) })).sort((a, b) => b.ms - a.ms);
   o.funkcije = Object.entries(_PERF.fn).map(([k, v]) => ({ fn: k, n: v.n, ms: Math.round(v.ms), max: Math.round(v.max), avg: +(v.ms / Math.max(1, v.n)).toFixed(2) })).sort((a, b) => b.ms - a.ms);
   o.idb = Object.entries(window._PERF_IDB || {}).map(([k, v]) => ({ vrsta: k, n: v.n, ms: v.ms, max: v.max, kbMax: v.kb })).sort((a, b) => b.ms - a.ms);
+  o.greske = (window._PERF_GRESKE || []).slice(-10);
   o.loaf = _PERF.loaf.slice(0, 8);
   o.koraci = (window._PERF_KORACI || []).filter(k => k.sync >= 20).sort((a, b) => b.sync - a.sync).slice(0, 8);
   o.najduzi = _PERF.lt.slice().sort((a, b) => b.ms - a.ms).slice(0, 8);
@@ -36600,10 +36681,10 @@ function _perfPreporuke(o) {
   if (!r.length) r.push(['#22c55e', 'Ništa alarmantno u izmjerenom. Pusti app da radi (pomjeri kartu, otvori tabove, snimaj) pa osvježi.']);
   return r;
 }
-function _perfDiagRender() {
-  const el = document.getElementById('perf-diag-card');
+function _perfDiagRender(elId) {
+  const el = document.getElementById(typeof elId === 'string' ? elId : 'perf-diag-card');
   if (!el) return;
-  if (!sbProfile?.is_admin) { el.innerHTML = ''; return; }
+  if (!(typeof _dijagDozvoljeno === 'function' ? _dijagDozvoljeno() : sbProfile?.is_admin)) { el.innerHTML = ''; return; }
   const o = _perfSnimak(), r = _perfPreporuke(o);
   const red = (k, v, c) => '<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid #1e293b;font-size:11.5px;"><span style="color:#94a3b8;">' + k + '</span><span style="color:' + (c || '#cbd5e1') + ';text-align:right;">' + v + '</span></div>';
   let h = '<div style="font-weight:700;color:#cbd5e1;font-size:13px;margin-bottom:8px;">⏱ Dijagnostika brzine</div>';
@@ -36624,7 +36705,7 @@ function _perfDiagRender() {
   if (o.idb && o.idb.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Čitanja IndexedDB (vrsta zapisa)</div>'; o.idb.slice(0, 6).forEach(t => { h += red(t.vrsta, t.n + '× · ' + t.ms + ' ms · max ' + t.max + (t.kbMax ? ' · do ' + t.kbMax + ' KB' : '')); }); }
   if (o.koraci && o.koraci.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Spori koraci pokretanja</div>'; o.koraci.forEach(k => { h += red(k.ime, k.sync + ' ms (sinhroni dio) · +' + k.at + ' ms'); }); }
   if (o.najduzi.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Najduži zastoji</div>'; o.najduzi.forEach(t => { h += red('+' + Math.round(t.at / 1000) + ' s · ' + t.tab, t.ms + ' ms'); }); }
-  h += '<div style="display:flex;gap:8px;margin-top:10px;"><button onclick="_perfDiagRender()" style="flex:1;padding:9px;background:#0c4a6e;border:1px solid #38bdf8;border-radius:8px;color:#e0f2fe;font-size:12px;font-weight:700;">Osvježi</button>' +
+  h += '<div style="display:flex;gap:8px;margin-top:10px;"><button onclick="_perfDiagRender(\'' + (typeof elId === 'string' ? elId : 'perf-diag-card') + '\')" style="flex:1;padding:9px;background:#0c4a6e;border:1px solid #38bdf8;border-radius:8px;color:#e0f2fe;font-size:12px;font-weight:700;">Osvježi</button>' +
     '<button onclick="_perfKopiraj()" style="flex:1;padding:9px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#bbf7d0;font-size:12px;font-weight:700;">Kopiraj izvještaj</button>' +
     '<button onclick="_perfReset()" style="flex:1;padding:9px;background:#1e293b;border:1px solid #475569;border-radius:8px;color:#cbd5e1;font-size:12px;font-weight:700;">Resetuj</button></div>';
   el.innerHTML = h;
@@ -36670,8 +36751,12 @@ function _primljeniObavijesti(novi) {
   try { if (document.visibilityState !== 'visible' && window.AndroidNotif && typeof AndroidNotif.show === 'function') AndroidNotif.show('📥 Primljeni podaci', txt); } catch (e) {}
   try { if (navigator.vibrate) navigator.vibrate(150); } catch (e) {}
 }
+// Pri PRIMANJU se KML ne parsira punim DOM-om (na slabom telefonu to je sekundama zamrznuta nit,
+// i to dok korisnik radi nešto drugo) — dovoljna je provjera okvira; pravo parsiranje i prijava
+// greške ide tek kad korisnik izabere "Na karti".
 function _kmlJeIspravan(txt) {
-  try { const d = new DOMParser().parseFromString(txt, 'text/xml'); return !d.querySelector('parsererror') && !!d.querySelector('kml'); } catch (e) { return false; }
+  if (typeof txt !== 'string' || txt.length < 30) return false;
+  return /<kml[\s>]/i.test(txt.slice(0, 4000)) && /<\/kml>\s*$/i.test(txt.slice(-300));
 }
 async function _primljeniSync(force) {
   if (_primljeniBusy || !sb || !sbUser || sbUser._cachedStub || !sbProfile) return;
@@ -36682,6 +36767,7 @@ async function _primljeniSync(force) {
   const owner = sbUser.id;
   try {
     const r = await _withTimeout(sb.from('primljeni_podaci').select('id,from_id,vrsta,naziv,sadrzaj,created_at').eq('to_id', owner).order('created_at', { ascending: true }).limit(20), 15000);
+    if (r.error) _primLog('sync', false, 0, r.error.message || 'greška upita');
     if (r.error || !Array.isArray(r.data) || !r.data.length || sbUser?.id !== owner) return;
     const lista = _primljeniUcitaj(), novi = [];
     for (const row of r.data) {
@@ -36702,17 +36788,31 @@ async function _primljeniSync(force) {
     _primljeniBadge();
     _primljeniObavijesti(novi);
     if (novi.length && document.getElementById('primljeni-panel')) _primljeniRender();
-  } catch (e) { /* nema veze / nema tabele — pokušaj ponovo kasnije */ }
+  } catch (e) { _primLog('sync', false, 0, e && e.message || String(e)); /* nema veze / nema tabele — pokušaj ponovo kasnije */ }
   finally { _primljeniBusy = false; }
 }
 
 // Lokalni upis primljenog podatka: sadržaj u IndexedDB, metapodaci u listu. Vraća stavku ili null.
 async function _primljeniSnimiLokalno(lista, id, vrsta, naziv, odId, odIme, t, sadrzaj) {
-  if (!(await _kmlcSave('primljeno:' + id, sadrzaj))) return null;
+  if (!(await _kmlcSave('primljeno:' + id, sadrzaj))) { _primLog('lokalni upis', false, 0, 'IndexedDB upis nije uspio (memorija?)', Math.round(sadrzaj.length / 1024)); return null; }
   const stavka = { id, vrsta, naziv: String(naziv || 'Podatak').slice(0, 120), od: odId, odIme: odIme || 'Kolega', t, kb: Math.round(sadrzaj.length / 1024), vidjeno: false };
   lista.unshift(stavka);
-  if (!_primljeniSpremi(lista)) { lista.shift(); try { await _kmlcDelete('primljeno:' + id); } catch (e) {} return null; }
+  if (!_primljeniSpremi(lista)) { lista.shift(); try { await _kmlcDelete('primljeno:' + id); } catch (e) {} _primLog('lokalni upis', false, 0, 'Lista nije sačuvana (localStorage pun)', stavka.kb); return null; }
+  _primLog('lokalni upis', true, 0, stavka.naziv, stavka.kb);
   return stavka;
+}
+
+// Dnevnik rada s primljenim fajlovima (za Dijagnostiku): zadnjih 40 događaja po korisniku.
+function _primLog(vrsta, ok, ms, detalj, kb) {
+  try {
+    const k = 'tvlake_primljeni_dijag_v1:' + (sbUser?.id || '');
+    const a = JSON.parse(localStorage.getItem(k) || '[]');
+    a.push({ t: Date.now(), v: vrsta, ok: !!ok, ms: Math.round(ms || 0), d: String(detalj || '').slice(0, 160), kb: kb || 0 });
+    localStorage.setItem(k, JSON.stringify(a.slice(-40)));
+  } catch (e) {}
+}
+function _primLogUcitaj() {
+  try { const a = JSON.parse(localStorage.getItem('tvlake_primljeni_dijag_v1:' + (sbUser?.id || '')) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
 }
 
 // ── Slanje ──
@@ -36787,6 +36887,7 @@ async function primljeniPreuzmiSifrom() {
     if (document.getElementById('primljeni-panel')) _primljeniRender();
   } catch (e) {
     const m = String(e?.message || e);
+    _primLog('šifra', false, 0, m);
     if (/preuzmi_podatke_sifrom|PGRST202|does not exist/i.test(m)) showToast('⚠ Server još nema ovu mogućnost — admin treba pokrenuti migraciju 20261107_primljeni_sifrom.sql');
     else if (typeof _isNetworkErr === 'function' && _isNetworkErr(e)) showToast('⚠ Nema veze — pokušaj kad imaš signal');
     else showToast('⚠ ' + m);
@@ -36848,12 +36949,16 @@ async function _primljeniNaKarti(id) {
   if (!x) return;
   const sadrzaj = await _kmlcGet('primljeno:' + id);
   if (typeof sadrzaj !== 'string') { showToast('Sadržaj nije pronađen na telefonu'); return; }
+  showToast('⏳ Učitavam na kartu…');
+  await new Promise(r => setTimeout(r, 80));   // da se poruka iscrta prije teškog parsiranja
+  const _t0 = performance.now();
   try {
     const ime = await _localLayerKml(x.naziv.replace(/\.kml$/i, '') + ' (od ' + x.odIme + ').kml', sadrzaj, sbUser.id);
     _primljeniZatvori();
     switchTab('karta');
     showToast('✓ Prikazano na karti: ' + ime + ' — uređuješ ga u Dodaj fajl na kartu → Na ovom uređaju');
-  } catch (e) { showToast('⚠ ' + (e.message || 'Prikaz nije uspio')); }
+    _primLog('na karti', true, performance.now() - _t0, x.naziv, x.kb);
+  } catch (e) { _primLog('na karti', false, performance.now() - _t0, e && e.message || String(e), x.kb); showToast('⚠ ' + (e.message || 'Prikaz nije uspio')); }
 }
 async function _primljeniPreimenuj(id) {
   const lista = _primljeniUcitaj(), x = lista.find(a => a.id === id);
@@ -36877,4 +36982,118 @@ async function _primljeniObrisi(id) {
   try { await _kmlcDelete('primljeno:' + id); } catch (e) {}
   _primljeniSpremi(_primljeniUcitaj().filter(a => a.id !== id));
   _primljeniBadge(); _primljeniRender();
+}
+
+// ─── Ko smije vidjeti Dijagnostiku / prebacivanje računa ────────────────────
+// Samo prikaz: pravi pristup uvijek određuje server (RLS). Poređenje imena je bez dijakritika
+// i velikih slova ("Ćehić" = "cehic").
+function _imeNorm() {
+  return ((sbProfile?.ime || '') + ' ' + (sbProfile?.prezime || '')).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+function _dijagDozvoljeno() { return !!sbProfile?.is_admin || _imeNorm() === 'azra cehic'; }
+function _dijagMeniSync() {
+  const el = document.getElementById('menu-dijag-item');
+  if (el) el.style.display = _dijagDozvoljeno() && !sbProfile?.is_admin ? 'block' : 'none';   // admin je ima u Debug tabu
+}
+// Greške stranice (za Dijagnostiku): zadnjih 20, bez ikakvog slanja.
+(function _gresheHvataj() {
+  const dodaj = (v, m) => { try { const a = (window._PERF_GRESKE = window._PERF_GRESKE || []); a.push({ t: Math.round(performance.now() / 1000), v, m: String(m || '').slice(0, 200) }); if (a.length > 20) a.shift(); } catch (e) {} };
+  try {
+    window.addEventListener('error', e => dodaj('greška', (e.message || '') + (e.lineno ? ' @' + e.lineno : '')));
+    window.addEventListener('unhandledrejection', e => dodaj('obećanje', e.reason && (e.reason.message || e.reason)));
+  } catch (e) {}
+})();
+
+// ─── Panel Dijagnostika (brzina rada + učitavanje primljenih fajlova) ───────
+function dijagOtvori() {
+  if (!_dijagDozvoljeno()) return;
+  let el = document.getElementById('dijag-panel');
+  if (!el) { el = document.createElement('div'); el.id = 'dijag-panel'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); document.body.appendChild(el); }
+  _dijagRender();
+}
+function dijagZatvori() { const el = document.getElementById('dijag-panel'); if (el) el.remove(); }
+function _dijagTekst() {
+  const o = _perfSnimak(), log = _primLogUcitaj();
+  return JSON.stringify(Object.assign({ korisnik: _imeNorm() }, o, { primljeniDnevnik: log.slice(-25).map(x => ({ prije_s: Math.round((Date.now() - x.t) / 1000), vrsta: x.v, ok: x.ok, ms: x.ms, kb: x.kb, detalj: x.d })) }), null, 1);
+}
+function _dijagRender() {
+  const el = document.getElementById('dijag-panel');
+  if (!el) return;
+  const log = _primLogUcitaj().slice().reverse();
+  let h = '<div class="dg-head"><button type="button" class="dg-x" onclick="dijagZatvori()" aria-label="Zatvori">‹</button><div><b>⏱ Dijagnostika</b><small>Brzina rada aplikacije i učitavanje primljenih fajlova</small></div></div><div class="dg-body">';
+  h += '<div id="dijag-perf" class="dg-card"></div>';
+  h += '<div class="dg-card"><div class="dg-t">📥 Primljeni fajlovi — dnevnik</div>';
+  if (!log.length) h += '<p class="dg-n">Još nema zapisa. Primi ili otvori primljeni fajl pa se vrati ovdje.</p>';
+  log.slice(0, 20).forEach(x => {
+    h += '<div class="dg-r' + (x.ok ? '' : ' lose') + '"><span>' + (x.ok ? '✓' : '✕') + ' ' + _escHtml(x.v) + '</span><small>' + _dozStarost(Date.now() - x.t) + (x.ms ? ' · ' + x.ms + ' ms' : '') + (x.kb ? ' · ' + x.kb + ' KB' : '') + '</small>' + (x.d ? '<em>' + _escHtml(x.d) + '</em>' : '') + '</div>';
+  });
+  h += '<div class="dg-akcije"><button type="button" onclick="_dijagRender();_perfDiagRender(\'dijag-perf\')">Osvježi</button><button type="button" class="pri" onclick="_dijagKopiraj()">Kopiraj izvještaj</button></div>';
+  h += '<p class="dg-n">Izvještaj kopiraj i pošalji razvijatelju (Viber/WhatsApp) odmah poslije problema.</p></div></div>';
+  el.innerHTML = h;
+  _perfDiagRender('dijag-perf');
+}
+async function _dijagKopiraj() {
+  const t = _dijagTekst();
+  try { await navigator.clipboard.writeText(t); showToast('✓ Izvještaj kopiran'); }
+  catch (e) { try { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); showToast('✓ Izvještaj kopiran'); } catch (e2) { showToast('Kopiranje nije uspjelo'); } }
+}
+
+// ─── Prebacivanje računa (Nedim Ćehić: običan ↔ administrator) ──────────────
+// Sesije računa kojima se prebacuje čuvaju se na OVOM uređaju (isto mjesto gdje biblioteka već
+// drži tekuću sesiju). Server i dalje odlučuje o pravima: prebacivanje samo vraća sesiju koja
+// već postoji, ne daje nikakvo novo pravo. Dugme vide samo vlasnik računa i računi koji su već
+// sačuvani na uređaju — ne drugi korisnici dijeljenog telefona.
+const _RACUNI_KEY = 'tvlake_racuni_v1';
+function _racuniUcitaj() { try { const a = JSON.parse(localStorage.getItem(_RACUNI_KEY) || '[]'); return Array.isArray(a) ? a.filter(x => x && x.uid && x.rt) : []; } catch (e) { return []; } }
+function _racuniSpremi(a) { try { localStorage.setItem(_RACUNI_KEY, JSON.stringify(a.slice(0, 4))); return true; } catch (e) { return false; } }
+function _racuniMoze() { return _imeNorm() === 'nedim cehic' || _racuniUcitaj().some(x => x.uid === sbUser?.id); }
+// Zapamti TRENUTNU sesiju (svježi tokeni; stari refresh token je jednokratan).
+async function _racuniSnimiTrenutni(sesija) {
+  try {
+    if (!sb || !sbUser || sbUser._cachedStub || !sbProfile || !_racuniMoze()) return;
+    const ss = sesija || (await _withTimeout(sb.auth.getSession(), 4000))?.data?.session;
+    if (!ss || ss.user?.id !== sbUser.id || !ss.refresh_token) return;
+    const a = _racuniUcitaj().filter(x => x.uid !== sbUser.id);
+    a.unshift({ uid: sbUser.id, ime: ((sbProfile.ime || '') + ' ' + (sbProfile.prezime || '')).trim(), admin: !!sbProfile.is_admin, at: ss.access_token, rt: ss.refresh_token, t: Date.now() });
+    _racuniSpremi(a);
+  } catch (e) {}
+  _racuniMeniSync();
+}
+function _racuniDrugi() { return _racuniUcitaj().find(x => x.uid !== sbUser?.id) || null; }
+function _racuniMeniSync() {
+  const el = document.getElementById('menu-prebaci-item');
+  if (!el) return;
+  const vidljivo = !!sbUser && !!sbProfile && _racuniMoze();
+  el.style.display = vidljivo ? 'block' : 'none';
+  const lbl = document.getElementById('menu-prebaci-txt');
+  if (lbl) { const d = _racuniDrugi(); lbl.textContent = d ? 'Prebaci na: ' + d.ime + (d.admin ? ' (administrator)' : '') : 'Prebaci na profil administratora'; }
+}
+async function racuniPrebaci() {
+  if (!_racuniMoze()) return;
+  if (typeof _anyRecOn === 'function' && _anyRecOn()) { showToast('⚠ Prvo završi ili pauziraj GPS snimanje'); return; }
+  const drugi = _racuniDrugi();
+  if (!drugi) {
+    const i = await _dlgActions('Profil administratora', [
+      { label: 'Odjavi se i prijavi administratorski račun<br><span style="font-size:11px;opacity:.7;">Samo ovaj put — poslije toga prebacivanje je jednim dodirom</span>' },
+    ]);
+    if (i === 0) { await _racuniSnimiTrenutni(); doLogout(); }
+    return;
+  }
+  if (!await _dlgConfirm('Prebaciti na račun „' + drugi.ime + '“' + (drugi.admin ? ' (administrator)' : '') + '?\nTvoji lokalni podaci ostaju na telefonu i vraćaju se kad se vratiš na ovaj račun.', { title: 'Prebaci račun', okLabel: 'Prebaci' })) return;
+  if (typeof _mrezaSila === 'function') _mrezaSila(30000);
+  try {
+    await _racuniSnimiTrenutni();                    // svježa kopija tekućeg računa prije odlaska
+    const r = await _withTimeout(sb.auth.setSession({ access_token: drugi.at, refresh_token: drugi.rt }), 15000);
+    if (r.error || !r.data?.session || r.data.session.user?.id !== drugi.uid) throw (r.error || new Error('Sesija nije vraćena'));
+    // Tokeni tog računa su se mogli obnoviti — zapamti nove.
+    const a = _racuniUcitaj().filter(x => x.uid !== drugi.uid);
+    a.unshift(Object.assign({}, drugi, { at: r.data.session.access_token, rt: r.data.session.refresh_token, t: Date.now() }));
+    _racuniSpremi(a);
+    showToast('✓ Prebacujem na ' + drugi.ime + '…');
+    setTimeout(() => location.reload(), 300);        // normalan start: provjera promjene korisnika arhivira lokalne podatke
+  } catch (e) {
+    // Neuspjeh ostavlja tekuću sesiju netaknutom.
+    const m = String(e?.message || e);
+    showToast(/network|fetch|veza/i.test(m) ? '⚠ Nema veze — prebacivanje traži internet' : '⚠ Sesija tog računa je istekla — odjavi se i prijavi ga ponovo (jednom)');
+  }
 }
