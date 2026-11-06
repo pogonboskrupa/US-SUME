@@ -20690,7 +20690,7 @@ function pkml(doc, col, op, opts) {
         cs = _jednostavi(cs); if (cs.length < 3) cs = pcs(tag1(pg, 'coordinates')?.textContent);
         // fill:true čuva hit-test i kad je površina potpuno prozirna.
         const holes = Array.from(pg.getElementsByTagName('innerBoundaryIs')).map(b=>_jednostavi(pcs(tag1(b, 'coordinates')?.textContent))).filter(r=>r.length>2);
-        const l = L.polygon(holes.length?[cs,...holes]:cs, {color:col, weight:2, opacity:op, fill:true, fillOpacity:0});
+        const l = L.polygon(holes.length?[cs,...holes]:cs, {color:col, weight:2, opacity:op, fill:!_gust, fillOpacity:0});
         l._kmlIsPolygon = true;
         l._kmlPmIndex=pmIndex;l._kmlName = name; l._kmlDesc = desc; l._kmlExtData = extData;
         if (name) l.bindTooltip(_escHtml(name), {sticky:true});
@@ -21201,7 +21201,11 @@ function applyKmlStyle(i) {
     if (!l.setStyle) return;
     const lo = {...base};
     if (l._kmlIsPolygon) {
-      lo.fill = true; // hit-test cijele površine ostaje, neovisno o prozirnosti.
+      // Hit-test cijele površine ostaje (fill:true i kad je prozirno) — osim za veliki sloj: tamo je
+      // prozirna ispuna samo trošak crtanja hiljada poligona, a klik unutar poligona i dalje hvata
+      // _kmlHitTest u map.on('click').
+      const _velik = !!(k.grp && k.grp._layers && Object.keys(k.grp._layers).length >= (typeof _KML_CULL_MIN === 'number' ? _KML_CULL_MIN : 1500));
+      lo.fill = _velik ? !!(k.fill && (k.fillOpacity ?? 0.35) > 0) : true;
       lo.fillOpacity = k.fill ? (k.fillOpacity ?? 0.35) : 0;
       lo.fillColor = k.fillCol || k.col;
       if (k.fill && lo.fillOpacity > 0) {
@@ -36705,7 +36709,9 @@ const _PERF = { lt: [], ltUk: 0, ltN: 0, ltMax: 0, lag: [], fn: {}, start: Date.
         for (const e of list.getEntries()) {
           if (e.duration < 100) continue;
           const sk = (e.scripts || []).slice().sort((a, b) => b.duration - a.duration).slice(0, 3).map(x =>
-            (x.sourceFunctionName || x.invoker || '?') + ' ' + Math.round(x.duration) + 'ms' + (x.forcedStyleAndLayoutDuration > 20 ? ' (raspored ' + Math.round(x.forcedStyleAndLayoutDuration) + ')' : ''));
+            (x.sourceFunctionName || x.invoker || '?') + ' ' + Math.round(x.duration) + 'ms' +
+            (x.sourceURL ? ' @' + String(x.sourceURL).split('/').pop() + (x.sourceCharPosition >= 0 ? ':' + x.sourceCharPosition : '') : '') +
+            (x.forcedStyleAndLayoutDuration > 20 ? ' (raspored ' + Math.round(x.forcedStyleAndLayoutDuration) + ')' : ''));
           const rend = e.styleAndLayoutStart ? Math.round(e.startTime + e.duration - e.styleAndLayoutStart) : 0;
           _PERF.loaf.push({ at: Math.round(e.startTime), ms: Math.round(e.duration), blok: Math.round(e.blockingDuration || 0), crtanje: rend, skripte: sk,
             tab: (typeof _activeTab !== 'undefined' && _activeTab) || '?' });
@@ -36721,12 +36727,21 @@ const _PERF = { lt: [], ltUk: 0, ltN: 0, ltMax: 0, lag: [], fn: {}, start: Date.
       const now = performance.now(), d = now - last - 500; last = now;
       if (document.hidden || d < 0 && d > -400) { if (document.hidden) return; }
       if (d >= 0 && d < 20000) { _PERF.lag.push(Math.round(d)); if (_PERF.lag.length > 240) _PERF.lag.shift(); }
+      // Glavna nit stalno kasni (ne samo pri pomicanju) → lagani prikaz sam, ako korisnik nije ručno birao.
+      try {
+        if (_PERF.lag.length >= 60 && !_PERF.lagLite) {
+          const R = window.DendroRender, st = R && R.state, p95 = _perfPerc(_PERF.lag.slice(-60), 0.95);
+          if (st && !st.lite && st.userMode === 'auto' && p95 > 180 && typeof R.slow === 'function') { _PERF.lagLite = true; R.slow('nit p95=' + p95 + 'ms'); }
+        }
+      } catch (e) {}
     }, 500);
   } catch (e) {}
   // Omotači oko vrućih funkcija: broj poziva, ukupno i najduže trajanje.
   const imena = ['rndList', 'updOvl', '_scheduleOvlRnd', '_declutterVlakaLabels', 'drawBuffers', 'switchTab',
     '_addTragPoint', '_vlakaProcessGpsPoint', '_dozProcessGpsPoint', '_dozComputeBands', '_dozPokrivenost',
-    '_crashSaveVlaka', '_crashSaveTrag', '_processOfflineQueue', '_kmlHitTest', 'onP', '_recBarUpdate'];
+    '_crashSaveVlaka', '_crashSaveTrag', '_processOfflineQueue', '_kmlHitTest', 'onP', '_recBarUpdate',
+    'dozRenderDetail', '_dozRenderTracks', '_dozTragoviPoKorisniku', '_dozEkipaRender', '_dozLivePrimi', 'sbInitData', '_applyVlakeRows',
+    '_primljeniSync', 'pkml', 'applyKmlStyle', '_terrariumDecodeTile', '_demLegendUpdate', 'updBan', 'rndGraniceModal', '_rndOznakePanel'];
   setTimeout(() => {
     for (const n of imena) {
       try {

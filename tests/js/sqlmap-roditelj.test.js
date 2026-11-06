@@ -34,3 +34,9 @@ assert(a > 0 && b > a);
   assert(/tvlake_kml_start_u_toku/.test(src) && /layer\.vis = false; sakriveni\.push/.test(src), 'sigurnosni start');
   console.log('cull + sigurnosni start: ok');
 })();
+(function () {
+  assert(/x\.sourceCharPosition/.test(src), 'dijagnostika imenuje fajl:poziciju skripte');
+  assert(/R\.slow\('nit p95='/.test(src), 'automatski lagani prikaz kad nit stalno kasni');
+  assert(/lo\.fill = _velik \?/.test(src) && /fill:!_gust/.test(src), 'veliki sloj bez prozirne ispune');
+  console.log('ubrzanje velikih slojeva: ok');
+})();
