@@ -7,7 +7,7 @@ const fn=(name)=>{const i=src.indexOf('function '+name+'(');assert(i>=0,name);le
 const mk=()=>{
   const layer={adds:[],rem:[],addLayer(x){this.adds.push(x);},removeLayer(x){this.rem.push(x);},addTo(){return this;}};
   const L={layerGroup:()=>layer,polyline:(pts)=>({pts,setLatLngs(p){this.pts=p;return this;},addTo(){return this;}}),circleMarker:()=>({bindTooltip(){return this;},setLatLng(){},addTo(){return this;}})};
-  const env={_dozLiveProj:'P1',_dozLiveLayer:null,_dozLiveTrails:{},_DOZ_LIVE_MAX:3,_dozMembers:[{user_id:'a'},{user_id:'b'}],DOZ_ENG_COLORS:['#f00','#0f0'],sbUser:{id:'me'},window:{map:{}},map:{removeLayer(){}},L,_escHtml:x=>x,_dozImeClana:()=>'Ime Prezime'};
+  const env={_dozLiveZadnja:{},_dozEkipaZakazi(){},_dozLiveProj:'P1',_dozLiveLayer:null,_dozLiveTrails:{},_DOZ_LIVE_MAX:3,_dozMembers:[{user_id:'a'},{user_id:'b'}],DOZ_ENG_COLORS:['#f00','#0f0'],sbUser:{id:'me'},window:{map:{}},map:{removeLayer(){}},L,_escHtml:x=>x,_dozImeClana:()=>'Ime Prezime'};
   const code=['_dozLiveUkloni','_dozLivePrimi'].map(fn).join('\n');
   const f=new Function(...Object.keys(env),code+';return {_dozLivePrimi,_dozLiveUkloni,get layer(){return _dozLiveLayer;}};');
   return {api:f(...Object.values(env)),env,layer};

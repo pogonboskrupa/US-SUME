@@ -33074,7 +33074,10 @@ function _dozRenderOverview() {
 // Dijeljenje kretanja) — prima se samo od korisnika sa liste članova odjela.
 let _dozLiveCh = null, _dozLiveProj = null, _dozLiveReady = false, _dozLiveLayer = null, _dozLiveGc = null, _dozLiveSendTs = 0;
 const _dozLiveTrails = {};
-const _DOZ_LIVE_MAX = 400, _DOZ_LIVE_TTL = 120000;
+const _DOZ_LIVE_MAX = 400, _DOZ_LIVE_TTL = 120000, _DOZ_LIVE_STARO = 30 * 60000;
+// Zadnja poznata pozicija po projektantu (i kad uživo nestane) — prikazuje se u Pregledu sa starošću.
+const _dozLiveZadnja = {};   // uid → { la, lo, ac, t }
+let _dozLiveMoja = null;     // zadnja moja pozicija koja nije mogla otići (nema veze) — šalje se čim se kanal vrati
 function _dozLiveSub(projectId) {
   if (_dozLiveProj === projectId && _dozLiveCh) return;
   if (_dozLiveCh) { try { sb.removeChannel(_dozLiveCh); } catch (e) {} }
@@ -33087,13 +33090,29 @@ function _dozLiveSub(projectId) {
   _dozLiveCh = sb.channel('doz-live-' + projectId, { config: { broadcast: { self: false } } })
     .on('broadcast', { event: 'pos' }, ({ payload }) => _dozLivePrimi(payload))
     .on('broadcast', { event: 'stop' }, ({ payload }) => _dozLiveUkloni(payload?.uid))
-    .subscribe(st => { _dozLiveReady = st === 'SUBSCRIBED'; });
+    .subscribe(st => {
+      _dozLiveReady = st === 'SUBSCRIBED';
+      // Veza se vratila: odmah javi gdje sam (ne čekaj sljedeću tačku), ako je pozicija svježa.
+      if (_dozLiveReady && _dozLiveMoja && Date.now() - _dozLiveMoja.t < 5 * 60000 && _dozLiveProj === _dozGpsProjId) {
+        try { _dozLiveCh.send({ type: 'broadcast', event: 'pos', payload: Object.assign({ uid: sbUser.id, pid: _dozGpsProjId }, _dozLiveMoja) }); _dozLiveMoja = null; } catch (e) {}
+      }
+    });
   _dozLiveGc = setInterval(() => {
     const sad = Date.now();
-    Object.keys(_dozLiveTrails).forEach(uid => { if (sad - _dozLiveTrails[uid].t > _DOZ_LIVE_TTL) _dozLiveUkloni(uid); });
+    Object.keys(_dozLiveTrails).forEach(uid => {
+      const tr = _dozLiveTrails[uid], star = sad - tr.t;
+      if (star > _DOZ_LIVE_STARO) { _dozLiveUkloni(uid); return; }
+      // Poslije 2 min bez signala marker ostaje (siv), a linija se skida — vidi se gdje je zadnji put viđen.
+      if (star > _DOZ_LIVE_TTL && !tr.stale) {
+        tr.stale = true;
+        try { if (tr.line) { _dozLiveLayer?.removeLayer(tr.line); tr.line = null; } if (tr.mk) tr.mk.setStyle({ fillColor: '#94a3b8', fillOpacity: .8 }); } catch (e) {}
+      }
+    });
+    try { _dozEkipaRender(); } catch (e) {}
   }, 15000);
 }
 function _dozLiveUkloni(uid) {
+  delete _dozLiveZadnja[uid];
   const tr = _dozLiveTrails[uid];
   if (!tr) return;
   try { if (tr.line) _dozLiveLayer?.removeLayer(tr.line); if (tr.mk) _dozLiveLayer?.removeLayer(tr.mk); } catch (e) {}
@@ -33108,9 +33127,14 @@ function _dozLivePrimi(p) {
   let tr = _dozLiveTrails[p.uid];
   if (!tr) tr = _dozLiveTrails[p.uid] = { pts: [], t: 0, line: null, mk: null };
   tr.t = Date.now();
+  _dozLiveZadnja[p.uid] = { la: p.la, lo: p.lo, ac: p.ac, t: tr.t };
+  if (tr.stale) { tr.stale = false; try { tr.mk && tr.mk.setStyle({ fillColor: col, fillOpacity: 1 }); } catch (e) {} }
   tr.pts.push([p.la, p.lo]);
   if (tr.pts.length > _DOZ_LIVE_MAX) tr.pts.shift();
-  if (!tr.line) {
+  if (!tr.line && tr.mk) {
+    tr.line = L.polyline(tr.pts, { color: col, weight: 4, opacity: .9, dashArray: '2 6', interactive: false }).addTo(_dozLiveLayer);
+    tr.mk.setLatLng([p.la, p.lo]);
+  } else if (!tr.line) {
     tr.line = L.polyline(tr.pts, { color: col, weight: 4, opacity: .9, dashArray: '2 6', interactive: false }).addTo(_dozLiveLayer);
     tr.mk = L.circleMarker([p.la, p.lo], { radius: 7, color: '#fff', weight: 2, fillColor: col, fillOpacity: 1, interactive: false }).addTo(_dozLiveLayer);
     tr.mk.bindTooltip(_escHtml(_dozImeClana(p.uid).split(' ')[0]), { permanent: true, direction: 'top', opacity: .9 });
@@ -33118,8 +33142,10 @@ function _dozLivePrimi(p) {
     tr.line.setLatLngs(tr.pts);
     tr.mk.setLatLng([p.la, p.lo]);
   }
+  _dozEkipaZakazi();
 }
 function _dozLiveSalji(lat, lng, acc) {
+  if (_dozGpsProjId && sbUser && (!_dozLiveCh || !_dozLiveReady)) { _dozLiveMoja = { la: lat, lo: lng, ac: acc, t: Date.now() }; return; }   // nema veze: zapamti, javi čim se kanal vrati
   if (!_dozLiveCh || !_dozLiveReady || _dozLiveProj !== _dozGpsProjId || !sbUser) return;
   const sad = Date.now();
   if (sad - _dozLiveSendTs < 4000) return;
@@ -34488,10 +34514,96 @@ function _dozTrackLenByUser(byUserIn) {
 function dozGoSection(key) {
   document.getElementById('doz-section-'+key)?.scrollIntoView({block:'start',behavior:'smooth'});
 }
+// ─── Ekipa u odjelu: ko je gdje (uživo ili zadnja poznata pozicija) ────────
+// Uživo (Realtime broadcast) radi samo kad OBA telefona imaju vezu. Bez signala
+// pozicija ne može stići ni na server ni kolegi — zato red pokazuje ZADNJU
+// poznatu poziciju sa starošću (iz uživo poruke ili iz već poslanog traga), a
+// čim se veza vrati, pozicija se šalje sama (_dozLiveMoja).
+let _dozEkipaTmr = null;
+function _dozEkipaZakazi() {
+  if (_dozEkipaTmr) return;
+  _dozEkipaTmr = setTimeout(() => { _dozEkipaTmr = null; try { _dozEkipaRender(); } catch (e) {} }, 1500);
+}
+function _dozStarost(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 10) return 'sada';
+  if (s < 90) return 'prije ' + s + ' s';
+  if (s < 5400) return 'prije ' + Math.round(s / 60) + ' min';
+  if (s < 172800) return 'prije ' + Math.round(s / 3600) + ' h';
+  return 'prije ' + Math.round(s / 86400) + ' d';
+}
+function _dozSmjer(la1, lo1, la2, lo2) {
+  const f1 = la1 * Math.PI / 180, f2 = la2 * Math.PI / 180, dl = (lo2 - lo1) * Math.PI / 180;
+  const y = Math.sin(dl) * Math.cos(f2), x = Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl);
+  const b = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  return ['S', 'SI', 'I', 'JI', 'J', 'JZ', 'Z', 'SZ'][Math.round(b / 45) % 8];
+}
+function _dozEkipaPodaci() {
+  const sad = Date.now(), red = [];
+  const tr = (typeof _dozTragoviPoKorisniku === 'function') ? _dozTragoviPoKorisniku() : {};
+  const pokr = (() => { try { const o = _dozOdjeli.find(x => x.id === _dozSelId); return o ? _dozPokrivenost(o).poKorisniku || {} : {}; } catch (e) { return {}; } })();
+  (_dozMembers || []).forEach((m, idx) => {
+    const uid = m.user_id, moj = uid === sbUser?.id;
+    let poz = null, izvor = '';
+    if (moj) {
+      if (typeof lastP !== 'undefined' && lastP) { poz = { la: lastP.la, lo: lastP.lo, t: sad }; izvor = 'gps'; }
+    } else if (_dozLiveZadnja[uid]) { poz = _dozLiveZadnja[uid]; izvor = 'uzivo'; }
+    const niz = tr[uid];
+    if (niz && niz.length && !moj) {
+      const z = niz[niz.length - 1], t = _dozTackaMs(z);
+      // Poslani trag je zadnja poznata pozicija samo ako je novija od uživo poruke (ili uživo nema).
+      if (isFinite(t) && z.latitude != null && (!poz || t > poz.t)) { poz = { la: z.latitude, lo: z.longitude, t }; izvor = 'trag'; }
+    }
+    const snima = moj ? !!_dozGpsOn : !!(_dozLiveTrails[uid] && !_dozLiveTrails[uid].stale);
+    red.push({ uid, idx, moj, ime: moj ? 'Ti' : _dozImeClana(uid), poz, izvor, snima, ha: pokr[uid] || 0, boja: DOZ_ENG_COLORS[idx % DOZ_ENG_COLORS.length] });
+  });
+  return red;
+}
+function _dozEkipaRender() {
+  const el = document.getElementById('doz-ekipa');
+  if (!el) return;
+  if (!_dozSelId || !(_dozMembers || []).length) { el.hidden = true; el.innerHTML = ''; return; }
+  const sad = Date.now();
+  const ja = (typeof lastP !== 'undefined' && lastP) ? lastP : null;
+  const red = _dozEkipaPodaci();
+  const uzivo = red.filter(r => r.snima).length;
+  let h = '<div class="dek-t"><b>👥 Ekipa u odjelu</b><span>' + (uzivo ? uzivo + ' snima' : 'niko ne snima') + '</span></div>';
+  red.forEach(r => {
+    const valid = r.poz && Number.isFinite(r.poz.la) && Number.isFinite(r.poz.lo);
+    const st = valid ? sad - r.poz.t : null;
+    let stanje;
+    if (!valid) stanje = 'nema poznate pozicije';
+    else if (r.snima && st < 45000) stanje = (r.moj ? 'snimaš' : 'snima uživo') + ' · ' + _dozStarost(st);
+    else if (r.snima) stanje = 'signal slab · zadnja pozicija ' + _dozStarost(st);
+    else stanje = 'zadnja poznata pozicija ' + _dozStarost(st) + (r.izvor === 'trag' ? ' (iz poslanog traga)' : '');
+    let udalj = '';
+    if (valid && ja && !r.moj) { const d = dst(ja.la, ja.lo, r.poz.la, r.poz.lo); udalj = (d < 1000 ? Math.round(d) + ' m' : (d / 1000).toFixed(1) + ' km') + ' ' + _dozSmjer(ja.la, ja.lo, r.poz.la, r.poz.lo); }
+    const stara = valid && st > _DOZ_LIVE_TTL;
+    h += '<button type="button" class="dek-r' + (stara ? ' stara' : '') + '"' + (valid ? ' onclick="_dozEkipaIdi(\'' + _jsAttr(r.uid) + '\')"' : ' disabled') + '>' +
+      '<i style="background:' + (r.snima ? r.boja : '#94a3b8') + '"></i>' +
+      '<span class="dek-i"><b>' + _escHtml(r.ime) + '</b><small>' + stanje + '</small></span>' +
+      '<span class="dek-d">' + (udalj ? udalj + '<small>' : '<small>') + (r.ha ? fmtHa(r.ha) : '') + '</small></span></button>';
+  });
+  h += '<div class="dek-n">Uživo prikaz traži vezu kod svih. Bez signala vidi se zadnja poznata pozicija; čim se veza vrati, pozicija se šalje sama.</div>';
+  el.hidden = false;
+  el.innerHTML = h;
+}
+function _dozEkipaIdi(uid) {
+  const r = _dozEkipaPodaci().find(x => x.uid === uid);
+  if (!r || !r.poz || !Number.isFinite(r.poz.la)) return;
+  switchTab('karta');
+  setTimeout(() => {
+    try { map.setView([r.poz.la, r.poz.lo], Math.max(map.getZoom(), 17)); } catch (e) {}
+    try { const tr = _dozLiveTrails[uid]; if (tr && tr.mk) tr.mk.openTooltip(); } catch (e) {}
+  }, 160);
+}
+setInterval(() => { try { if (_activeTab === 'doznaka' && !document.hidden) _dozEkipaRender(); } catch (e) {} }, 10000);
+
 // Traka pregleda ispod zaglavlja: odgovor na prvo pitanje pri otvaranju odjela
 // ("koliko je urađeno") bez skrolanja do statistike. Brojevi dolaze iz ISTE
 // računice kao statistika (_dozPokrivenost), pa se dva mjesta ne mogu razići.
 function _dozPregledRender(d) {
+  try { _dozEkipaRender(); } catch (e) {}
   const el = document.getElementById('doz-pregled');
   if (!el) return;
   if (!d || !(d.bndHa > 0)) { el.hidden = true; el.innerHTML = ''; return; }

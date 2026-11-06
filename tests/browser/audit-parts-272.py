@@ -42,7 +42,7 @@ async def main():
   assert await page.evaluate("async()=>{FieldStore.finish=realFinish;const r=await dozBackToList();return r===true&&!_dozGpsOn&&_dozSelId===null&&!(await FieldStore.live(sbUser.id));}")
   assert await page.evaluate('FieldStore.count(sbUser.id)')==2
   await page.evaluate("dozSelectOdjel('A')")
-  assert '2 GPS tačaka čeka slanje' in await page.locator('#doz-local-status').inner_text()
+  assert await page.locator('#doz-local-status').count()==0
   # In-flight fetch A cannot overwrite selection B or its durable cache.
   assert await page.evaluate("""async()=>{
    let release;const original=sb.from;sb.from=()=>{const q=new Proxy({}, {get(_,k){if(k==='then')return (ok,bad)=>new Promise(r=>release=r).then(ok,bad);return ()=>q;}});return q;};

@@ -5610,8 +5610,9 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <span class="doz-detail-meta" id="doz-detail-area"></span>
         </div>
         <div id="doz-context" class="doz-context"></div>
+        <div class="doz-top-add"><button class="btn b" id="doz-add-member-btn" onclick="dozAddMember()"><svg class="ic"><use href="#ic-korisnik"/></svg> Dodaj projektanta</button></div>
         <div id="doz-pregled" class="doz-pregled" hidden></div>
-        <div class="doz-local-card" id="doz-local-status" aria-live="polite"></div>
+        <div id="doz-ekipa" class="doz-ekipa" hidden></div>
         <nav class="doz-nav" aria-label="Doznaka sekcije"><button onclick="dozGoSection('gps')">GPS</button><button onclick="dozGoSection('stats')">Pregled</button><button onclick="dozGoSection('zones')">Zone</button><button onclick="dozGoSection('vlake')">Vlake</button></nav>
         <div class="doz-row-lbl">Status odjela</div>
         <div id="doz-status-row" style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 12px 4px;"></div>
@@ -5644,13 +5645,11 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         <div class="sec" id="doz-section-team">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
             <div class="sec-t" style="margin:0;">👥 Projektanti</div>
-            <button class="btn b" id="doz-add-member-btn" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozAddMember()">+ Dodaj</button>
           </div>
           <div id="doz-members-list"><div class="doz-empty">Nema članova</div></div>
         </div>
 
 
-        <div class="sec" id="doz-section-plan"><button type="button" class="dp-entry" onclick="DoznakaPlan.open()"><span><b>Projekcija trajanja doznake</b><small id="doz-plan-summary">Izohipsni pojasevi i procjena radnih dana</small></span><strong aria-hidden="true">↗</strong></button></div>
 
         <div class="sec" id="doz-section-zones">
           <div class="doz-sec-hdr">
@@ -5784,6 +5783,8 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           </div>
         </div>
         </details>
+
+        <div class="sec" id="doz-section-plan"><button type="button" class="dp-entry" onclick="DoznakaPlan.open()"><span><b>Projekcija trajanja doznake</b><small id="doz-plan-summary">Izohipsni pojasevi i procjena radnih dana</small></span><strong aria-hidden="true">↗</strong></button></div>
 
         <div class="sec">
           <div class="sec-t">📶 Dijeljenje pojasa bez interneta</div>
@@ -6022,7 +6023,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.4.0';
+const APP_VER = 'v3.4.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
