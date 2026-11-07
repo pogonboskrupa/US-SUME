@@ -11992,6 +11992,7 @@ function _openLayerSheet() {
   try { const rm = document.getElementById('render-mode-sel'); if (rm) rm.value = window.DendroRender?.state?.userMode || 'auto'; } catch (e) {}
   document.getElementById('layer-sheet-bg').style.display = 'block';
   document.getElementById('layer-sheet').style.display   = 'block';
+  if (typeof rndGraniceModal === 'function' && rndGraniceModal._prljav) rndGraniceModal();
   let lastTab='karte';try { lastTab=localStorage.getItem('tvlake_layer_sheet_tab')||lastTab; } catch(e) {}
   _lsTab(lastTab);
   ['elev','slope','nv','ekspo','kont'].forEach(id => {
@@ -21930,6 +21931,11 @@ function rndGraniceModal() {
   if(typeof window!=='undefined')window.GithubLayers?.render();
   const el = document.getElementById('granice-list');
   if (!el) return;
+  // Zatvoren prozor Slojeva: lista se ne crta (pri startu se ovo zove po jednom za svaki vraćeni sloj,
+  // izmjereno 8× / 108 ms na Redmi Note) — crta se pri otvaranju (_openLayerSheet).
+  const _ls = document.getElementById('layer-sheet');
+  if (_ls && _ls.style.display !== 'block') { rndGraniceModal._prljav = true; return; }
+  rndGraniceModal._prljav = false;
   const isAdmin = sbProfile?.is_admin === true;
   if (kmlLs.length === 0) {
     el.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:20px;">Nema učitanih slojeva.<br>Slojevi se učitavaju automatski pri prijavi.</div>';
