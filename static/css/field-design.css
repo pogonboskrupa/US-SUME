@@ -1399,3 +1399,15 @@ html .le-pop2 .le-object-measure{display:grid;grid-template-columns:repeat(auto-
 .le-pop2 .le-sub-bar>b{font-size:16px}
 .le-pop2 .le-sub-bar .le-nazad{display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:0 12px;border-radius:10px;border:1px solid var(--field-border);background:var(--field-bg);color:var(--field-ink);font:600 13px system-ui;cursor:pointer}
 .le-pop2 .le-sub-bar .ic{width:18px;height:18px}
+/* Meni → Ažuriraj aplikaciju: svijetlo zlatna; s novom verzijom naglašena + oznaka NOVO (v3.5.7). */
+html button.mdrop-item.mdrop-azur{color:#fcd34d;font-weight:600}
+html button.mdrop-item.mdrop-azur.ima-novu{background:linear-gradient(90deg,#fbbf2433,#fbbf2412);box-shadow:inset 4px 0 0 #fbbf24;color:#fde68a}
+.mdrop-azur-nova{margin-left:auto;padding:2px 8px;border-radius:999px;background:#fbbf24;color:#1c1300;font:800 10px/1.6 system-ui;letter-spacing:.4px;white-space:nowrap;animation:azurPuls 1.6s ease-in-out infinite}
+.mdrop-azur-nova[hidden]{display:none}
+@keyframes azurPuls{0%,100%{box-shadow:0 0 0 0 #fbbf2499}50%{box-shadow:0 0 0 5px #fbbf2400}}
+body.ima-azuriranje #menu-btn{position:relative}
+body.ima-azuriranje #menu-btn::after{content:"";position:absolute;top:5px;right:calc(50% - 16px);width:9px;height:9px;border-radius:50%;background:#fbbf24;box-shadow:0 0 0 2px #0f172a}
+html[data-field-theme=day] button.mdrop-item.mdrop-azur{color:#8a5a00!important}
+html[data-field-theme=day] button.mdrop-item.mdrop-azur.ima-novu{background:linear-gradient(90deg,#fde68a,#fef3c7);box-shadow:inset 4px 0 0 #b45309;color:#78350f!important}
+html[data-field-theme=day] body.ima-azuriranje #menu-btn::after{background:#d97706;box-shadow:0 0 0 2px #fff}
+@media (prefers-reduced-motion:reduce){.mdrop-azur-nova{animation:none}}

@@ -72,9 +72,13 @@ function mk(opts) {
   // preuzimanje: lokalno spremi PRIJE potvrde; neispravna šifra → nema upisa
   t = mk({ sifraUnos: 'abcd-2345', rpcFn: async (n) => n === 'preuzmi_podatke_sifrom' ? { data: [{ vrsta: 'trag', naziv: 'Sifrom', sadrzaj: KML, od_ime: 'Neko Treći' }] } : { data: null } });
   await t.api.primljeniPreuzmiSifrom();
-  assert.deepStrictEqual(t.log.rpcs.map(x => x.n), ['preuzmi_podatke_sifrom', 'potvrdi_preuzimanje_sifrom']);
+  // v3.5.7: šifra je za više korisnika — klijent je ne "troši" (bez potvrde/brisanja)
+  assert.deepStrictEqual(t.log.rpcs.map(x => x.n), ['preuzmi_podatke_sifrom']);
   assert.strictEqual(t.log.rpcs[0].p.p_sifra, 'ABCD2345'); assert.strictEqual(t.api._primljeniUcitaj()[0].odIme, 'Neko Treći');
-  assert(t.log.order[0].startsWith('save:primljeno:sifra_ABCD2345'), 'upis lokalno prije potvrde');
+  assert(t.log.order[0].startsWith('save:primljeno:sifra_ABCD2345'), 'upis lokalno');
+  // isti korisnik drugi put istu šifru: ne preuzima ponovo (bez duple kopije)
+  await t.api.primljeniPreuzmiSifrom();
+  assert.strictEqual(t.log.rpcs.length, 1); assert(t.log.toasts.some(m => /već preuzeo/.test(m)));
   t = mk({ sifraUnos: 'ABCD2345', rpcFn: async () => ({ data: [] }) });
   await t.api.primljeniPreuzmiSifrom();
   assert.strictEqual(t.api._primljeniUcitaj().length, 0); assert(t.log.toasts.some(m => /nije ispravna/.test(m)));
@@ -92,6 +96,8 @@ function mk(opts) {
   const sql = require('fs').readFileSync(__dirname + '/../../supabase/migrations/20261106_primljeni_podaci.sql', 'utf8');
   const sql2 = require('fs').readFileSync(__dirname + '/../../supabase/migrations/20261107_primljeni_sifrom.sql', 'utf8');
   assert(/claimed_by <> auth\.uid\(\)/.test(sql2) && /podaci_sifre_pokusaji/.test(sql2) && /interval '2 days'/.test(sql2) && /enable row level security/.test(sql2) && !/create policy/i.test(sql2), 'šifre: bez politika, 2 dana, ograničenje pokušaja');
+  const sql3 = require('fs').readFileSync(__dirname + '/../../supabase/migrations/20261108_sifra_vise_preuzimanja.sql', 'utf8');
+  assert(!/claimed_by/.test(sql3.split('-- ====')[2] || sql3.slice(sql3.indexOf('create or replace'))) && /podaci_sifre_pokusaji/.test(sql3) && !/delete from public\.podaci_sifre where sifra/.test(sql3), 'šifra za više korisnika, bez brisanja pri potvrdi');
   assert(/distinct from v_ja_sum/.test(sql) && !/for insert/i.test(sql) && /to_id = auth\.uid\(\)/.test(sql) && /zzz_odobren/.test(sql));
   console.log('primljeni-podaci: ok');
 })().catch(e => { console.error(e); process.exit(1); });

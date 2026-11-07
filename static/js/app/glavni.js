@@ -32225,11 +32225,23 @@ async function _checkLatestVersion() {
     }
     const local = APP_VER.replace(/^v/, '');
     if (_verCmp(latest, local) <= 0) return;               // već na najnovijoj (ili novijoj lokalnoj)
+    _menuAzurOznaci(latest);                                 // Meni: istaknuto i kad je baner odbijen
     if (localStorage.getItem('tvlake_ver_dismissed') === latest) return; // korisnik odbio baš ovu verziju
     _showVersionBanner(latest, isAPK);
   } catch(e) { /* offline / CORS / bilo šta — tiho preskoči */ }
 }
 
+// Meni → Ažuriraj aplikaciju: kad postoji novija verzija, stavka dobija oznaku "NOVO vX.Y.Z" i
+// naglašenu zlatnu pozadinu (CSS .mdrop-azur.ima-novu), a dugme Menija tačkicu.
+function _menuAzurOznaci(latest) {
+  try {
+    const b = document.getElementById('menu-azuriraj'); if (!b) return;
+    b.classList.add('ima-novu');
+    const n = b.querySelector('.mdrop-azur-nova'); if (n) { n.textContent = 'NOVO v' + latest; n.hidden = false; }
+    b.setAttribute('aria-label', 'Ažuriraj aplikaciju — dostupna je nova verzija ' + latest);
+    document.body.classList.add('ima-azuriranje');
+  } catch (e) {}
+}
 function _showVersionBanner(latest, isAPK) {
   _updateNotice(latest);
 }
@@ -37104,7 +37116,7 @@ async function podaciPosalji(vrsta, naziv, kml) {
   if (new Blob([kml]).size > _PRIM_MAX_BAJTA) { showToast('Podatak je prevelik za slanje (najviše ~2,8 MB)'); return; }
   const kolege = _shareKolege();
   const akcije = kolege.map(k => ({ label: _escHtml(k.ime) }));
-  akcije.push({ label: '🔑 Pošalji šifrom — bilo ko, drugi profil ili šumarija (važi 2 dana)' });
+  akcije.push({ label: '🔑 Pošalji šifrom — više ljudi, drugi profil ili šumarija (važi 2 dana)' });
   akcije.push({ label: 'Odustani' });
   const i = await _dlgActions('📤 Pošalji: ' + naziv, akcije);
   if (i == null || i < 0 || i > kolege.length) return;
@@ -37133,8 +37145,8 @@ async function podaciPosalji(vrsta, naziv, kml) {
 // Šifra za preuzimanje: velika, uz kopiranje i dijeljenje porukom.
 async function _sifraPrikazi(sifra, naziv) {
   const lijepa = sifra.slice(0, 4) + ' ' + sifra.slice(4);
-  const txt = 'Dendro Map — podatak „' + naziv + '“. Šifra za preuzimanje: ' + sifra + ' (važi 2 dana). U aplikaciji: Meni → Primljeni podaci → Preuzmi šifrom.';
-  const i = await _dlgActions('🔑 Šifra: ' + lijepa + '\nVaži 2 dana, preuzima je jedna osoba. Poslije preuzimanja nestaje sa servera.', [
+  const txt = 'Dendro Map — podatak „' + naziv + '“. Šifra za preuzimanje: ' + sifra + ' (važi 2 dana, može je preuzeti više ljudi). U aplikaciji: Meni → Primljeni podaci → Preuzmi šifrom.';
+  const i = await _dlgActions('🔑 Šifra: ' + lijepa + '\nVaži 2 dana i može je preuzeti više ljudi (cijela ekipa). Poslije isteka nestaje sa servera.', [
     { label: '📋 Kopiraj šifru' }, { label: '📤 Podijeli porukom (Viber, WhatsApp…)' }, { label: 'Zatvori' },
   ]);
   if (i === 0) { try { await navigator.clipboard.writeText(sifra); showToast('📋 Šifra kopirana: ' + sifra); } catch (e) { showToast('Šifra: ' + sifra); } }
@@ -37144,26 +37156,26 @@ async function _sifraPrikazi(sifra, naziv) {
     try { await navigator.clipboard.writeText(txt); showToast('📋 Poruka kopirana'); } catch (e) { showToast('Šifra: ' + sifra); }
   }
 }
-// Primalac unosi šifru: preuzmi → spremi LOKALNO → tek onda potvrdi (briše se sa servera).
+// Primalac unosi šifru: preuzmi → spremi LOKALNO. Šifra ostaje aktivna do isteka (više primalaca).
 async function primljeniPreuzmiSifrom() {
   if (!sb || !sbUser || !sbProfile) { showToast('Prijavi se da preuzmeš podatak'); return; }
   const unos = await _dlgPrompt('Unesi šifru koju si dobio (8 znakova):', '', { title: 'Preuzmi šifrom', okLabel: 'Preuzmi' });
   if (unos == null) return;
   const sifra = String(unos).toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (sifra.length !== 8) { showToast('Šifra ima 8 znakova (slova i brojevi)'); return; }
+  if (_primljeniUcitaj().some(x => String(x.id).startsWith('sifra_' + sifra + '_'))) { showToast('Ovu šifru si već preuzeo — podatak je u Primljenim podacima'); return; }
   if (typeof _mrezaSila === 'function') _mrezaSila(30000);
   if (sbUser._cachedStub && !(await _sesijaPinom(true))) { showToast('Preuzimanje traži vezu sa serverom'); return; }
   try {
     const r = await _withTimeout(sb.rpc('preuzmi_podatke_sifrom', { p_sifra: sifra }), 25000);
     if (r.error) throw r.error;
     const red = Array.isArray(r.data) ? r.data[0] : r.data;
-    if (!red || typeof red.sadrzaj !== 'string') { showToast('⚠ Šifra nije ispravna, istekla je ili je već preuzeta'); return; }
-    if (!_kmlJeIspravan(red.sadrzaj)) { showToast('⚠ Podatak nije ispravan KML'); try { await sb.rpc('potvrdi_preuzimanje_sifrom', { p_sifra: sifra }); } catch (e) {} return; }
+    if (!red || typeof red.sadrzaj !== 'string') { showToast('⚠ Šifra nije ispravna ili je istekla'); return; }
+    if (!_kmlJeIspravan(red.sadrzaj)) { showToast('⚠ Podatak nije ispravan KML'); return; }
     const lista = _primljeniUcitaj();
     const id = 'sifra_' + sifra + '_' + Date.now().toString(36);
     const stavka = await _primljeniSnimiLokalno(lista, id, red.vrsta, red.naziv, null, red.od_ime || 'Nepoznat pošiljalac', Date.now(), red.sadrzaj);
     if (!stavka) { showToast('⚠ Nije sačuvano na telefonu (memorija?) — na serveru je ostalo, pokušaj ponovo'); return; }
-    try { await sb.rpc('potvrdi_preuzimanje_sifrom', { p_sifra: sifra }); } catch (e) { /* sadržaj je lokalno; red na serveru istekne sam */ }
     _primljeniBadge();
     showToast('✓ Preuzeto: ' + stavka.naziv);
     if (document.getElementById('primljeni-panel')) _primljeniRender();

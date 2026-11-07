@@ -108,6 +108,7 @@ async def main():
     await page.evaluate("()=>{"+close+";}")
    states=[
     ('menu','toggleMenuDropdown()','#menu-dropdown','closeMenuDropdown()'),
+    ('menu-azuriranje',"_menuAzurOznaci('9.9.9');toggleMenuDropdown()",'#menu-dropdown','closeMenuDropdown()'),
     ('projects-list',"switchTab('projekat');showProjektiList()",'#proj-panel',"switchTab('karta')"),
     ('projects-detail',"switchTab('projekat');showProjektDetalji('P')",'#proj-panel',"switchTab('karta')"),
     ('project-new',"switchTab('projekat');showNovProjektForm()",'#proj-panel',"hideNovProjektForm();switchTab('karta')"),

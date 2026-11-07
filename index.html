@@ -6027,7 +6027,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.5.6';
+const APP_VER = 'v3.5.7';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6290,7 +6290,7 @@ function _loadLocalVlake() {
   <button type="button" class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-users"/></svg></span>Admin — korisnici</button>
   <button type="button" class="mdrop-item" id="menu-debug-item" style="display:none;color:#f87171;" onclick="closeMenuDropdown();if(sbProfile?.is_admin)switchTab('debug')"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-debug"/></svg></span>DEBUG</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();promijeniPin()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-pin"/></svg></span>Promijeni PIN</button>
-  <button type="button" class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();azurirajAplikaciju()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-update"/></svg></span>Ažuriraj aplikaciju</button>
+  <button type="button" id="menu-azuriraj" class="mdrop-item mdrop-azur" onclick="closeMenuDropdown();azurirajAplikaciju()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-update"/></svg></span>Ažuriraj aplikaciju<span class="mdrop-azur-nova" hidden></span></button>
   <button type="button" class="mdrop-item" id="menu-prebaci-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();racuniPrebaci()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-users"/></svg></span><span id="menu-prebaci-txt">Prebaci na profil administratora</span></button>
   <button type="button" class="mdrop-item" id="menu-dijag-item" style="display:none;color:#38bdf8;" onclick="closeMenuDropdown();dijagOtvori()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-debug"/></svg></span>Dijagnostika</button>
   <button type="button" class="mdrop-item" id="menu-apk-download" hidden style="color:#38bdf8;" onclick="closeMenuDropdown();preuzmiApkAdmin()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-load"/></svg></span><span>Preuzmi APK fajl<small>Samo admin · najnovija verzija</small></span></button>
