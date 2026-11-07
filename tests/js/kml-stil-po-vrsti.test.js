@@ -21,3 +21,11 @@ assert(!/_layerPreview\(i\)\+/.test(fn(le, '_layerStyleControls')), 'bez pregled
 assert(/prop==='ptR'\)value=Math\.max\(2,Math\.min\(14/.test(le));
 assert(/if \(l\._kmlIsPoint\) \{ lo\.radius = k\.ptR \|\| 5;/.test(src) && /ptR: data\.ptR \|\| 5/.test(src) && /store\[origName\]\.ptR/.test(src), 'ptR primjena + čuvanje');
 console.log('kml-stil-po-vrsti: ok');
+// KML linije bez dodatnog nevidljivog sloja za klik (klik hvata _kmlHitTest u map.on('click'))
+{
+  const b = fn(src, '_bindKmlPopup');
+  assert(!/L\.polyline\(/.test(b), 'bez hit-sloja po liniji (dvostruki broj slojeva)');
+  assert(/const kl = _kmlHitTest\(e\.latlng\);\s*if \(kl\) \{ _kmlOpenPopup\(kl, e\.latlng\); return; \}/.test(src), 'fallback klik postoji');
+  assert(/o\.slojeviPo = /.test(src), 'Dijagnostika: raspodjela slojeva');
+  console.log('kml linije bez hit-sloja + dijagnostika slojeva: ok');
+}

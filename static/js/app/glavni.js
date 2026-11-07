@@ -20938,21 +20938,10 @@ function _bindKmlPopup(layer) {
   layer.on('click', _onClick);
   layer.on('add',()=>{if(layer._kmlIsPolygon&&layer._path)layer._path.style.pointerEvents='all';});
 
-  // KML granice/linije su tanke i često isprekidane — bez šireg nevidljivog
-  // hit-sloja tap prstom na terenu skoro nikad ne pogodi samu liniju (isti
-  // problem i rješenje kao attachPolyClick za vlaka linije, 24px "duh" sloj).
-  // Poligoni (fillOpacity može biti 0, ali fill hit-test i dalje radi kroz
-  // cijelu unutrašnjost) i tačke (već imaju radius) to ne trebaju.
-  if (!layer._kmlIsPolygon && !layer._kmlIsPoint && layer.getLatLngs) {
-    const hit = L.polyline(layer.getLatLngs(), {
-      weight: 20, opacity: 0.001, color: '#000',
-      pane: layer.options.pane, renderer: layer.options.renderer, interactive: true
-    });
-    layer.on('add',    () => { try { hit.addTo(map); } catch(e) {} });
-    layer.on('remove', () => { try { map.removeLayer(hit); } catch(e) {} });
-    if (layer._map) { try { hit.addTo(layer._map); } catch(e) {} }
-    hit.on('click', _onClick);
-  }
+  // Ranije: nevidljiva linija od 20 px uz SVAKU KML liniju (lakši dodir prstom). Za fajl sa 2000 linija
+  // to je 2000 dodatnih slojeva na karti i 2000 širokih poteza koje canvas crta pri svakom zumu/pomaku.
+  // Nije potrebna: klik koji ne pogodi tanku liniju ide na kartu, a map.on('click') → _kmlHitTest
+  // hvata liniju sa istom tolerancijom (TOL_LINE = 20 px) i otvara isti popup.
 }
 
 // ── Zašto KML klik treba fallback preko map.on('click') ──────────────────────
@@ -36976,6 +36965,18 @@ function _perfSnimak() {
   try { const fcp = performance.getEntriesByName('first-contentful-paint')[0]; if (fcp) o.fcp = Math.round(fcp.startTime); } catch (e) {}
   o.dom = document.getElementsByTagName('*').length;
   try { o.slojeva = (typeof map !== 'undefined' && map && map._layers) ? Object.keys(map._layers).length : 0; } catch (e) { o.slojeva = 0; }
+  // Raspodjela: šta stoji na karti (vrsta · pane) — da se vidi koji dio pravi višak slojeva.
+  try {
+    const po = {};
+    for (const id in map._layers) {
+      const l = map._layers[id];
+      const vrsta = l instanceof L.CircleMarker ? 'tačka' : l instanceof L.Polygon ? 'poligon' : l instanceof L.Polyline ? (l.options?.opacity <= 0.01 ? 'linija-klik' : 'linija')
+        : l instanceof L.Marker ? 'marker' : l instanceof L.GridLayer ? 'pločice' : l instanceof L.LayerGroup ? 'grupa' : 'ostalo';
+      const k = vrsta + ' · ' + (l.options?.pane || '-');
+      po[k] = (po[k] || 0) + 1;
+    }
+    o.slojeviPo = Object.entries(po).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, n]) => k + ': ' + n);
+  } catch (e) {}
   try { o.plocica = document.querySelectorAll('.leaflet-tile').length; } catch (e) { o.plocica = 0; }
   try { o.vlaka = (typeof vlake !== 'undefined' && vlake) ? vlake.length : 0; o.tacaka = (typeof vlake !== 'undefined' && vlake) ? vlake.reduce((a, v) => a + ((v.pts && v.pts.length) || 0), 0) : 0; } catch (e) {}
   try { if (performance.memory) { o.heapMB = Math.round(performance.memory.usedJSHeapSize / 1048576); o.heapLimMB = Math.round(performance.memory.jsHeapSizeLimit / 1048576); } } catch (e) {}
@@ -37025,6 +37026,7 @@ function _perfDiagRender(elId) {
   h += red('Uređaj', o.jezgri + ' jezgri · RAM ' + o.ram + ' GB · ' + (o.ua || '?'));
   h += red('Pokretanje', (o.domInteractive || '?') + ' ms interaktivno · ' + (o.dcl || '?') + ' ms DOM' + (o.fcp ? ' · prvi prikaz ' + o.fcp + ' ms' : ''));
   h += red('DOM / slojevi / pločice', o.dom + ' / ' + o.slojeva + ' / ' + o.plocica);
+  if (o.slojeviPo && o.slojeviPo.length) h += red('Slojevi po vrsti', o.slojeviPo.slice(0, 5).join(' · '));
   h += red('Vlake', o.vlaka + ' (' + o.tacaka + ' tačaka)');
   if (o.heapMB) h += red('JS memorija', o.heapMB + ' / ' + o.heapLimMB + ' MB');
   h += red('Kašnjenje glavne niti', 'medijan ' + o.lagP50 + ' · p95 ' + o.lagP95 + ' · max ' + o.lagMax + ' ms', o.lagP95 > 100 ? '#ef4444' : '#22c55e');
