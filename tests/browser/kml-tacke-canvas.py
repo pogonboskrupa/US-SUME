@@ -50,6 +50,10 @@ async def main():
   # zum mijenja projekciju; stil se primjenjuje; uklanjanje briše canvas
   z=await page.evaluate('''async()=>{map.setZoom(12,{animate:false});await new Promise(r=>setTimeout(r,120));const g=kmlLs[0].grp;
    g.eachLayer(l=>l.setStyle({color:'#00f',fillColor:'#00f'}));g._tackeSloj.redraw();const z=g._tackeSloj._pz.z;
+   // animacija zuma (pinch/dugme): canvas se skalira kao Leafletov renderer, ne stoji pomjeren
+   g._tackeSloj._naZoomAnim({center:map.getCenter(),zoom:11});const tr=document.querySelector('.kml-tacke-canvas').style.transform;
+   if(!/scale\(0\.5\)/.test(tr))throw new Error('zoomanim bez skaliranja: '+tr);
+   map.setZoom(12,{animate:false});await new Promise(r=>setTimeout(r,80));if(/scale\(0\.5\)/.test(document.querySelector('.kml-tacke-canvas').style.transform))throw new Error('skala ostala poslije zooma');
    map.removeLayer(g);return {z,ostalo:document.querySelectorAll('.kml-tacke-canvas').length,lay:Object.keys(map._layers).length}}''')
   assert z['z']==12 and z['ostalo']==0,z
   assert not errors,errors

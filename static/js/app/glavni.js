@@ -20567,10 +20567,13 @@ function _kmlTackeKlasa() {
   _KmlTackeSloj = L.Layer.extend({
     initialize(grp) { this._grp = grp; this._pz = null; },
     onAdd(map) {
-      const c = this._c = L.DomUtil.create('canvas', 'kml-tacke-canvas leaflet-zoom-hide');
+      // Prati animaciju zuma (pinch i dugmad) kao Leafletov renderer — bez toga su tačke pri
+      // odzumiranju stajale pomjerene u odnosu na kartu dok se ne pusti prst.
+      const c = this._c = L.DomUtil.create('canvas', 'kml-tacke-canvas leaflet-zoom-animated');
       c.style.pointerEvents = 'none'; c.style.position = 'absolute';
       map.getPanes().overlayPane.appendChild(c);
       map.on('moveend zoomend resize viewreset', this._crtaj, this);
+      map.on('zoom', this._naZoom, this); map.on('zoomanim', this._naZoomAnim, this);
       // Naziv tačke na prelazak mišem (na dodirnom ekranu ga nema ni kod pojedinačnih tačaka).
       if (window.matchMedia?.('(hover:hover)').matches) map.on('mousemove', this._hover, this);
       this._crtaj();
@@ -20592,9 +20595,21 @@ function _kmlTackeKlasa() {
     },
     onRemove(map) {
       map.off('moveend zoomend resize viewreset', this._crtaj, this);
+      map.off('zoom', this._naZoom, this); map.off('zoomanim', this._naZoomAnim, this);
       map.off('mousemove', this._hover, this);
       if (this._tip) { map.removeLayer(this._tip); this._tip = null; } this._hL = null;
       this._c?.remove(); this._c = null; this._pz = null;
+    },
+    _naZoom() { this._xf(this._map.getCenter(), this._map.getZoom()); },
+    _naZoomAnim(e) { this._xf(e.center, e.zoom); },
+    // Isti račun kao L.Renderer._updateTransform: skaliraj nacrtani canvas oko njegovog centra.
+    _xf(center, zoom) {
+      const map = this._map;
+      if (!map || !this._c || this._z == null) return;
+      const scale = map.getZoomScale(zoom, this._z), half = map.getSize().multiplyBy(0.5 + this._pad);
+      const cp = map.project(this._centar, zoom);
+      const off = half.multiplyBy(-scale).add(cp).subtract(map._getNewPixelOrigin(center, zoom));
+      L.DomUtil.setTransform(this._c, off, scale);
     },
     osvjezi() { this._pz = null; if (this._map && !this._t) this._t = setTimeout(() => { this._t = null; this._crtaj(); }, 50); },
     redraw() { this._pz = null; this._crtaj(); return this; },
@@ -20613,7 +20628,8 @@ function _kmlTackeKlasa() {
     _crtaj() {
       const map = this._map, c = this._c;
       if (!map || !c) return;
-      const z = map.getZoom(), sz = map.getSize(), pad = 0.3;
+      const z = map.getZoom(), sz = map.getSize(), pad = this._pad = 0.3;
+      this._z = z; this._centar = map.getCenter();
       const w = Math.round(sz.x * (1 + 2 * pad)), h = Math.round(sz.y * (1 + 2 * pad)), dpr = Math.min(window.devicePixelRatio || 1, 2);
       const tl = map.containerPointToLayerPoint([-sz.x * pad, -sz.y * pad]).round();
       L.DomUtil.setPosition(c, tl);
@@ -21105,6 +21121,15 @@ function _kmlPopStyleToggle(uid) {
 
 function _kmlPopStylePanel(uid, layer, idx) { return _layerStyleControls(idx!==undefined?idx:_kmlPopFindIdx(uid)); }
 
+// Šta fajl sadrži: tačke (npr. doznačena stabla), linije, poligoni — stil se nudi prema tome.
+function _kmlGrpVrste(i) {
+  const v = { tacke: 0, linije: 0, poligoni: 0 };
+  const walk = g => g?.eachLayer?.(l => {
+    if (l._kmlIsPolygon) v.poligoni++; else if (l._kmlIsPoint) v.tacke++;
+    else if (l.eachLayer) walk(l); else if (l._kmlName !== undefined) v.linije++;
+  });
+  walk(kmlLs[i]?.grp); return v;
+}
 function _kmlGrpHasPolygon(i) {
   let has=false;
   const walk=g=>g?.eachLayer?.(l=>{if(l._kmlIsPolygon)has=true;else if(l.eachLayer)walk(l);});
@@ -21265,7 +21290,7 @@ function saveKmlStyles() {
     if (!k._key || k.grp===null || k._downloaded===false) return;
     userMap[k._key] = { col: k.col, dash: k.dash, weight: k.weight, opacity: k.opacity ?? 0.9, vis: k.vis,
       fill: k.fill || false, fillCol: k.fillCol || k.col, fillPattern: k.fillPattern || 'solid', fillOpacity: k.fillOpacity ?? 0.35,
-      tag: k.tag || '', onlyPolygon: k.onlyPolygon===true };
+      tag: k.tag || '', onlyPolygon: k.onlyPolygon===true, ptR: k.ptR || 5 };
   });
   localStorage.setItem(_KML_USER_STYLES_KEY, JSON.stringify(userMap));
   if(_localKmlSaveAll(false)===false)throw Error('Lokalni stil nije sačuvan');
@@ -21342,6 +21367,7 @@ function applyKmlStyle(i) {
     } else {
       lo.fillColor = k.col;
       lo.fillOpacity = l._kmlIsPoint ? op : 0;
+      if (l._kmlIsPoint) { lo.radius = k.ptR || 5; lo.weight = 1.5; lo.dashArray = null; }
     }
     l.setStyle(lo);
     if(l._kmlIsPolygon&&l._path)l._path.style.pointerEvents='all';
@@ -21545,6 +21571,7 @@ function _localKmlSaveAll(prune=true) {
       store[origName].fillCol      = k.fillCol || k.col;
       store[origName].fillPattern  = k.fillPattern || 'solid';
       store[origName].fillOpacity  = k.fillOpacity ?? 0.35;
+      store[origName].ptR          = k.ptR || 5;
       store[origName].tag          = k.tag || '';
       store[origName]._loadedAt    = k._loadedAt || store[origName]._loadedAt || 0;
     });
@@ -21595,7 +21622,7 @@ async function _localKmlRestore() {
           grp, col, dash: data.dash || '', weight: data.weight || 2,
           opacity: data.opacity ?? 0.9, vis: data.vis !== false,
           fill: data.fill || false, fillCol: data.fillCol || col,
-          fillPattern: data.fillPattern || 'solid', fillOpacity: data.fillOpacity ?? 0.35,
+          fillPattern: data.fillPattern || 'solid', fillOpacity: data.fillOpacity ?? 0.35, ptR: data.ptR || 5,
           onlyPolygon: data.onlyPolygon===true, tag: data.tag || '', _loadedAt: data._loadedAt || 0
         };
         layer.onlyPolygon=globalThis.GithubLayers?.defaultOnlyPolygon(layer)??layer.onlyPolygon;
@@ -33071,7 +33098,7 @@ async function _loadOneKml(bucketName, file, opts, extractOdjeli, cacheOnly=fals
     col: _fc, dash: finalOpts.dashArray || finalOpts.dash || '',
     weight: finalOpts.weight || 2, opacity: finalOpts.opacity ?? 0.9,
     vis: finalOpts.vis !== false,
-    fill: finalOpts.fill===true, fillCol: finalOpts.fillCol||_fc, fillPattern: finalOpts.fillPattern||'solid', fillOpacity: finalOpts.fillOpacity??0.35,
+    fill: finalOpts.fill===true, fillCol: finalOpts.fillCol||_fc, fillPattern: finalOpts.fillPattern||'solid', fillOpacity: finalOpts.fillOpacity??0.35, ptR: finalOpts.ptR||5,
     onlyPolygon: finalOpts.onlyPolygon===true, tag: finalOpts.tag||'', _loadedAt: Date.now(), _downloaded: true });
   applyKmlStyle(kmlLs.length-1);
   // Apply visibility
