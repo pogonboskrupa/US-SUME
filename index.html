@@ -2256,7 +2256,9 @@ select:focus { outline:none; border-color:#3b82f6; }
 #map-center-dot {
   position:absolute; top:50%; left:50%;
   transform:translate(-50%,-50%);
-  z-index:900; pointer-events:none;
+  /* 450: iznad karte (Leaflet slojevi su u map-pane, z 400), ali ispod panela unutar karte
+     (npr. #doz-gps-modal 500) i kontrola — ranije 900 pa je stajala preko njih. */
+  z-index:450; pointer-events:none;
   display:flex; flex-direction:column; align-items:center; gap:4px;
 }
 #mcd-ring {
@@ -2266,6 +2268,8 @@ select:focus { outline:none; border-color:#3b82f6; }
   box-shadow:0 0 0 1px rgba(255,255,255,0.5), 0 1px 4px rgba(0,0,0,0.5);
   transition:all 0.15s;
 }
+/* Otvoren popup na karti: tačka centra ne smije stajati preko njega (crtanje je izuzetak). */
+body.popup-otvoren #main:not(.drawing-active) #map-center-dot { visibility:hidden; }
 /* Crtanje aktivno — centralna tačka je interaktivna */
 .drawing-active #map-center-dot {
   pointer-events:auto; cursor:crosshair;
@@ -6023,7 +6027,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.5.5';
+const APP_VER = 'v3.5.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima

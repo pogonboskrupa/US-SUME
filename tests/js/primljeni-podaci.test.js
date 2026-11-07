@@ -95,3 +95,14 @@ function mk(opts) {
   assert(/distinct from v_ja_sum/.test(sql) && !/for insert/i.test(sql) && /to_id = auth\.uid\(\)/.test(sql) && /zzz_odobren/.test(sql));
   console.log('primljeni-podaci: ok');
 })().catch(e => { console.error(e); process.exit(1); });
+// "Na karti" drugi put ne pravi novu kopiju sloja; Sakrij umjesto Kopiraj u popupu; tačka centra ispod popupa
+(function () {
+  const f = src.slice(src.indexOf('async function _primljeniNaKarti'), src.indexOf('async function _primljeniPreimenuj'));
+  assert(/x\.lokalno && kmlLs\.find/.test(f) && /x\.lokalno = ime; _primljeniSpremi\(lista\)/.test(f), 'primljeni: bez duplih kopija');
+  assert(f.indexOf('kmlLs.find') < f.indexOf('_localLayerKml('), 'provjera prije uvoza');
+  const le = require('fs').readFileSync(__dirname + '/../../static/js/layer-editor.js', 'utf8');
+  assert(/btn\('_kmlPopSakrij','sakrij','Sakrij'\)/.test(le) && !/_kmlPopKopiraj/.test(le) && /function _kmlPopSakrij/.test(le), 'popup: Sakrij');
+  assert(/map\.on\('popupopen', \(\) => document\.body\.classList\.add\('popup-otvoren'\)\)/.test(src));
+  assert(/body\.popup-otvoren #main:not\(\.drawing-active\) #map-center-dot \{ visibility:hidden; \}/.test(src));
+  console.log('primljeni bez duplikata / popup Sakrij / tačka centra: ok');
+})();

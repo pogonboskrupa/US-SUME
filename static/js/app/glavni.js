@@ -27087,6 +27087,11 @@ map.on('moveend zoomend', () => {
   _stpMapFrame=requestAnimationFrame(()=>{_stpMapFrame=null;if(!_stp)return;_stpStilPrimijeni();_stpOverlays();if(typeof PrintSlope!=='undefined')PrintSlope.refresh();});
 });
 
+// Bijela tačka centra (#map-center-dot) je iznad svih Leaflet slojeva, pa i popupa — stajala je preko
+// sadržaja popupa (KML objekat, vlaka, mjerenje). Dok je popup otvoren, sakrij je (CSS: body.popup-otvoren).
+map.on('popupopen', () => document.body.classList.add('popup-otvoren'));
+map.on('popupclose', () => setTimeout(() => { if (!map._popup || !map.hasLayer(map._popup)) document.body.classList.remove('popup-otvoren'); }, 0));
+
 // === OFFLINE MODAL ===
 function lngLatToTile(lat, lng, z) {
   const n = Math.pow(2, z);
@@ -37222,8 +37227,20 @@ function _primljeniRender(oznaciVidjeno) {
   if (oznaciVidjeno && lista.some(x => !x.vidjeno)) { lista.forEach(x => { x.vidjeno = true; }); _primljeniSpremi(lista); _primljeniBadge(); }
 }
 async function _primljeniNaKarti(id) {
-  const x = _primljeniUcitaj().find(a => a.id === id);
+  const lista = _primljeniUcitaj(), x = lista.find(a => a.id === id);
   if (!x) return;
+  // Već uvezen (i nije obrisan sa uređaja): samo ga prikaži. Ranije je svaki klik pravio NOVU
+  // kopiju sloja ("… (2).kml", "… (3).kml").
+  const vec = x.lokalno && kmlLs.find(k => !k._key && (k._origName || k.name) === x.lokalno);
+  if (vec) {
+    const i = kmlLs.indexOf(vec);
+    if (vec.vis === false && typeof togK === 'function') togK(i);
+    else if (!map.hasLayer(vec.grp)) vec.grp.addTo(map);
+    _primljeniZatvori(); switchTab('karta');
+    try { const b = vec.grp.getBounds(); if (b.isValid()) map.fitBounds(b, { padding: [20, 20] }); } catch (e) {}
+    showToast('✓ Već je na karti: ' + vec.name);
+    return;
+  }
   const sadrzaj = await _kmlcGet('primljeno:' + id);
   if (typeof sadrzaj !== 'string') { showToast('Sadržaj nije pronađen na telefonu'); return; }
   showToast('⏳ Učitavam na kartu…');
@@ -37231,6 +37248,7 @@ async function _primljeniNaKarti(id) {
   const _t0 = performance.now();
   try {
     const ime = await _localLayerKml(x.naziv.replace(/\.kml$/i, '') + ' (od ' + x.odIme + ').kml', sadrzaj, sbUser.id);
+    x.lokalno = ime; _primljeniSpremi(lista);
     _primljeniZatvori();
     switchTab('karta');
     showToast('✓ Prikazano na karti: ' + ime + ' — uređuješ ga u Dodaj fajl na kartu → Na ovom uređaju');
@@ -37246,8 +37264,20 @@ async function _primljeniPreimenuj(id) {
   _primljeniSpremi(lista); _primljeniRender();
 }
 async function _primljeniDalje(id) {
-  const x = _primljeniUcitaj().find(a => a.id === id);
+  const lista = _primljeniUcitaj(), x = lista.find(a => a.id === id);
   if (!x) return;
+  // Već uvezen (i nije obrisan sa uređaja): samo ga prikaži. Ranije je svaki klik pravio NOVU
+  // kopiju sloja ("… (2).kml", "… (3).kml").
+  const vec = x.lokalno && kmlLs.find(k => !k._key && (k._origName || k.name) === x.lokalno);
+  if (vec) {
+    const i = kmlLs.indexOf(vec);
+    if (vec.vis === false && typeof togK === 'function') togK(i);
+    else if (!map.hasLayer(vec.grp)) vec.grp.addTo(map);
+    _primljeniZatvori(); switchTab('karta');
+    try { const b = vec.grp.getBounds(); if (b.isValid()) map.fitBounds(b, { padding: [20, 20] }); } catch (e) {}
+    showToast('✓ Već je na karti: ' + vec.name);
+    return;
+  }
   const sadrzaj = await _kmlcGet('primljeno:' + id);
   if (typeof sadrzaj !== 'string') { showToast('Sadržaj nije pronađen na telefonu'); return; }
   podaciPosalji(x.vrsta, x.naziv, sadrzaj);
