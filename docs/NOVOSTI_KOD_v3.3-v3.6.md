@@ -1,4 +1,4 @@
-# Novosti u kodu — v3.3.x do v3.6.0 (2026-11)
+# Novosti u kodu — v3.3.x do v3.6.1 (2026-11)
 
 Pregled izmjena koje mijenjaju KAKO kod radi (arhitektura, pravila, zamke).
 Kozmetika i tekstovi su izostavljeni. Detalji su u commit porukama.
@@ -45,7 +45,7 @@ Pozicija `glavni.js:NNNNNN` je **znakovni pomak**, ne red:
 | Prozirna ispuna hiljada poligona | veliki sloj bez prozirne ispune (klik i dalje kroz `_kmlHitTest`) | `applyKmlStyle` `_velik` |
 | Primljeni podaci: svakih 20 s preuzet i parsiran cijeli sadržaj (212 ms) | prvo samo zaglavlja; sadržaj samo za nove stavke | `_primljeniSync` |
 | Lista Granica crtana 8× pri startu (prozor zatvoren) | `rndGraniceModal` samo označi `_prljav`, crta pri `_openLayerSheet` | |
-| Pokretanje: jedan blok 1,2 s (mikrozadaci async koraka u istom zadatku) | kritični koraci `_startupRestore` **svaki u svom zadatku** (`setTimeout 0`), isti redoslijed; Dijagnostika bilježi i `ukupno` po koraku | `_startupRestore` |
+| Pokretanje: jedan blok 1,2 s (mikrozadaci async koraka u istom zadatku) | kritični koraci `_startupRestore` **svaki u svom zadatku** (`setTimeout 0`), isti redoslijed; Dijagnostika bilježi i `ukupno` po koraku. `_startupRestore._done` = kritični koraci GOTOVI (testovi čekaju na to); `_pokrenut` = zaštita od dvostrukog poziva | `_startupRestore` |
 | DEM pločice odjednom | red pločica `_demPredah`, trigonometrija po redu | DEM slojevi |
 | Glavna nit stalno kasni | automatski lagani prikaz (lagP95 > 180 ms) | render-health |
 | KML LINIJE: uz svaku nevidljiva linija 20 px za klik (2× slojeva + široki potezi) | **uklonjeno** — klik hvata `_kmlHitTest` (TOL_LINE 20 px) | `_bindKmlPopup` |

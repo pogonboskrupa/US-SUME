@@ -1776,8 +1776,11 @@ function _startupRestore() {
     document.addEventListener('DOMContentLoaded', _startupRestore, { once: true });
     return;
   }
-  if (_startupRestore._done) return;   // idempotentno (showApp može doći dvaput)
-  _startupRestore._done = true;
+  // _pokrenut: idempotentno (showApp može doći dvaput). _done: kritični koraci GOTOVI (postavlja
+  // se na kraju lanca ispod) — na to čekaju testovi i sve što pretpostavlja učitane projekte/kartu.
+  if (_startupRestore._pokrenut) return;
+  _startupRestore._pokrenut = true;
+  _startupRestore._done = false;
   _startupRestore._t = performance.now();   // samo mjerenje (_startupMjeri), bez uticaja na tok
   const owner = sbUser?.id;
   const generation = (_startupRestore._generation || 0) + 1;
@@ -1810,6 +1813,7 @@ function _startupRestore() {
     if (!alive()) return;
     if (_ki < kriticni.length) { const [ime, fn] = kriticni[_ki++]; korak(ime, fn); setTimeout(_sljedeci, 0); return; }
     _zavrsiKorak();
+    _startupRestore._done = true;
     _startupRestore._tSync = performance.now();
     _ostali();
   };
@@ -2307,7 +2311,7 @@ async function doLogout() {
   if(typeof _accessTrialStop!=='undefined'&&_accessTrialStop){_accessTrialStop();_accessTrialStop=null;}
   if(typeof closeVlakaStyle==='function')closeVlakaStyle();
   sbUser = null; sbProfile = null;
-  _startupRestore._done = false;
+  _startupRestore._done = false; _startupRestore._pokrenut = false;
   _startupRestore._generation = (_startupRestore._generation || 0) + 1;
   _appEntered = false;
   if(typeof SpdProfile!=='undefined')SpdProfile.sync();

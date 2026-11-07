@@ -144,7 +144,7 @@ t('promjena naloga prije odgođene obnove ne prikazuje prethodni privatni sadrž
   const isprazni = () => { while (e.pending.length) e.pending.shift()(); };
   e.owner.id='u2'; isprazni();
   assert.ok(!e.log.includes('tacke') && !e.log.includes('fotos') && !e.log.includes('localKml'));
-  e.run._done=false; e.run._generation++;
+  e.run._done=false; e.run._pokrenut=false; e.run._generation++;
   e.run(); isprazni();
   assert.ok(e.log.includes('tacke') && e.log.includes('fotos') && e.log.includes('localKml'));
 });
