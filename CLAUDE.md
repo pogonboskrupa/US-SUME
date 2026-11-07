@@ -32,17 +32,15 @@ PRATI — on je zaseban, čisto monotono rastući cijeli broj (Android to
 zahtijeva da bi update uopšte instalirao), raste +1 pri SVAKOJ izmjeni
 nezavisno od toga kako se `X.Y.Z` mijenja.
 
-## "Ažuriraj aplikaciju" — release SAMO na izričit zahtjev (od v3.0.0)
+## Release poslije svake izmjene (od 2026-11-07, v3.5.9)
 
-Korisnikov trajni zahtjev: verzija se podiže, a push na
-`claude/inline-js-split` (koji pokreće CI → GitHub Release) radi se
-SAMO kad korisnik kaže **"ažuriraj aplikaciju"** (ili jasno isto). Na ostale
-promptove: izmjene, testovi i commit LOKALNO, bez bump-a verzije i bez push-a.
-Push bez bump-a je također pogrešan — CI bi pod istim tagom prepisao APK
-postojećeg releasea, a telefon (isti versionCode) ne bi ponudio update.
-Kad stigne "ažuriraj aplikaciju": jedan bump (sva tri mjesta), commit, push.
-Lokalni commiti nestaju ako se kontejner ugasi — upozoriti korisnika ako se
-nakupi puno neobjavljenog rada.
+Korisnik je UKINUO raniji zahtjev "release samo na 'ažuriraj aplikaciju'"
+(v3.0.0 – v3.5.8). Sada: svaka gotova izmjena koda (testovi prošli) ide
+odmah kao release — jedan bump verzije (sva tri mjesta), commit, push na
+`claude/inline-js-split` (CI → GitHub Release). Push bez bump-a je i dalje
+pogrešan (CI bi pod istim tagom prepisao APK postojećeg releasea, a telefon
+sa istim versionCode ne bi ponudio update). Prije javljanja korisniku da je
+objavljeno, provjeriti da je release stvarno nastao (CI zelen, APK prilog).
 
 ## APK build — assets se NE povlače sami
 
