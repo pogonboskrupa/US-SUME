@@ -1784,23 +1784,37 @@ function _startupRestore() {
   _startupRestore._generation = generation;
   const alive = () => !!owner && sbUser?.id === owner && _startupRestore._generation === generation;
 
-  const korak = (ime, fn) => { if (!alive()) return; const t0 = performance.now(); try { Promise.resolve(fn()).catch(e => console.warn('startup:' + ime, e)); } catch(e) { console.warn('startup:' + ime, e); } try { (window._PERF_KORACI = window._PERF_KORACI || []).push({ ime, sync: Math.round(performance.now() - t0), at: Math.round(t0) }); } catch(e) {} };
+  // Bilježi i SINHRONI dio (sync) i UKUPNO sa nastavcima async koraka (ukupno, upisuje ga sljedeći korak):
+  // nastavci (mikrozadaci) se izvršavaju tek poslije sinhronog dijela, pa sync sam ne vidi teški posao.
+  let _zadnjiKorak = null;
+  const _zavrsiKorak = () => { if (_zadnjiKorak && _zadnjiKorak.ukupno == null) _zadnjiKorak.ukupno = Math.round(performance.now() - _zadnjiKorak.at); };
+  const korak = (ime, fn) => { if (!alive()) return; _zavrsiKorak(); const t0 = performance.now(); try { Promise.resolve(fn()).catch(e => console.warn('startup:' + ime, e)); } catch(e) { console.warn('startup:' + ime, e); } try { const z = { ime, sync: Math.round(performance.now() - t0), at: Math.round(t0) }; (window._PERF_KORACI = window._PERF_KORACI || []).push(z); _zadnjiKorak = z; } catch(e) {} };
 
-  korak('bufferStyle', () => { if(typeof _bufRestorePrefs==='function')_bufRestorePrefs(); });
-  korak('visibility', () => { if(typeof _tvVisibilityRestore==='function')_tvVisibilityRestore(); });
-  korak('switchTab',   () => switchTab('karta'));
-  korak('sqlmapRestore', async () => { await sqlmapRestoreAll(); if(alive() && window.MapDownloads?.available()){await MapDownloads.resume();if(alive())await MapDownloads.openFromNotification();} });
-  korak('projectPolygon',()=>{if(typeof ProjectTerrain!=='undefined')ProjectTerrain.refresh();});
-  korak('loadProj',    () => loadProj());        // lokalni podaci odmah (sinhrono, brzo)
-  if (typeof FieldStore !== 'undefined') korak('fieldStore', async () => { await FieldStore.init(); if(alive())_updSyncBadge(); });
-  korak('sbInitData',  () => Promise.resolve(sbInitData()).catch(e => console.warn('sbInitData:', e)));   // Supabase podaci u pozadini
-  korak('queue', () => _processOfflineQueue());   // red sam odlučuje o vezi
-  korak('primljeni', () => { _primljeniBadge(); return _primljeniSync(); });
-  _startupRestore._tSync = performance.now();
-  // Ostali restore koraci ne blokiraju početak čitanja aktivne karte.
-
-  // Ostali nekritični restores iza prvog painta
-  setTimeout(() => {
+  // Kritični koraci idu SVAKI U SVOM ZADATKU (setTimeout 0), istim redoslijedom. Ranije su svi bili
+  // u jednom: sa nastavcima async koraka to je na srednjem Xiaomiju bio JEDAN blok od 1,2 s pri
+  // pokretanju (ekran ne reaguje). Ovako se između koraka iscrta karta i prihvati dodir.
+  const kriticni = [
+    ['bufferStyle', () => { if(typeof _bufRestorePrefs==='function')_bufRestorePrefs(); }],
+    ['visibility', () => { if(typeof _tvVisibilityRestore==='function')_tvVisibilityRestore(); }],
+    ['switchTab',   () => switchTab('karta')],
+    ['sqlmapRestore', async () => { await sqlmapRestoreAll(); if(alive() && window.MapDownloads?.available()){await MapDownloads.resume();if(alive())await MapDownloads.openFromNotification();} }],
+    ['projectPolygon',()=>{if(typeof ProjectTerrain!=='undefined')ProjectTerrain.refresh();}],
+    ['loadProj',    () => loadProj()],        // lokalni podaci odmah
+    typeof FieldStore !== 'undefined' ? ['fieldStore', async () => { await FieldStore.init(); if(alive())_updSyncBadge(); }] : null,
+    ['sbInitData',  () => Promise.resolve(sbInitData()).catch(e => console.warn('sbInitData:', e))],   // Supabase podaci u pozadini
+    ['queue', () => _processOfflineQueue()],   // red sam odlučuje o vezi
+    ['primljeni', () => { _primljeniBadge(); return _primljeniSync(); }],
+  ].filter(Boolean);
+  let _ki = 0;
+  const _sljedeci = () => {
+    if (!alive()) return;
+    if (_ki < kriticni.length) { const [ime, fn] = kriticni[_ki++]; korak(ime, fn); setTimeout(_sljedeci, 0); return; }
+    _zavrsiKorak();
+    _startupRestore._tSync = performance.now();
+    _ostali();
+  };
+  // Ostali nekritični restores iza prvog painta (poslije kritičnih)
+  const _ostali = () => setTimeout(() => {
     if (!alive()) return;
     korak('geojsonOdjeli', () => geojsonOdjeliRestore());
     korak('tragReg',       () => _tragRegLoad());
@@ -1828,8 +1842,10 @@ function _startupRestore() {
         navigator.storage.persisted().then(p => { if (!p) navigator.storage.persist(); });
       }
     });
+    korak('kraj', () => {});   // zatvara mjerenje zadnjeg koraka
     // Vodeći projektant: nalog služi isključivo nadzoru — odmah otvori pregled
   }, 80);
+  _sljedeci();
 }
 
 // --- Auth form helpers ---
@@ -36971,7 +36987,7 @@ function _perfSnimak() {
   o.idb = Object.entries(window._PERF_IDB || {}).map(([k, v]) => ({ vrsta: k, n: v.n, ms: v.ms, max: v.max, kbMax: v.kb })).sort((a, b) => b.ms - a.ms);
   o.greske = (window._PERF_GRESKE || []).slice(-10);
   o.loaf = _PERF.loaf.slice(0, 8);
-  o.koraci = (window._PERF_KORACI || []).filter(k => k.sync >= 20).sort((a, b) => b.sync - a.sync).slice(0, 8);
+  o.koraci = (window._PERF_KORACI || []).filter(k => Math.max(k.sync, k.ukupno || 0) >= 20).sort((a, b) => Math.max(b.sync, b.ukupno || 0) - Math.max(a.sync, a.ukupno || 0)).slice(0, 8);
   o.najduzi = _PERF.lt.slice().sort((a, b) => b.ms - a.ms).slice(0, 8);
   try { const R = window.DendroRender; if (R && R.state) { o.nacin = R.state.lite ? 'lagani' : 'puni'; o.pomicanja = (R.state.hist || []).map(x => x.p50 + '/' + x.p95); } } catch (e) {}
   return o;
@@ -37018,7 +37034,7 @@ function _perfDiagRender(elId) {
   if (o.funkcije.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Vruće funkcije (ukupno vrijeme)</div>'; o.funkcije.slice(0, 8).forEach(t => { h += red(t.fn, t.n + '× · ' + t.ms + ' ms · ø ' + t.avg + ' · max ' + t.max); }); }
   if (o.loaf && o.loaf.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Šta je držalo nit (skripta · crtanje)</div>'; o.loaf.forEach(t => { h += red('+' + Math.round(t.at / 1000) + ' s · ' + t.tab + ' · ' + t.ms + ' ms (crtanje ' + t.crtanje + ')', (t.skripte.join('; ') || 'bez skripte — stil/raspored/slike')); }); }
   if (o.idb && o.idb.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Čitanja IndexedDB (vrsta zapisa)</div>'; o.idb.slice(0, 6).forEach(t => { h += red(t.vrsta, t.n + '× · ' + t.ms + ' ms · max ' + t.max + (t.kbMax ? ' · do ' + t.kbMax + ' KB' : '')); }); }
-  if (o.koraci && o.koraci.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Spori koraci pokretanja</div>'; o.koraci.forEach(k => { h += red(k.ime, k.sync + ' ms (sinhroni dio) · +' + k.at + ' ms'); }); }
+  if (o.koraci && o.koraci.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Spori koraci pokretanja</div>'; o.koraci.forEach(k => { h += red(k.ime, k.sync + ' ms sinhrono' + (k.ukupno != null ? ' · ' + k.ukupno + ' ms ukupno' : '') + ' · +' + k.at + ' ms'); }); }
   if (o.najduzi.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Najduži zastoji</div>'; o.najduzi.forEach(t => { h += red('+' + Math.round(t.at / 1000) + ' s · ' + t.tab, t.ms + ' ms'); }); }
   h += '<div style="display:flex;gap:8px;margin-top:10px;"><button onclick="_perfDiagRender(\'' + (typeof elId === 'string' ? elId : 'perf-diag-card') + '\')" style="flex:1;padding:9px;background:#0c4a6e;border:1px solid #38bdf8;border-radius:8px;color:#e0f2fe;font-size:12px;font-weight:700;">Osvježi</button>' +
     '<button onclick="_perfKopiraj()" style="flex:1;padding:9px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#bbf7d0;font-size:12px;font-weight:700;">Kopiraj izvještaj</button>' +

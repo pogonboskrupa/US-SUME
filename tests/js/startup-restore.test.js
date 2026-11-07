@@ -141,11 +141,21 @@ t('dvostruki poziv obnavlja samo jednom', () => {
 
 t('promjena naloga prije odgođene obnove ne prikazuje prethodni privatni sadržaj', () => {
   const e = makeEnv({ delayed:true }); e.run();
-  e.owner.id='u2'; e.pending.shift()();
+  const isprazni = () => { while (e.pending.length) e.pending.shift()(); };
+  e.owner.id='u2'; isprazni();
   assert.ok(!e.log.includes('tacke') && !e.log.includes('fotos') && !e.log.includes('localKml'));
   e.run._done=false; e.run._generation++;
-  e.run(); e.pending.shift()();
+  e.run(); isprazni();
   assert.ok(e.log.includes('tacke') && e.log.includes('fotos') && e.log.includes('localKml'));
+});
+
+t('kritični koraci idu svaki u svom zadatku (ne jedan blok), istim redoslijedom', () => {
+  const e = makeEnv({ delayed: true }); e.run();
+  const n = () => e.log.filter(x => !x.startsWith('warn:')).length;
+  let prije = n();
+  while (e.pending.length && n() < 5) { e.pending.shift()(); assert.ok(n() - prije <= 1, 'najviše jedan korak po zadatku'); prije = n(); }
+  while (e.pending.length) e.pending.shift()();
+  assert.deepStrictEqual(e.log.filter(x => !x.startsWith('warn:')), SVI);
 });
 
 console.log('switchTab — nedostajući paneli:');
