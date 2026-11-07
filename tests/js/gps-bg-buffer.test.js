@@ -97,7 +97,8 @@ t('korumpiran/prazan sadržaj ne ruši oporavak', () => {
   assert.deepStrictEqual(makeUzmi({ readNativeBuffer: () => '{nije json' })(), []);
   assert.deepStrictEqual(makeUzmi({ readNativeBuffer: () => '' })(), []);
   assert.deepStrictEqual(makeUzmi({ readNativeBuffer: () => '[]' })(), []);
-  assert.throws(makeUzmi({ readNativeBuffer: () => { throw new Error('most pao'); } }), /most pao/);
+  // v3.4.6: pad mosta NE ruši oporavak (ranije je bacao pa se isti dijalog vraćao pri svakom pokretanju)
+  assert.deepStrictEqual(makeUzmi({ readNativeBuffer: () => { throw new Error('most pao'); } })(), []);
 });
 
 t('most se pita SAMO JEDNOM po pozivu (paket ostaje pending do ack-a)', () => {
@@ -112,6 +113,7 @@ console.log('_crashCheck — dopuna oporavljenog snimanja iz native bafera:');
 
 const SRC_CRASH = [
   extractFn('_nativeBufUzmi'),
+  extractFn('_nativeRijetko'),
   extractFn('_crashClearVlaka'),
   extractFn('_crashClearTrag'),
   extractFn('_crashCheck'),
@@ -294,7 +296,7 @@ t('nema nedovršenog snimanja → bafer se NE dira (nema šta da mu se doda)', a
 t('native ack se NE šalje ako lokalni journal nije upisan', () => {
   let ack = 0;
   const fn = makeUzmi({readNativeBuffer:()=>JSON.stringify([{la:44,lo:16,t:1}]),ackNativeBuffer:()=>ack++}, true);
-  assert.throws(fn,/quota/); assert.equal(ack,0);
+  assert.doesNotThrow(fn); assert.equal(ack,0);   // v3.4.6: ne baca, a native fajl ostaje nepotvrđen
 });
 t('oporavak čuva al i projekt i stvarno piše lokalni keš', async () => {
   const {fn,stanje,sandbox} = makeCrash({snapV:{nm:'T1',ts:1,projektId:'p1',pts:[[44,16,600],[44.01,16.01,610]]}});
@@ -377,3 +379,28 @@ t('neuspješan trajni upis zadržava crash snapshot', async () => {
   console.log('\n' + pass + ' prošlo, ' + fail + ' palo');
   process.exit(fail ? 1 : 0);
 })();
+
+// ── v3.4.6: ponavljajući dijalog "nedovršeno snimanje sa 0 tačaka" ──────────
+t('oštećen journal (bez raw / loš JSON) ne baca i ne ponavlja dijalog', () => {
+  const mkLS = v => ({ getItem: k => k === 'tvlake_native_journal' ? v : null, setItem() {}, removeItem() {} });
+  const f1 = new Function('AndroidGps', 'localStorage', SRC_UZMI + '\nreturn _nativeBufUzmi;')(undefined, mkLS('[{"token":"a"}]'));
+  assert.deepStrictEqual(f1(), []);
+  const f2 = new Function('AndroidGps', 'localStorage', SRC_UZMI + '\nreturn _nativeBufUzmi;')(undefined, mkLS('{{{'));
+  assert.deepStrictEqual(f2(), []);
+});
+t('snimak sa 0 tačaka i bez native tačaka se tiho čisti, bez dijaloga', async () => {
+  const {fn,sandbox} = makeCrash({snapV:{nm:'T1',ts:1,pts:[]}});
+  let dijalog = 0; sandbox._dlgConfirm = async () => { dijalog++; return true; };
+  await fn();
+  assert.equal(dijalog, 0, 'nema dijaloga za prazan snimak');
+  assert.equal(sandbox.localStorage.getItem('tvlake_crash_vlaka_v2'), null, 'snimak je očišćen');
+});
+t('_nativeRijetko: 56 000 fiksova u mjestu → nekoliko tačaka; kretanje i zadnji fiks se čuvaju', () => {
+  const fn = new Function(extractFn('_nativeRijetko') + '\nreturn _nativeRijetko;')();
+  const stoji = Array.from({ length: 56000 }, (_, i) => ({ t: i, la: 44 + (i % 3) * 1e-7, lo: 16 + (i % 2) * 1e-7 }));
+  const r = fn(stoji, 1.5);
+  assert(r.length <= 3, 'šum u mjestu se sažima, ostalo ' + r.length);
+  assert.strictEqual(r[r.length - 1].t, 55999, 'zadnji fiks ostaje');
+  const hoda = Array.from({ length: 100 }, (_, i) => ({ t: i, la: 44 + i * 1e-4, lo: 16 }));   // ~11 m razmaka
+  assert.strictEqual(fn(hoda, 1.5).length, 100, 'hodanje se ne rijedi');
+});

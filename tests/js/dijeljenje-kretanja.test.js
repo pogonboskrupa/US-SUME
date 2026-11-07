@@ -295,7 +295,8 @@ t('prozor: izbor jedne osobe objašnjava da ona dobija obavijest', () => {
 t('markup: prozor, Teren dugme, prečica u popupu, Java most za obavijest i tekst', () => {
   assert.ok(/id="share-sheet"/.test(SRC) && /id="share-sheet-body"/.test(SRC));
   assert.ok(/id="trn-share-btn"/.test(SRC) && /onclick="terenTogShare\(\)"/.test(SRC));
-  assert.ok(/id="ab-loc-dijeli"/.test(SRC));
+  assert.ok(!/id="ab-loc-dijeli"/.test(SRC),'Dijeli kretanje je uklonjeno iz popupa Moja lokacija');
+  assert.ok(/id="ab-loc-tragovi"/.test(SRC)&&/id="ab-loc-mjerenja"/.test(SRC));
   assert.ok(/new AppNotifBridge\(this\), "AndroidNotif"/.test(JAVA));
   assert.ok(/public void shareText\(String title, String text\)/.test(JAVA));
   assert.ok(/prati=/.test(BLOK));

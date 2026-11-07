@@ -444,6 +444,7 @@ public class MainActivity extends Activity {
 
         private String guessMime(String filename) {
             if (filename.endsWith(".kml")) return "application/vnd.google-earth.kml+xml";
+            if (filename.endsWith(".kmz")) return "application/vnd.google-earth.kmz";
             if (filename.endsWith(".gpx")) return "application/gpx+xml";
             if (filename.endsWith(".geojson")) return "application/geo+json";
             if (filename.endsWith(".json")) return "application/json";
@@ -874,6 +875,7 @@ public class MainActivity extends Activity {
 
         private String guessMime(String filename) {
             if (filename.endsWith(".kml")) return "application/vnd.google-earth.kml+xml";
+            if (filename.endsWith(".kmz")) return "application/vnd.google-earth.kmz";
             if (filename.endsWith(".gpx")) return "application/gpx+xml";
             if (filename.endsWith(".geojson")) return "application/geo+json";
             if (filename.endsWith(".json")) return "application/json";

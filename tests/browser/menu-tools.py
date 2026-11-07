@@ -29,7 +29,7 @@ body=section('<div id="guide-choice-modal"','<!-- PROFIL VISINA MODAL -->')+sect
 js='''
 let sbUser={id:'A'},sbProfile={ime:'Emina',prezime:'Projektant'},lastP={la:44.9,lo:16},_fotoSnapPos=null;
 const _LOCAL_KML_KEY='fixture_local',_GUIDE_ROUTES_KEY='fixture_routes',_KML_USER_STYLES_KEY='fixture_styles';let _dozKmlSelMode=false;window._dozDrawType=null;window._dozDrawEnabled=false;
-const _KMLC_DB='fixture_cache',_KMLC_STORE='files';let _kmlcDB=null,_kmlcKeys=new Set();
+const _KMLC_DB='fixture_cache',_KMLC_STORE='files',_KMLC_BLOB_MIN=200000,_kmlcMigrirano=new Set(),_KML_PO_DIJELOVIMA_MIN=1200000;let _kmlcDB=null,_kmlcKeys=new Set();
 let kmlLs=[],kmlCI=0;const KCOLS=['#16a34a','#2563eb'],_glCollapsed=new Set();
 const map=L.map('map').setView([44.9,16],13),_genUUID=()=>crypto.randomUUID();
 let chosenStart=null,selectedRoute=null,sharedRoute=null,_guideActiveRouteId=null;
@@ -48,7 +48,7 @@ const _OP_LABELS={upsert_vlaka:'Vlaka',insert_doz_marking:'Zona doznake'},server
 let exchangeCalls=[],exchangeHold=false,exchangeRelease=null;
 const _mrezaSila=()=>{},serverPreuzmiDijeljeno=async()=>{exchangeCalls.push('vlake');return {ok:true,count:1,projects:1}},dozLoadOdjeli=async()=>{exchangeCalls.push('doz');return true},dozLoadLayers=async id=>{exchangeCalls.push('doz-'+id);return true};
 '''
-js+='\n'.join(function(n) for n in ['dst','calcL','openSyncQueuePanel','closeSyncQueuePanel','_serverSazetakRender','_fmtAgo','_escHtml','fmtL','showGuideChoice','closeGuideChoice','_guideRoutesLoad','_guideRoutesStore','_guideDeleteRoute','_guideRenderRoutes','_guideTrajanjeTxt','startLocPhoto','_firstCoord','pkml','_kmlPointClick','_kmlGrpClick','_kmlGrpTip','pcs','_parseKmlExtData','_bindKmlPopup','_kmlcOpen','_kmlcSave','_kmlcGet','_kmlcDelete','_localKmlSaveContent','_localKmlRestore','_localKmlSaveAll','_kmlGrpHasPolygon','applyKmlStyle','delK','_kmlCanvasPattern','_ensureKmlPattern','saveKmlStyles','_kmlPopFindLayer','_kmlPopFindIdx','_kmlPopSave','_kmlPopCancel','_kmlPopEditStart','_kmlPopStyleToggle','_kmlPopStylePanel','_kmlPopupHtml','_kmlOpenPopup','_kmlPopZoom'])
+js+='\n'.join(function(n) for n in ['_kmlcMigrirajUBlob','_kmlGrupaIzSadrzaja','dst','calcL','openSyncQueuePanel','closeSyncQueuePanel','_serverSazetakRender','_fmtAgo','_escHtml','fmtL','showGuideChoice','closeGuideChoice','_guideRoutesLoad','_guideRoutesStore','_guideDeleteRoute','_guideRenderRoutes','_guideTrajanjeTxt','startLocPhoto','_firstCoord','pkml','_kmlPointClick','_kmlGrpClick','_kmlGrpTip','pcs','_parseKmlExtData','_bindKmlPopup','_kmlcOpen','_kmlcSave','_kmlcGet','_kmlcDelete','_localKmlSaveContent','_localKmlRestore','_localKmlSaveAll','_kmlGrpHasPolygon','applyKmlStyle','delK','_kmlCanvasPattern','_ensureKmlPattern','saveKmlStyles','_kmlPopFindLayer','_kmlPopFindIdx','_kmlPopSave','_kmlPopCancel','_kmlPopEditStart','_kmlPopStyleToggle','_kmlPopMod','_kmlPopNazad','_kmlPopStylePanel','_kmlPopupHtml','_kmlOpenPopup','_kmlPopZoom'])
 js+='\n'+(ROOT/'static/js/layer-editor.js').read_text()
 js+='\n'+'\n'.join(re.findall(r"proj4.defs\('EPSG:3127[56]', [^\n]+",SOURCE))
 js+='\n'+(ROOT/'static/js/local-layer-import.js').read_text()+'\n'+(ROOT/'static/js/tab-data.js').read_text()+'\n'+(ROOT/'static/js/server-panel.js').read_text()
@@ -202,6 +202,11 @@ async def main():
         await page.evaluate("map.closePopup()")
         await page.locator(".kml-info-popup").wait_for(state="detached")
         await page.evaluate("_kmlOpenPopup(kmlLs[0].grp.getLayers()[0],map.getCenter());_kmlPopEditStart(kmlLs[0].grp.getLayers()[0]._kmlPopupId)")
+        # Podprikaz: naziv/mjere/atributi sakriveni dok je otvoren Naziv i opis; Nazad ih vraća.
+        assert not await page.locator('.le-object-measure').is_visible() and not await page.locator('.le-pop-act').is_visible()
+        await page.locator('.le-fields .le-nazad').click()
+        assert await page.locator('.le-pop-act').is_visible() and not await page.locator('.le-fields').is_visible()
+        await page.evaluate("_kmlPopEditStart(kmlLs[0].grp.getLayers()[0]._kmlPopupId)")
         await page.locator('.le-fields input').fill('Čuvar <b>105</b>')
         await page.locator('.le-fields textarea').fill('Nova napomena & opis')
         await page.evaluate('_kmlPopSave(kmlLs[0].grp.getLayers()[0]._kmlPopupId)')

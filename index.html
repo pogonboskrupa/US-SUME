@@ -2101,6 +2101,9 @@ select:focus { outline:none; border-color:#3b82f6; }
 /* === AŽURIRANJE APLIKACIJE (panel preuzimanja/instalacije) === */
 #upd-bg { position:fixed; inset:0; background:rgba(2,6,23,0.62); z-index:99990; display:none; align-items:flex-end; justify-content:center; }
 #upd-bg.show { display:flex; }
+.upd-min { flex:0 0 auto; width:44px; height:44px; border-radius:12px; border:1px solid #0f3460; background:#0f3460; color:#e2e8f0; font-size:24px; line-height:1; cursor:pointer; }
+#upd-pill { position:fixed; top:62px; left:50%; transform:translateX(-50%); z-index:99991; max-width:94vw; min-height:44px; padding:0 18px; border-radius:22px;
+  border:1.5px solid #38bdf8; background:#0f1b33; color:#e2e8f0; font:700 12px system-ui; white-space:nowrap; box-shadow:0 4px 14px rgba(0,0,0,.5); cursor:pointer; }
 #upd-sheet { width:100%; max-width:440px; background:#16213e; border:1px solid #0f3460; border-bottom:none; border-radius:18px 18px 0 0;
   padding:18px 18px calc(18px + env(safe-area-inset-bottom,0px)); box-shadow:0 -10px 30px rgba(0,0,0,0.45); color:#e2e8f0;
   transform:translateY(0); animation:updUp .22s ease-out; box-sizing:border-box; }
@@ -2253,7 +2256,9 @@ select:focus { outline:none; border-color:#3b82f6; }
 #map-center-dot {
   position:absolute; top:50%; left:50%;
   transform:translate(-50%,-50%);
-  z-index:900; pointer-events:none;
+  /* 450: iznad karte (Leaflet slojevi su u map-pane, z 400), ali ispod panela unutar karte
+     (npr. #doz-gps-modal 500) i kontrola — ranije 900 pa je stajala preko njih. */
+  z-index:450; pointer-events:none;
   display:flex; flex-direction:column; align-items:center; gap:4px;
 }
 #mcd-ring {
@@ -2263,6 +2268,8 @@ select:focus { outline:none; border-color:#3b82f6; }
   box-shadow:0 0 0 1px rgba(255,255,255,0.5), 0 1px 4px rgba(0,0,0,0.5);
   transition:all 0.15s;
 }
+/* Otvoren popup na karti: tačka centra ne smije stajati preko njega (crtanje je izuzetak). */
+body.popup-otvoren #main:not(.drawing-active) #map-center-dot { visibility:hidden; }
 /* Crtanje aktivno — centralna tačka je interaktivna */
 .drawing-active #map-center-dot {
   pointer-events:auto; cursor:crosshair;
@@ -5341,6 +5348,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
              komentar uz _netZabiljezi. Dugme ispod je JEDINI zahtjev koji ova
              sekcija sama napravi, i to tek na izričit klik. -->
         <div id="net-debug-card" style="background:#080f1e;border:1px solid #334155;border-radius:10px;padding:12px;margin-bottom:12px;"></div>
+        <div id="perf-diag-card" style="background:#080f1e;border:1px solid #0e7490;border-radius:10px;padding:12px;margin-bottom:12px;"></div>
 
         <button onclick="_netTestSada()" id="btn-net-test"
           style="width:100%;padding:10px;margin-bottom:14px;background:#14233c;border:1px solid #3b82f6;border-radius:9px;color:#93c5fd;font-size:12px;font-weight:700;cursor:pointer;">
@@ -5606,8 +5614,9 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           <span class="doz-detail-meta" id="doz-detail-area"></span>
         </div>
         <div id="doz-context" class="doz-context"></div>
+        <div class="doz-top-add"><button class="btn b" id="doz-add-member-btn" onclick="dozAddMember()"><svg class="ic"><use href="#ic-korisnik"/></svg> Dodaj projektanta</button></div>
         <div id="doz-pregled" class="doz-pregled" hidden></div>
-        <div class="doz-local-card" id="doz-local-status" aria-live="polite"></div>
+        <div id="doz-ekipa" class="doz-ekipa" hidden></div>
         <nav class="doz-nav" aria-label="Doznaka sekcije"><button onclick="dozGoSection('gps')">GPS</button><button onclick="dozGoSection('stats')">Pregled</button><button onclick="dozGoSection('zones')">Zone</button><button onclick="dozGoSection('vlake')">Vlake</button></nav>
         <div class="doz-row-lbl">Status odjela</div>
         <div id="doz-status-row" style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 12px 4px;"></div>
@@ -5640,13 +5649,11 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         <div class="sec" id="doz-section-team">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
             <div class="sec-t" style="margin:0;">👥 Projektanti</div>
-            <button class="btn b" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozAddMember()">+ Dodaj</button>
           </div>
           <div id="doz-members-list"><div class="doz-empty">Nema članova</div></div>
         </div>
 
 
-        <div class="sec" id="doz-section-plan"><button type="button" class="dp-entry" onclick="DoznakaPlan.open()"><span><b>Projekcija trajanja doznake</b><small id="doz-plan-summary">Izohipsni pojasevi i procjena radnih dana</small></span><strong aria-hidden="true">↗</strong></button></div>
 
         <div class="sec" id="doz-section-zones">
           <div class="doz-sec-hdr">
@@ -5722,12 +5729,13 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         <div class="doz-post-grupa">
           <div class="sec-t">📐 Pojasevi</div>
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-            <span style="font-size:11px;color:#94a3b8;">Vanjski rub:</span>
+            <span style="font-size:11px;color:#94a3b8;" title="Ukupna širina pojasa: pola sa svake strane traga">Širina pojasa:</span>
             <select id="doz-band-outer" onchange="dozBandOuterChange()" style="flex:1;padding:4px 6px;background:#0f172a;border:1px solid #374151;border-radius:5px;color:#eee;font-size:11px;">
-              <option value="15">15 m</option>
-              <option value="20" selected>20 m (default)</option>
-              <option value="30">30 m</option>
-              <option value="40">40 m</option>
+              <option value="10">10 m (5 + 5)</option>
+              <option value="15">15 m (7,5 + 7,5)</option>
+              <option value="20" selected>20 m (10 + 10, zadano)</option>
+              <option value="30">30 m (15 + 15)</option>
+              <option value="40">40 m (20 + 20)</option>
             </select>
             <button class="btn b" style="margin:0;padding:4px 10px;font-size:11px;" onclick="dozRefreshBands()"><svg class="ic"><use href="#ic-osvjezi"/></svg></button>
           </div>
@@ -5779,6 +5787,8 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           </div>
         </div>
         </details>
+
+        <div class="sec" id="doz-section-plan"><button type="button" class="dp-entry" onclick="DoznakaPlan.open()"><span><b>Projekcija trajanja doznake</b><small id="doz-plan-summary">Izohipsni pojasevi i procjena radnih dana</small></span><strong aria-hidden="true">↗</strong></button></div>
 
         <div class="sec">
           <div class="sec-t">📶 Dijeljenje pojasa bez interneta</div>
@@ -6017,7 +6027,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.3.2';
+const APP_VER = 'v3.5.7';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6091,6 +6101,11 @@ try {
   if (localStorage.getItem('tvlake_debug_ocisceno_v154') !== '1') {
     localStorage.removeItem('tvlake_admin_debug_v1');
     localStorage.setItem('tvlake_debug_ocisceno_v154', '1');
+  }
+  // v3.3.9: na zahtjev, sav sadržaj Debug sekcije se briše jednokratno.
+  if (localStorage.getItem('tvlake_debug_ocisceno_v339') !== '1') {
+    ['tvlake_admin_debug_v1', 'tvlake_startup_zadnje', 'tvlake_map_startup_diag_v1'].forEach(k => localStorage.removeItem(k));
+    localStorage.setItem('tvlake_debug_ocisceno_v339', '1');
   }
 } catch(e) {}
 
@@ -6240,6 +6255,7 @@ function _loadLocalVlake() {
   <div class="mdrop-scroll"><section class="mdrop-section mdrop-server-section">
   <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg>Server</div>
   <button type="button" class="mdrop-item" id="mdrop-server"  onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg></span>Pošalji na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;flex-shrink:0;white-space:nowrap;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;white-space:nowrap;display:inline-block;"></span></span></button>
+  <button type="button" class="mdrop-item" id="mdrop-primljeni" onclick="closeMenuDropdown();primljeniOtvori()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-folders"/></svg></span>Primljeni podaci<span id="mdrop-primljeni-cnt" style="display:none;margin-left:auto;padding-left:8px;flex-shrink:0;"><span style="background:#22c55e;color:#04210f;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;display:inline-block;"></span></span></button>
 </section><div id="spd-menu-launch" hidden aria-label="ŠPD prečice">
     <button type="button" onclick="SpdProfile.open()"><svg class="ic" aria-hidden="true"><use href="#ic-korisnik"/></svg><span>Moj ŠPD profil<small>Zapisi, karte i sigurnosna kopija</small></span>›</button>
     <button type="button" onclick="closeMenuDropdown();switchTab('teren')">Otvori Teren</button>
@@ -6274,7 +6290,9 @@ function _loadLocalVlake() {
   <button type="button" class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-users"/></svg></span>Admin — korisnici</button>
   <button type="button" class="mdrop-item" id="menu-debug-item" style="display:none;color:#f87171;" onclick="closeMenuDropdown();if(sbProfile?.is_admin)switchTab('debug')"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-debug"/></svg></span>DEBUG</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();promijeniPin()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-pin"/></svg></span>Promijeni PIN</button>
-  <button type="button" class="mdrop-item" style="color:#38bdf8;" onclick="closeMenuDropdown();azurirajAplikaciju()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-update"/></svg></span>Ažuriraj aplikaciju</button>
+  <button type="button" id="menu-azuriraj" class="mdrop-item mdrop-azur" onclick="closeMenuDropdown();azurirajAplikaciju()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-update"/></svg></span>Ažuriraj aplikaciju<span class="mdrop-azur-nova" hidden></span></button>
+  <button type="button" class="mdrop-item" id="menu-prebaci-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();racuniPrebaci()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-users"/></svg></span><span id="menu-prebaci-txt">Prebaci na profil administratora</span></button>
+  <button type="button" class="mdrop-item" id="menu-dijag-item" style="display:none;color:#38bdf8;" onclick="closeMenuDropdown();dijagOtvori()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-debug"/></svg></span>Dijagnostika</button>
   <button type="button" class="mdrop-item" id="menu-apk-download" hidden style="color:#38bdf8;" onclick="closeMenuDropdown();preuzmiApkAdmin()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-load"/></svg></span><span>Preuzmi APK fajl<small>Samo admin · najnovija verzija</small></span></button>
   <button type="button" class="mdrop-item" id="menu-device-settings" onclick="closeMenuDropdown();showDeviceSettings()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-battery"/></svg></span>Baterija i automatsko pokretanje</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showHelp()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-help"/></svg></span>Upute za korištenje</button>
@@ -7725,21 +7743,23 @@ function _loadLocalVlake() {
           <div class="abp-title">Moja lokacija</div>
           <div class="abp-sub"><span id="gps-info">Isključen</span><span id="gps-age"></span></div>
         </div>
+        <button class="abp-chip abp-sumski" id="forest-switch" onclick="_locChipSumski()" onpointerdown="_locLongPress(event)" onpointerup="_locLongPressStop()" onpointerleave="_locLongPressStop()" oncontextmenu="return false" title="Šumski mod — drži prst za objašnjenje">🌲 Šumski mod</button>
         <span class="gps-switch" id="gps-switch" onclick="toggleGPS()" title="GPS uključen / isključen"><span class="gps-switch-knob"></span></span>
       </div>
       <button class="abp-ukljuci" onclick="toggleGPS()">
         <svg class="ic"><use href="#ic-meta"/></svg><span>Uključi lokaciju</span></button>
+      <div class="abp-chips abp-red1">
+        <button type="button" class="abp-chip abp-centar" onclick="_locPopupCentriraj()" title="Centriraj kartu na moju lokaciju">⌖ Centriraj</button>
+        <button class="abp-chip" id="compass-switch" onclick="_togCompassSwitch()" title="Kompas / pravac gledanja">🧭 Kompas</button>
+        <button class="abp-chip" id="radius-switch" onclick="_togRadiusRings()" title="Krugovi udaljenosti oko tebe">⊚ Radijus</button>
+      </div>
       <div class="abp-acts">
-        <button class="abp-act abp-centar" onclick="_locPopupCentriraj()">
-          <svg class="ic"><use href="#ic-meta"/></svg><span>Centriraj</span></button>
         <button id="ab-loc-trag" class="abp-act abp-trag" onclick="_locPopupSnimiTrag()">
           <svg class="ic"><use href="#ic-trag"/></svg><span id="ab-loc-trag-txt">Snimi trag</span></button>
       </div>
-      <button type="button" class="abp-chip abp-dijeli" id="ab-loc-dijeli" onclick="_locPopupDijeli()" title="Dijeli kretanje sa kolegama ili preko linka / QR koda">📍 Dijeli kretanje</button>
-      <div class="abp-chips">
-        <button class="abp-chip" id="compass-switch" onclick="_togCompassSwitch()" title="Kompas / pravac gledanja">🧭 Kompas</button>
-        <button class="abp-chip" id="radius-switch" onclick="_togRadiusRings()" title="Krugovi udaljenosti oko tebe">⊚ Radijus</button>
-        <button class="abp-chip" id="forest-switch" onclick="_locChipSumski()" onpointerdown="_locLongPress(event)" onpointerup="_locLongPressStop()" onpointerleave="_locLongPressStop()" oncontextmenu="return false" title="Šumski mod — drži prst za objašnjenje">🌲 Šumski</button>
+      <div class="abp-chips abp-lista">
+        <button type="button" class="abp-chip" id="ab-loc-tragovi" onclick="_locPopupTragovi('trg')" title="Lista tragova i snimanje">🥾 Tragovi</button>
+        <button type="button" class="abp-chip" id="ab-loc-mjerenja" onclick="_locPopupTragovi('msr')" title="Sačuvana mjerenja">📏 Mjerenja</button>
       </div>
     </div>
   </div>
@@ -7756,10 +7776,14 @@ function _loadLocalVlake() {
     <span class="ab-ico"><svg class="ic"><use href="#ic-stop"/></svg></span>
     <span>Završi</span>
   </button>
-  <div id="ab-trag-stats" style="display:none;" onclick="_tragUrediOtvori()" role="button" title="Uredi trag dok snimaš">
-    <div class="ab-ts-lbl">SNIMANJE TRAGA <span class="ab-ts-ured">✎ Uredi</span></div>
-    <span id="ab-trag-info">0 tač. · 0 m</span>
-  </div>
+  <button id="ab-trag-foto" onclick="_tragFoto()" title="Uslikaj lokaciju — slika postaje dio traga" style="display:none;">
+    <span class="ab-ico" style="--c1:#38bdf8;--c2:#0284c7;--sh:rgba(2,132,199,0.4);"><svg class="ic"><use href="#ic-kamera"/></svg></span>
+    <span>Slikaj<span id="ab-trag-foto-n"></span></span>
+  </button>
+  <button id="ab-trag-ured" onclick="_tragUrediOtvori()" title="Uredi trag dok snimaš" style="display:none;">
+    <span class="ab-ico"><svg class="ic"><use href="#ic-uredjaj"/></svg></span>
+    <span>Uredi</span>
+  </button>
 </div>
 
 
@@ -7929,6 +7953,15 @@ function _loadLocalVlake() {
     <!-- Zauzeće memorije online karata — ispod podloga, jer se rijetko gleda -->
     <div id="ls-cache-box" hidden>
       <div id="ls-cache-info"></div>
+    </div>
+    <!-- Prikaz za slabije telefone: lagani prikaz gasi blur pozadine i animacije, manji tile budžet -->
+    <div id="ls-render-mode" style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <label for="render-mode-sel" style="font-size:12px;color:#94a3b8;">⚡ Brzina prikaza</label>
+      <select id="render-mode-sel" onchange="DendroRender.setMode(this.value)" style="flex:1;min-width:150px;min-height:44px;padding:6px 10px;background:#0f172a;border:1px solid #374151;border-radius:8px;color:#e2e8f0;font-size:13px;">
+        <option value="auto">Automatski (prati trzanje)</option>
+        <option value="lite">Lagani — za slabiji telefon</option>
+        <option value="full">Puni prikaz</option>
+      </select>
     </div>
     <!-- Granice odjela — sakriven dok nema podataka -->
     <div id="ls-granice-row" style="display:none;margin-top:10px;">

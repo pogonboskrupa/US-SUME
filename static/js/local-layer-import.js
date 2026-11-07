@@ -102,12 +102,15 @@ function _localLayerKml(name,content,owner=sbUser?.id,driveSource=null,fmt='') {
 }
 async function _localLayerKmlImpl(name,content,owner,driveSource,fmt='') {
   if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; uvoz je prekinut');
-  const doc=new DOMParser().parseFromString(content,'text/xml');
-  if(doc.querySelector('parsererror') || !doc.querySelector('kml'))throw Error('Neispravan KML fajl');
+  const velik=typeof _KML_PO_DIJELOVIMA_MIN==='number'&&content.length>=_KML_PO_DIJELOVIMA_MIN&&typeof _kmlJeIspravan==='function';
+  let doc=null;
+  if(velik){if(!_kmlJeIspravan(content))throw Error('Neispravan KML fajl');}
+  else{doc=new DOMParser().parseFromString(content,'text/xml');if(doc.querySelector('parsererror') || !doc.querySelector('kml'))throw Error('Neispravan KML fajl');}
   const store=JSON.parse(localStorage.getItem(_LOCAL_KML_KEY)||'{}');
   let unique=name,n=2;
   while(Object.prototype.hasOwnProperty.call(store,unique)||kmlLs.some(k=>!k._key&&(k._origName||k.name)===unique))unique=name.replace(/\.kml$/i,'')+' ('+(n++)+').kml';
-  const col=KCOLS[kmlCI%KCOLS.length],grp=pkml(doc,col);
+  const col=KCOLS[kmlCI%KCOLS.length],grp=velik?await _kmlGrupaIzSadrzaja(content,col):pkml(doc,col);
+  if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; uvoz je prekinut');
   if(!grp.getLayers().length)throw Error('KML nema tačaka, linija ili poligona za prikaz');
   if(!await _localKmlSaveContent(unique,content,col,owner,driveSource,fmt))throw Error('Sloj nije trajno sačuvan — provjeri slobodnu memoriju');
   if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; uvoz je prekinut');
@@ -182,6 +185,7 @@ function layerImportRenderList(){
       +'<button type="button" onclick="layerImportStil('+i+')" aria-expanded="'+stil+'" aria-label="Linija i ispuna sloja '+esc(k.name)+'">'+(stil?'Zatvori stil':'Linija i ispuna')+'</button>'
       +'<button type="button" onclick="layerImportToggle('+i+')" aria-label="'+(k.vis?'Sakrij':'Prikaži')+' sloj '+esc(k.name)+'">'+(k.vis?'Sakrij':'Prikaži')+'</button>'
       +'<button type="button" onclick="layerImportZoom('+i+')" aria-label="Prikaži sloj '+esc(k.name)+' na karti">Na karti</button>'
+      +'<button type="button" onclick="_layerPosalji('+i+')" aria-label="Pošalji sloj '+esc(k.name)+' kolegi">Pošalji</button>'
       +'<button type="button" class="layer-del" onclick="layerImportDelete('+i+')" aria-label="Ukloni sloj '+esc(k.name)+'">Ukloni</button>'
       +'</span>'+(stil?'<div class="layer-row-style">'+_layerStyleControls(i)+'</div>':'')+'</div>';
   }).join('')+(rows.length>MAX?'<button type="button" class="layer-more" onclick="_layerListSve=!_layerListSve;layerImportRenderList()">'+(_layerListSve?'Prikaži manje':'Prikaži sve ('+rows.length+')')+'</button>':'');

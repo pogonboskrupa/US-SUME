@@ -26,8 +26,8 @@ for(let day=0;day<6;day++){
   }
  }
 }
-const sources=['_dozTackaMs','_dozTragoviPoKorisniku','_dozTragoviPotpis','_dozBuildUserTracks','_dozComputeBands','_dozPokrivenost','_dozGetBoundaryGeoJSON'].map(fn).join('\n');
-function env(pts){return new Function('turf','tracks','DozBands',`let _dozTracks=tracks,_dozSelId='SIM-DOZ-6D',_DOZ_BAND_OUTER_M=20,_DOZ_TRACK_BUF_KEY='none';const localStorage={getItem:()=>null};let _dozUTMemo={k:null,v:null},_dozBandsMemo={k:null,v:null},_dozPokrMemo={k:null,v:null};${sources};return {_dozComputeBands,_dozPokrivenost,_dozBuildUserTracks};`)(turf,pts,require('../../static/js/doznaka-bands.js'));}
+const sources=['_dozTackaMs','_dozTragoviPoKorisniku','_dozTragoviPotpis','_dozBuildUserTracks','_dozPojasPolovina','_dozComputeBands','_dozPokrivenost','_dozGetBoundaryGeoJSON'].map(fn).join('\n');
+function env(pts){return new Function('turf','tracks','DozBands',`let _dozTracks=tracks,_dozSelId='SIM-DOZ-6D',_DOZ_BAND_OUTER_M=40,_DOZ_TRACK_BUF_KEY='none';const localStorage={getItem:()=>null};let _dozUTMemo={k:null,v:null},_dozBandsMemo={k:null,v:null},_dozPokrMemo={k:null,v:null};${sources};return {_dozComputeBands,_dozPokrivenost,_dozBuildUserTracks};`)(turf,pts,require('../../static/js/doznaka-bands.js'));}
 const api=env(tracks),start=performance.now(),bands=api._dozComputeBands(project),cover=api._dozPokrivenost(project),elapsed=performance.now()-start;
 const boundary=turf.polygon([ring]),area=turf.area(boundary)/10000;
 assert.equal(tracks.length,12060);assert(tracks.every(p=>turf.booleanPointInPolygon(turf.point([p.longitude,p.latitude]),boundary)),'Svi radni tragovi su unutar odjela');assert.equal(api._dozBuildUserTracks().length,60);assert.equal(bands.length,60);assert(bands.every(b=>b.joined===true),'Svi susjedni pojasevi imaju zajedničku granicu');assert(api._dozBuildUserTracks().every(t=>t.line.geometry.coordinates.length===201),'GPS tragovi se ne skraćuju zbog blizine kolege');assert(cover.ukupnoHa<=area+1e-6);assert(cover.preklopHa>=0);

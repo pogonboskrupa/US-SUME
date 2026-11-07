@@ -1,0 +1,22 @@
+const assert = require('assert');
+const { izvor } = require('./_izvor');
+const src = izvor();
+const a = src.indexOf('const _PERF = {');
+const b = src.indexOf('function _perfDiagRender(');
+assert(a > 0 && b > a);
+const kod = src.slice(a, b);
+const doc = { hidden: false, getElementsByTagName: () => ({ length: 1234 }), querySelectorAll: () => ({ length: 90 }) };
+const f = new Function('document', 'performance', 'navigator', 'window', 'setTimeout', 'setInterval', 'PerformanceObserver', 'sbProfile',
+  kod + '; return {_PERF,_perfSnimak,_perfPreporuke,_perfPerc};');
+const R = f(doc, { getEntriesByType: () => [], getEntriesByName: () => [], now: () => 0 }, { hardwareConcurrency: 4, userAgent: 'Android 10' }, {}, () => 0, () => 0, undefined, {});
+R._PERF.lag.push(10, 20, 500);
+R._PERF.fn.rndList = { n: 5, ms: 1500, max: 400 };
+R._PERF.tabLt.vlake = { n: 10, ms: 2000, max: 300 };
+const o = R._perfSnimak();
+assert.strictEqual(o.dom, 1234); assert.strictEqual(o.funkcije[0].fn, 'rndList'); assert.strictEqual(o.lagMax, 500);
+const txt = R._perfPreporuke(o).map(x => x[1]).join('|');
+assert(/rndList/.test(txt), 'najskuplja funkcija se javlja'); assert(/vlake/.test(txt), 'tab sa zastojima');
+assert(/Glavna nit kasni/.test(txt), 'lag upozorenje');
+const prazno = R._perfPreporuke({ dom: 10, slojeva: 1, plocica: 1, lagP95: 5, dugihZadataka: 0, poTabu: [], funkcije: [], pomicanja: [], sekundi: 5 });
+assert.strictEqual(prazno.length, 1);
+console.log('perf-dijagnostika: ok');

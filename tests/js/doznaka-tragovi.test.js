@@ -35,7 +35,7 @@ function t(name, fn) {
 function env({ tracks = [], buf = [], selId = 'O1' } = {}) {
   const store = { tvlake_doz_track_buf: JSON.stringify(buf) };
   const fns = ['_dozTackaMs', '_dozTragoviPoKorisniku', '_dozTragoviPotpis', '_dozBuildUserTracks',
-    '_dozComputeBands', '_dozPokrivenost', '_dozGetBoundaryGeoJSON', '_dozTrackLenByUser'].map(extractFn).join('\n');
+    '_dozPojasPolovina', '_dozComputeBands', '_dozPokrivenost', '_dozGetBoundaryGeoJSON', '_dozTrackLenByUser'].map(extractFn).join('\n');
   const f = new Function('turf', 'localStorage', '_DOZ_TRACK_BUF_KEY', 'dst', 'S',
     `let _dozTracks = S.tracks, _dozSelId = S.selId, _DOZ_BAND_OUTER_M = 20;
      let _dozUTMemo = { k: null, v: null }, _dozBandsMemo = { k: null, v: null }, _dozPokrMemo = { k: null, v: null };
