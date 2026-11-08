@@ -38,7 +38,7 @@
  // (izmjereno simulacijom: ravna kosina 20 % sa šumom ±5 m daje ~11 % ćelija u razredu 30 %+).
  // Prosjek visina u kutiji ~100 m uklanja takve lažne ćelije, a srednji nagib ostaje isti.
  // Kutija se računa preko integralne slike; gdje nema pune kutije (rub podataka) ostaje sirova visina.
- const SMOOTH_M=45,validH=h=>Number.isFinite(h)&&h>-12000&&h<10000;
+ const SMOOTH_M=75,validH=h=>Number.isFinite(h)&&h>-12000&&h<10000;
  function smoother(sample,x0,y0,width,height,pad,k){
   const W=width+2*pad,H=height+2*pad,ox=x0-pad,oy=y0-pad,stride=W+1,sumI=new Float64Array(stride*(H+1)),cntI=new Int32Array(stride*(H+1));
   for(let y=0;y<H;y++){let rs=0,rc=0;for(let x=0;x<W;x++){const v=sample(ox+x,oy+y);if(validH(v)){rs+=v;rc++;}const i=(y+1)*stride+x+1;sumI[i]=sumI[i-stride]+rs;cntI[i]=cntI[i-stride]+rc;}}

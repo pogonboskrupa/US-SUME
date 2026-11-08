@@ -229,11 +229,11 @@ async def main():
   assert await page.evaluate('DepartmentReport.snapshot().result.slopeProfiles')==profiles
   assert await page.evaluate('DepartmentReport.snapshot().result.stats.mean')==stats['mean']
   # Stari keš bez profila ostaje upotrebljiv offline; ne izmišlja se novi rezultat.
-  await page.evaluate("""async()=>{window.profileReportBackup=DepartmentReport.snapshot().result;const legacy={...profileReportBackup};delete legacy.slopeProfiles;delete legacy.profileInfo;const k='tvlake_department_report_v1_'+encodeURIComponent(sbUser.id),geometry=DepartmentReport.snapshot().state.geometry;await _kmlcSave(k,{model:4,signature:JSON.stringify(geometry),result:legacy});DepartmentReport.reset();await DepartmentReport.open()}""")
+  await page.evaluate("""async()=>{window.profileReportBackup=DepartmentReport.snapshot().result;const legacy={...profileReportBackup};delete legacy.slopeProfiles;delete legacy.profileInfo;const k='tvlake_department_report_v1_'+encodeURIComponent(sbUser.id),geometry=DepartmentReport.snapshot().state.geometry;await _kmlcSave(k,{model:5,signature:JSON.stringify(geometry),result:legacy});DepartmentReport.reset();await DepartmentReport.open()}""")
   assert 'ponovi izračun' in await page.locator('#dr-profile-info').text_content()
   assert await page.locator('#dr-profile-toggle').is_disabled()
   assert await page.evaluate('DepartmentReport.snapshot().result.stats.mean')==stats['mean'] and len(dem)==calls
-  await page.evaluate("""async()=>{const k='tvlake_department_report_v1_'+encodeURIComponent(sbUser.id),geometry=DepartmentReport.snapshot().state.geometry;await _kmlcSave(k,{model:4,signature:JSON.stringify(geometry),result:profileReportBackup});DepartmentReport.reset();await DepartmentReport.open()}""")
+  await page.evaluate("""async()=>{const k='tvlake_department_report_v1_'+encodeURIComponent(sbUser.id),geometry=DepartmentReport.snapshot().state.geometry;await _kmlcSave(k,{model:5,signature:JSON.stringify(geometry),result:profileReportBackup});DepartmentReport.reset();await DepartmentReport.open()}""")
   # Prekid za vrijeme rada Workera mora odmah osloboditi novi izračun.
   await page.evaluate("""()=>{_mrezaProbaj=()=>false;window.NativeWorker=Worker;window.stalled=[];window.Worker=class{constructor(){stalled.push(this)}postMessage(){}terminate(){this.stopped=true}};window.cancelledReport=DepartmentReport.calculate();}""")
   await page.wait_for_function('stalled.length===1');await page.evaluate('DepartmentReport.cancelCalculation();Worker=NativeWorker;cancelledReport')
