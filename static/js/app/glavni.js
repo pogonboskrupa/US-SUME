@@ -2915,8 +2915,15 @@ async function adminLoadUsers() {
     el.innerHTML = `<p style="color:#f87171;font-size:12px;text-align:center;padding:16px 0;">Greška: ${_escHtml(error.message)}</p>`;
     return;
   }
-  const active=new Map((activity.error?[]:activity.data||[]).map(a=>[a.user_id,a.last_active_at]));
-  _adminUsers = (data || []).map(u=>({...u,last_active_at:activity.error?undefined:active.get(u.id)||null}));
+  const actRows=activity.error?[]:activity.data||[];
+  const active=new Map(actRows.map(a=>[a.user_id,a]));
+  // Stara admin_get_user_activity (bez migracije verzije) ne vraća kolonu.
+  const bezVerzije=!!activity.error||(actRows.length>0&&!('app_version' in actRows[0]));
+  _adminUsers = (data || []).map(u=>{const a=active.get(u.id);return {...u,
+    last_active_at:activity.error?undefined:a?.last_active_at||null,
+    // undefined = podatak o verziji ne postoji na serveru, null = korisnik još nije javio
+    app_version:bezVerzije?undefined:a?.app_version||null,
+    platforma:a?.platforma||null};});
   // Badge: broj neodobrenih — osvježi iz svježih podataka (bez dodatnog RPC-a)
   _notifCounts.admin = _adminUsers.filter(u => u.odobren === false).length;
   _notifRender('admin');
@@ -3070,6 +3077,28 @@ function _admGrupisiPoAktivnosti(users, sada) {
   return _ADM_AKT_GRUPE.map(g => ({ ...g, users: mapa.get(g.id) })).filter(g => g.users.length);
 }
 // "prije 12 min" čita se brže od punog datuma; pun datum ostaje pored.
+// Numerička usporedba verzija ("v3.6.10" > "v3.6.9"); NaN segment = 0.
+function _admVerUsporedi(a, b) {
+  const pa = String(a || '').replace(/^v/, '').split('.').map(Number);
+  const pb = String(b || '').replace(/^v/, '').split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d < 0 ? -1 : 1;
+  }
+  return 0;
+}
+// Verzija koju je korisnik zadnji put javio. Poredi se sa verzijom koju admin
+// trenutno koristi — admin je u praksi uvijek na najnovijoj.
+function _admVerzijaHtml(u) {
+  if (u.app_version === undefined) return '📱 Verzija: <span style="color:#7f8ea3;">podatak nije dostupan (migracija)</span>';
+  if (!u.app_version) return '📱 Verzija: <span style="color:#7f8ea3;">još nije javljena</span>';
+  const pl = u.platforma === 'apk' ? ' · APK' : u.platforma === 'web' ? ' · web' : '';
+  const ref = typeof APP_VER === 'string' ? APP_VER : '';
+  const star = ref && _admVerUsporedi(u.app_version, ref) < 0;
+  const boja = star ? '#fbbf24' : '#4ade80';
+  return `📱 Verzija: <b style="color:${boja};">${_escHtml(u.app_version)}</b>${pl}` +
+    (star ? ' <span style="color:#fbbf24;font-size:10px;background:rgba(251,191,36,0.14);padding:1px 6px;border-radius:4px;">starija</span>' : '');
+}
 function _admRelativno(iso, sada) {
   const t = Date.parse(iso || '');
   if (!isFinite(t)) return '';
@@ -3311,6 +3340,7 @@ function _admKarticaHtml(u, saSumarijom) {
       <div style="font-size:11px;color:#64748b;margin-bottom:${u.is_admin ? '0' : '8px'};">
         ${u.created_at ? fmtDateShort(u.created_at) : '—'}
         ${u.login_email ? ' · ' + _escHtml(u.login_email) : ''}
+        <br>${_admVerzijaHtml(u)}
         <br>🕐 Zadnja aktivnost: ${u.last_active_at ? '<b style="color:#cbd5e1;">' + _escHtml(_admRelativno(u.last_active_at)) + '</b> · ' + _escHtml(_fmtDateTime(u.last_active_at)) : (u.last_active_at === null ? 'još nije zabilježena' : 'podatak nije dostupan')}
       </div>
       ${!u.is_admin ? `
