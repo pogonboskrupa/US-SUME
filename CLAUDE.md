@@ -5005,3 +5005,8 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 
 ### CI: runner pinovan na ubuntu-24.04 (v3.2.7)
 - Run 317 je pao za 3 s na `playwright install --with-deps chromium`: `ubuntu-latest` je prešao na **Ubuntu 26.04**, a Playwright 1.55 ne podržava taj OS ("does not support chromium on ubuntu26.04-x64"). Nije bio kod aplikacije. `codex-webview.yml` sad koristi `ubuntu-24.04` (job `apk`); `deploy.yml`/`build.yml` ne instaliraju Playwright pa su ostali na `latest`. Kad se Playwright ažurira na verziju koja podržava 26.04, pin se može vratiti. Pad na koraku "Pregled Menija…" za 3 s znači grešku okruženja, ne testa — čitati kraj loga, ne postgres šum.
+
+### Preglednik KML oznaka — kompaktan red (v3.6.3)
+- Dugme `#oznake-btn` je ispod zvijezde (`#map-fav-btn`) i istaknuto tirkiznom bojom (`map-library.css`, kraj fajla). Zaglavlje panela više NIJE `sticky` (skrola se sa listom) i nosi samo "Preglednik KML oznaka" + broj stavki; uklonjeni natpis "SADRŽAJ KARTE", naslov "Fajlovi i oznake" i fusnota.
+- Red (`row()` u `static/js/map-library.js`) je ~56 px umjesto ~170: značka vrste 32 px, naziv u jednom redu (dodir na naziv = Na karti), jedan red podataka, tri brze radnje desno — oko (`data-action=visibility`, `aria-label` Sakrij/Prikaži), meta (`zoom`), ⋯ (`edit` — otvara izvoz/brisanje + uređivač). "Dodijeli odjelu" je mala oker značka ispod podataka. Tabovi vrsta su jedan red sa horizontalnim skrolom.
+- Testovi traže `data-action` na dugmadima i dostupna imena "Sakrij"/"Prikaži" — ne mijenjati u čiste ikone bez `aria-label`.
