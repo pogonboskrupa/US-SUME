@@ -282,7 +282,7 @@ function _localLayerPatchFeature(k,pmIndex,name,description,owner=sbUser?.id) {
       const saved=local(s.id),older=!saved&&localByName(s),state=messages.get(s.id),row=document.createElement('article');row.className='kml-drive-row';
       const icon=document.createElement('span');icon.className='kml-drive-icon';icon.textContent='KML';icon.setAttribute('aria-hidden','true');
       const copy=document.createElement('div');copy.className='kml-drive-copy';const name=document.createElement('b');name.textContent=s.name;
-      const meta=document.createElement('small');meta.textContent=sizeText(s.size)+' · '+(saved?'Sačuvano na telefonu':older?'Na telefonu je starija verzija':github?'GitHub · '+(s.release||'KARTE'):'KARTA APP');
+      const meta=document.createElement('small');meta.textContent=sizeText(s.size)+' · '+(saved?'Sačuvano na telefonu':older?'Na telefonu je starija verzija':github?'Server · '+(s.release||'KARTE'):'KARTA APP');
       const status=document.createElement('span');status.className='kml-drive-status';status.setAttribute('role','status');status.textContent=state?.message||(saved?'✓ Preuzeto · dostupno bez interneta':older?'Objavljena je nova verzija'+(s.release?' ('+s.release+')':''):s.tooLarge?'Veće od 32 MB — podijeli sloj':'');
       copy.append(name,meta,status);const button=document.createElement('button');button.type='button';button.dataset.sourceId=s.id;
       button.textContent=state?.busy?(state.phase||'Preuzimam…'):saved?'Prikaži':older?'Ažuriraj':'Preuzmi i dodaj';if(saved)button.classList.add('kml-drive-saved');button.disabled=_layerImportBusy||!!state?.busy||!!s.tooLarge||!available();button.onclick=()=>start(s.id);
@@ -358,7 +358,7 @@ function _localLayerPatchFeature(k,pmIndex,name,description,owner=sbUser?.id) {
   }
   async function refreshGithub(){
     if(githubRefreshing)return;githubRefreshing=true;render();const note=el('kml-github-message');
-    if(note)note.textContent=available()?'Provjeravam GitHub slojeve…':'Preuzimanje slojeva dostupno je u Android aplikaciji.';
+    if(note)note.textContent=available()?'Provjeravam slojeve na serveru…':'Preuzimanje slojeva dostupno je u Android aplikaciji.';
     try{
       const cached=await request({type:'list',provider:'github',refresh:false});if(cached.ok){githubFiles=(cached.files||[]).filter(valid);render();}
       const offline=navigator.onLine===false,r=offline?cached:await request({type:'list',provider:'github',refresh:true});

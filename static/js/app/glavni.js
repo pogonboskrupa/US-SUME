@@ -32134,8 +32134,8 @@ async function preuzmiApkAdmin() {
   try {
     const r = await _fetchT(_APK_RELEASES_API, 10000, { cache: 'no-store' });
     if (r.ok) apk = _apkAssetIzReleasea((await r.json())?.[0]);
-    else greska = 'GitHub je odgovorio ' + r.status + '.';
-  } catch (e) { greska = 'Nema veze sa GitHub-om.'; }
+    else greska = 'Server je odgovorio ' + r.status + '.';
+  } catch (e) { greska = 'Nema veze sa serverom.'; }
   if (!apk) {
     const izbor = await _dlgActions('Preuzmi APK fajl', [
       { label: '🌐 Otvori stranicu sa verzijama' },
