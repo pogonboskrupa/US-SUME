@@ -1442,7 +1442,7 @@ async function initAuth() {
       try {
         sbUser = session.user;
         if (_appEntered) { await _upgradeToOnlineSession(); }
-        else { await sbLoadProfile(); showApp(); }
+        else { await _sbLoadProfileRok(); showApp(); }
         return;
       } catch(e) {
         console.error('Auth init error:', e);
@@ -1462,7 +1462,7 @@ async function initAuth() {
   if (startupSessionUser) {
     sbUser = startupSessionUser;
     if (_appEntered) await _upgradeToOnlineSession();
-    else { await sbLoadProfile(); if (sbProfile) await showApp(); }
+    else { await _sbLoadProfileRok(); if (sbProfile) await showApp(); }
     return;
   }
 
@@ -1579,6 +1579,18 @@ async function _offCredProvjeri(ime, prezime, pin) {
   return null;
 }
 
+// Profil sa servera uz ROK: na sporoj vezi sbLoadProfile zna čekati i 30–45 s (ponavljanja GET-a),
+// a ulaz u app je stajao iza toga. Kad rok istekne a profil ovog korisnika postoji u kešu, ulazi se
+// na kešu (svjež profil stigne u pozadini i sam osvježi meni/uloge); bez keša se i dalje čeka.
+async function _sbLoadProfileRok(ms) {
+  const p = sbLoadProfile();
+  try { await _withTimeout(p, ms || 10000); }
+  catch (e) {
+    const c = _profileLoad(sbUser?.id);
+    if (c) { sbProfile = c; try { _primijeniUlogeUI(c); } catch (_) {} }
+    else await p;
+  }
+}
 async function sbLoadProfile() {
   let data = null;
   try {
@@ -1687,6 +1699,8 @@ async function showApp() {
   // korisnika prije nego _checkDeviceUserSwitch odradi brisanje.
   const _gateMozeBlokirati = !!(sbProfile && sbProfile.odobren === false && !sbProfile.is_admin && !(typeof AccessPolicy!=='undefined' && AccessPolicy.canUse(sbProfile)));
   if (!_gateMozeBlokirati && !_appEntered) _revealApp();
+  // Meni odmah nosi ime (iz keša) — inače do kraja provjera ispod stoji zadani "Nije prijavljen".
+  try { if (typeof _menuIdentityRender === 'function') _menuIdentityRender(); } catch (e) {}
 
   if (sbProfile && sbProfile.odobren === false && !sbProfile.is_admin && !(typeof AccessPolicy!=='undefined' && AccessPolicy.canUse(sbProfile)) && sbUser && sb) {
     try {
@@ -2105,7 +2119,7 @@ async function doLogin() {
   }
 
   sbUser = (await sb.auth.getUser()).data.user;
-  await sbLoadProfile();
+  await _sbLoadProfileRok();
   showApp();
   } catch(e) { showAuthErr('Greška: ' + e.message); }
   finally {
@@ -2467,6 +2481,8 @@ async function _checkDeviceUserSwitch(uid) {
   if (!uid) return;
   const last = localStorage.getItem(_DEVICE_LAST_USER_KEY);
   if (last && last !== uid) {
+    // Arhiviranje/vraćanje podataka računa zna potrajati — bez poruke ekran izgleda zamrznuto.
+    try { showToast('⏳ Pripremam podatke ovog računa…'); } catch (e) {}
     if (document.readyState === 'loading') await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, {once:true}));
     // Arhiva se mora potvrditi PRIJE brisanja. Neuspjeh prekida promjenu naloga.
     await _archiveFieldData(last);
@@ -11102,7 +11118,7 @@ const CachedSat  = makeCachedTileLayer();
 let _initMapCenter = _defCenter, _initMapZoom = _defZoom;
 try {
   const _lp = JSON.parse(localStorage.getItem('tvlake_last_pos') || 'null');
-  if (_lp && [_lp.la,_lp.lo,_lp.z].every(Number.isFinite) && Math.abs(_lp.la)<=85 && Math.abs(_lp.lo)<=180 && _lp.z>=0 && _lp.z<=22) { _initMapCenter = [_lp.la, _lp.lo]; _initMapZoom = _lp.z; }
+  if (_lp && [_lp.la,_lp.lo,_lp.z].every(Number.isFinite) && Math.abs(_lp.la)<=85 && Math.abs(_lp.lo)<=180 && _lp.z>=6 && _lp.z<=22) { _initMapCenter = [_lp.la, _lp.lo]; _initMapZoom = _lp.z; }
 } catch(e) {}
 const _renderCfg = window.DendroRender?.state || {
   tileBuffer:4,overlayBuffer:2,sqlCache:160,mainTileConcurrency:8,
@@ -11131,6 +11147,25 @@ const map = L.map('map',{
   tapTolerance:15,
   preferCanvas:true
 }).setView(_initMapCenter, _initMapZoom);
+// fitBounds na SKRIVENOJ karti (drugi panel otvoren, kontejner 0×0) daje besmislen zum/centar, a
+// moveend ga onda sačuva kao zadnji prikaz → sljedeće pokretanje otvori kartu na "nasumičnom" mjestu.
+// Sva mjesta (38) prolaze kroz ovo: na skrivenoj karti se čeka da postane vidljiva, pa se tek onda fituje.
+(function () {
+  const fitOrig = map.fitBounds.bind(map);
+  map.fitBounds = function (b, o) {
+    const s = this.getSize();
+    if (s.x >= 50 && s.y >= 50) return fitOrig(b, o);
+    let n = 0;
+    const pokusaj = () => {
+      try { this.invalidateSize(false); } catch (e) {}
+      const z = this.getSize();
+      if (z.x >= 50 && z.y >= 50) { try { fitOrig(b, o); } catch (e) {} }
+      else if (++n < 40) setTimeout(pokusaj, 100);
+    };
+    setTimeout(pokusaj, 60);
+    return this;
+  };
+})();
 // Grafičko mjerilo (v2.9.8): "1:50 000" u traci je broj, a na terenu se udaljenost
 // procjenjuje okom — traka "0–200 m" je za to brža. Štampa ga sakriva (ima svoje).
 try { L.control.scale({ metric: true, imperial: false, position: 'bottomright', maxWidth: 110 }).addTo(map); } catch (e) {}
@@ -11145,6 +11180,8 @@ window.Explorer = ExplorerNavigation.create({
 
 map.on('moveend', () => {
   if(document.body.classList.contains('stampa-on'))return;
+  // Skrivena karta (0×0) nema stvaran prikaz — ne pamti ga (vidi omotač fitBounds iznad).
+  try { const sz = map.getSize(); if (sz.x < 50 || sz.y < 50) return; } catch (e) { return; }
   try {const c=map.getCenter();localStorage.setItem('tvlake_last_pos',JSON.stringify({la:c.lat,lo:c.lng,z:map.getZoom()}));const sl=_sqlLayers.find(s=>s.visible&&map.hasLayer(s.layer));if(sl)_sqlMapSaveView(sl.name);}catch(e){}
 });
 // Spriječi da automatski startup fit-ovi (vlake/granice) pregaze podrazumijevani prikaz
@@ -12775,7 +12812,7 @@ function _menuIdentityRender() {
   if(typeof SpdProfile!=='undefined')SpdProfile.sync();
   const p = sbUser && sbProfile?.id === sbUser.id ? sbProfile : null;
   const name = document.getElementById('menu-user-label');
-  if (name) name.textContent = p ? [p.ime,p.prezime].filter(Boolean).join(' ').trim() || 'Korisnik' : sbUser ? 'Profil nije dostupan' : 'Nije prijavljen';
+  if (name) name.textContent = p ? [p.ime,p.prezime].filter(Boolean).join(' ').trim() || 'Korisnik' : sbUser ? (sbProfile ? 'Profil nije dostupan' : 'Učitavam profil…') : 'Nije prijavljen';
   const role = document.getElementById('menu-user-role');
   if (role) role.textContent = p ? [p.is_admin ? 'Administrator' : typeof isVodeci === 'function' && isVodeci() ? 'Vodeći projektant' : typeof isSpdField === 'function' && isSpdField() ? 'Terenski korisnik' : 'Projektant',p.sumarija].filter(Boolean).join(' · ') : '';
   const version = document.getElementById('menu-app-ver');
@@ -20743,7 +20780,9 @@ function _kmlGrupa() {
         const { C, idx, svuda } = this._idx, b = map.getBounds().pad(0.15);
         const x0 = Math.floor(b.getWest() / C), x1 = Math.floor(b.getEast() / C), y0 = Math.floor(b.getSouth() / C), y1 = Math.floor(b.getNorth() / C);
         let cand;
-        if ((x1 - x0 + 1) * (y1 - y0 + 1) > 6000) cand = new Set(Object.values(this._layers).filter(l => !(this._tackeZasebno && l._kmlIsPoint)));   // daleko odzumirano: sve
+        // Daleko odzumirano: ranije se dodavalo SVE (hiljade poligona odjednom) — telefon se zamrzne
+        // dok se ne nacrta, a sitni objekti se na tom zumu ionako ne vide. Sad samo veliki (svuda).
+        if ((x1 - x0 + 1) * (y1 - y0 + 1) > 6000) cand = new Set(svuda);
         else {
           cand = new Set(svuda);
           for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) { const a = idx.get(x + ':' + y); if (a) for (const l of a) cand.add(l); }
