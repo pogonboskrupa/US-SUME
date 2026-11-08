@@ -6027,7 +6027,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.6.3';
+const APP_VER = 'v3.6.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -8082,7 +8082,7 @@ function _loadLocalVlake() {
 <div id="oznake-bg" onclick="closeOznakePanel()"></div>
 <div id="oznake-panel" role="dialog" aria-modal="true" aria-label="Preglednik KML oznaka">
   <header id="oznake-header"><h2>Preglednik KML oznaka</h2><small id="oz-total-badge">0 stavki</small><button class="oz-close" onclick="closeOznakePanel()" aria-label="Zatvori preglednik">×</button></header>
-  <div class="ml-toolbar"><input id="library-search" type="search" placeholder="Traži naziv, odjel ili opis…" aria-label="Pretraži oznake" oninput="_librarySearch(this.value)"><div id="library-tabs" role="tablist" aria-label="Vrsta oznaka"></div><div class="ml-sort-row"><select aria-label="Sortiraj" id="library-sort" onchange="_librarySort(this.value)"><option value="department">Po odjelu</option><option value="date">Po datumu — novije prvo</option><option value="proximity">Blizina sredini karte</option><option value="name">Po nazivu</option></select><button onclick="closeOznakePanel();openLayerImport()">+ Dodaj fajl</button></div><div class="ml-bulk"><span id="library-summary"></span><div><button onclick="_libraryGroup(true)">Prikaži rezultate</button><button onclick="_libraryGroup(false)">Sakrij rezultate</button></div></div></div>
+  <div class="ml-toolbar"><input id="library-search" type="search" placeholder="Traži naziv, odjel ili opis…" aria-label="Pretraži oznake" oninput="_librarySearch(this.value)"><div id="library-tabs" role="tablist" aria-label="Vrsta oznaka"></div><div class="ml-sort-row"><select aria-label="Sortiraj" id="library-sort" onchange="_librarySort(this.value)"><option value="proximity">Najbliže sredini karte</option><option value="department">Po odjelu</option><option value="date">Po datumu — novije prvo</option><option value="name">Po nazivu</option></select><button onclick="closeOznakePanel();openLayerImport()">+ Dodaj fajl</button></div><div class="ml-bulk"><span id="library-summary"></span><div><button onclick="_libraryGroup(true)">Prikaži rezultate</button><button onclick="_libraryGroup(false)">Sakrij rezultate</button></div></div></div>
   <section class="ml-folder-area" aria-label="Fajlovi i oznake na karti"><div id="library-list" aria-live="polite"></div><button id="library-more" class="ml-load-more" onclick="_libraryMore()" hidden>Prikaži još</button></section>
 </div>
 

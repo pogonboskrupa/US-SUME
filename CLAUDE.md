@@ -5010,3 +5010,8 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 - Dugme `#oznake-btn` je ispod zvijezde (`#map-fav-btn`) i istaknuto tirkiznom bojom (`map-library.css`, kraj fajla). Zaglavlje panela više NIJE `sticky` (skrola se sa listom) i nosi samo "Preglednik KML oznaka" + broj stavki; uklonjeni natpis "SADRŽAJ KARTE", naslov "Fajlovi i oznake" i fusnota.
 - Red (`row()` u `static/js/map-library.js`) je ~56 px umjesto ~170: značka vrste 32 px, naziv u jednom redu (dodir na naziv = Na karti), jedan red podataka, tri brze radnje desno — oko (`data-action=visibility`, `aria-label` Sakrij/Prikaži), meta (`zoom`), ⋯ (`edit` — otvara izvoz/brisanje + uređivač). "Dodijeli odjelu" je mala oker značka ispod podataka. Tabovi vrsta su jedan red sa horizontalnim skrolom.
 - Testovi traže `data-action` na dugmadima i dostupna imena "Sakrij"/"Prikaži" — ne mijenjati u čiste ikone bez `aria-label`.
+- **Zadani sort je "Najbliže sredini karte" (v3.6.4)**: sačuvani sort se poštuje samo uz `sortRucno` (korisnik ga je sam izabrao) — stari zapisi su nosili `department` samo jer je to bio zadani.
+
+### Ažuriranje APK-a — prekidi i HTTP 5xx (v3.6.4)
+- `preuzmiSaNastavkom`: prekid POSLIJE napretka (>256 KB) ne troši pokušaj (kapa 40 krugova); poruka nosi razlog (`kratkiRazlog`: "veza resetovana", "server ne odgovara", "GitHub server privremeno ne odgovara, HTTP 504"…), a 5xx čeka duže (5→30 s). Log `DendroUpdate`.
+- APK se uzima samo kad je asset `state == "uploaded"`: release je vidljiv prije kraja CI uploada, pa je preuzimanje u tom prozoru davalo HTTP 504/404. Tada poruka kaže da se verzija upravo objavljuje.
