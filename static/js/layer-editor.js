@@ -1,6 +1,6 @@
 // Uređivanje učitanih slojeva: iste kontrole u listi i popupu na karti.
 'use strict';
-const _LE_COLORS=['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ffffff','#94a3b8','#000000'];
+const _LE_COLORS=['#ef4444','#f97316','#d4a52a','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ffffff','#94a3b8','#000000'];
 const _LE_PATTERNS=[['solid','Puna'],['diagonal','Kosa /'],['diagonal-rev','Kosa \\'],['crosshatch','Mreža'],['horizontal','Vodoravna'],['vertical','Uspravna'],['dots','Tačke']];
 const _lePendingStyles=new Map();
 function _layerLeaves(k) {
@@ -42,8 +42,9 @@ function _layerStyleControls(i) {
   const dashes=[['','Puna'],['6 4','Isprekidana'],['12 6','Duge crte'],['2 4','Tačkasta']];
   return '<div class="le-style" data-layer="'+i+'">'+
     (window.GithubLayers?.isBoundary(k)?'<label class="le-switch boundary-only-option"><span><b>Samo za poligon</b><small>Prikaži granice samo pri izboru ili crtanju odjela</small></span><input type="checkbox" '+(k.onlyPolygon?'checked':'')+' onchange="GithubLayers.onlyPolygon(this.checked,'+i+')"></label>':'')+
+    (hasPoly&&vr.tacke>0?'<label class="le-switch"><span><b>Prikaži poligone</b><small>Fajl ima tačke, pa su poligoni zadano sakriveni</small></span><input type="checkbox" '+(k.poligoniVidljivi?'checked':'')+' onchange="_layerPoligoniToggle('+i+',this.checked)"></label>':'')+
     (hasPoly?'<div class="le-presets"><button type="button" onclick="_layerPreset('+i+',\'outline\')" aria-pressed="'+(!k.fill||k.fillOpacity===0)+'">Samo obrub</button><button type="button" onclick="_layerPreset('+i+',\'filled\')" aria-pressed="'+(k.fill&&k.fillOpacity>0)+'">Obrub i ispuna</button></div>':'')+
-    (samoTacke?(vr.tacke?'<section class="le-section"><h4><span class="le-step">•</span> Tačke'+(samoTacke?' ('+vr.tacke+')':'')+'</h4><label class="le-caption">Boja tačaka</label>'+palette('col',k.col)+range('ptR','Veličina tačke',2,14,1,k.ptR||5,' px')+range('opacity','Vidljivost tačaka',0,100,1,lineOpacity,'%')+'</section>':''):'<section class="le-section"><h4><span class="le-step">1</span> Linija i obrub</h4><label class="le-caption">Boja linije</label>'+palette('col',k.col)+range('weight','Debljina',.5,12,.5,k.weight??2,' px')+'<div class="le-options">'+dashes.map(([v,l])=>'<button type="button" aria-pressed="'+((k.dash||'').replaceAll(',',' ')===v)+'" onclick="_layerStyleChange('+i+',\'dash\',\''+v+'\')">'+l+'</button>').join('')+'</div>'+range('opacity','Vidljivost linije',0,100,1,lineOpacity,'%')+'</section>'+(vr.tacke?'<section class="le-section"><h4><span class="le-step">•</span> Tačke'+(samoTacke?' ('+vr.tacke+')':'')+'</h4><label class="le-caption">Boja tačaka</label>'+palette('col',k.col)+range('ptR','Veličina tačke',2,14,1,k.ptR||5,' px')+range('opacity','Vidljivost tačaka',0,100,1,lineOpacity,'%')+'</section>':''))+
+    (samoTacke?(vr.tacke?'<section class="le-section"><h4><span class="le-step">•</span> Tačke'+(samoTacke?' ('+vr.tacke+')':'')+'</h4><label class="le-caption">Boja tačaka</label>'+palette('col',k.col)+range('ptR','Veličina tačke',2,14,1,k.ptR||3,' px')+range('opacity','Vidljivost tačaka',0,100,1,lineOpacity,'%')+'</section>':''):'<section class="le-section"><h4><span class="le-step">1</span> Linija i obrub</h4><label class="le-caption">Boja linije</label>'+palette('col',k.col)+range('weight','Debljina',.5,12,.5,k.weight??2,' px')+'<div class="le-options">'+dashes.map(([v,l])=>'<button type="button" aria-pressed="'+((k.dash||'').replaceAll(',',' ')===v)+'" onclick="_layerStyleChange('+i+',\'dash\',\''+v+'\')">'+l+'</button>').join('')+'</div>'+range('opacity','Vidljivost linije',0,100,1,lineOpacity,'%')+'</section>'+(vr.tacke?'<section class="le-section"><h4><span class="le-step">•</span> Tačke'+(samoTacke?' ('+vr.tacke+')':'')+'</h4><label class="le-caption">Boja tačaka</label>'+palette('col',k.col)+range('ptR','Veličina tačke',2,14,1,k.ptR||3,' px')+range('opacity','Vidljivost tačaka',0,100,1,lineOpacity,'%')+'</section>':''))+
     (hasPoly?'<section class="le-section"><h4><span class="le-step">2</span> Ispuna poligona</h4><label class="le-switch"><span><b>Uključi ispunu</b><small>Prozirna površina ostaje klikabilna</small></span><input type="checkbox" '+(k.fill?'checked':'')+' onchange="_layerStyleChange('+i+',\'fill\',this.checked)"></label><div class="le-fill-controls"'+(k.fill?'':' hidden')+'><label class="le-caption">Boja ispune</label>'+palette('fillCol',k.fillCol||k.col)+range('fillOpacity','Jačina ispune',0,100,1,fillOpacity,'%')+'<small class="le-note">0%: potpuno prozirno. Dodir poligona otvara informacije.</small><details class="le-patterns"><summary>Uzorak ispune</summary><div class="le-options">'+_LE_PATTERNS.map(([v,l])=>'<button type="button" aria-pressed="'+((k.fillPattern||'solid')===v)+'" onclick="_layerStyleChange('+i+',\'fillPattern\',\''+v+'\')">'+l+'</button>').join('')+'</div></details></div></section>':'')+'</div>';
 }
 function _layerStyleRefresh(i) {
@@ -69,6 +70,7 @@ function _layerStyleChange(i,prop,value,commit=true) {
   else return;
   if(typeof value==='number'&&!Number.isFinite(value))return;
   k[prop]=value;
+  if(prop==='ptR')k.ptRRucno=true;
   const pending=_lePendingStyles.get(k);if(pending&&typeof cancelAnimationFrame==='function')cancelAnimationFrame(pending);
   _lePendingStyles.delete(k);
   const apply=()=>{_lePendingStyles.delete(k);const index=kmlLs.indexOf(k);if(index<0)return;applyKmlStyle(index);document.querySelectorAll('.le-style[data-layer="'+index+'"] .le-preview').forEach(e=>e.outerHTML=_layerPreview(index));};
@@ -78,6 +80,12 @@ function _layerStyleChange(i,prop,value,commit=true) {
   try {saveKmlStyles();}catch(e){showToast('⚠ Stil nije sačuvan — provjeri memoriju telefona');return;}
   _layerStyleRefresh(i);
   if(typeof GithubLayers!=='undefined')GithubLayers.render();
+}
+function _layerPoligoniToggle(i,on) {
+  const k=kmlLs[i];if(!k)return;
+  k.poligoniVidljivi=!!on;applyKmlStyle(i);
+  try {saveKmlStyles();}catch(e){showToast('⚠ Stil nije sačuvan — provjeri memoriju telefona');return;}
+  _layerStyleRefresh(i);
 }
 function _layerPreset(i,mode) {
   const k=kmlLs[i];if(!k)return;

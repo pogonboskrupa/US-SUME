@@ -4826,7 +4826,6 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 </script>
 
 <div id="wrapper" style="display:none;">
-  <div id="field-status" role="status" style="display:none;"></div>
 
   <div id="tab-bar">
     <button class="tab-btn" id="menu-btn" aria-expanded="false" aria-controls="menu-dropdown" ontouchstart="toggleMenuDropdown(event)" onclick="toggleMenuDropdown(event)"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-menu"/></svg> Meni</button>
@@ -6027,7 +6026,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.7.0';
+const APP_VER = 'v3.7.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6275,6 +6274,7 @@ function _loadLocalVlake() {
   <button type="button" class="mdrop-item" id="menu-field-work" onclick="TerenWorkspace.open()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg></span><span>RAD NA TERENU<small>Pozicija, Explorer, tragovi i bilješke</small></span><span class="mdrop-arrow" aria-hidden="true">›</span></button>
   <button class="mdrop-item" id="field-theme-toggle" type="button" onclick="toggleFieldTheme()" aria-pressed="false"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-sun"/></svg></span>Dnevni mod</button>
   <button type="button" class="mdrop-item" id="menu-share-kretanje" onclick="closeMenuDropdown();shareSheetOpen()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg></span>Dijeljenje kretanja</button>
+  <button type="button" class="mdrop-item" id="menu-explorer-mod" onclick="closeMenuDropdown();TerenWorkspace.explorerMeni()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-guide"/></svg></span><span>Explorer mod<small>Pregled ispred tebe, karta prati smjer</small></span></button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-camera"/></svg></span>Uslikaj lokaciju</button>
   <button type="button" class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-guide"/></svg></span>Vodi me do odjela/lokacije</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-measure"/></svg></span>Mjerenja i tragovi</button>
@@ -8176,10 +8176,6 @@ function _loadLocalVlake() {
 </div>
 
 <style>
-#field-status {position:absolute;left:6px;right:6px;top:54px;z-index:1700;padding:6px 9px;border-radius:7px;background:#10251f;color:#bbf7d0;font-size:11px;line-height:1.5;pointer-events:none;border:1px solid #4ade8055;}
-#field-status.warn {background:#451a03;color:#fde68a;border-color:#f59e0b;}
-.field-recording #panel,.field-recording #proj-panel,.field-recording #doznaka-panel,.field-recording #teren-panel,.field-recording #tragovi-panel {padding-top:var(--field-status-height,44px);}
-.field-recording #map-ctrl-bar {top:calc(32px + var(--field-status-height,44px));}
 </style>
 <script src="static/js/field-tools.js"></script>
 <script src="static/js/terrain-workspace.js"></script>

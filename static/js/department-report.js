@@ -1,7 +1,7 @@
 /* Izvještaj odjela: nezavisna granica, ručni izbor odsjeka i lokalni DEM rezultat. */
 (function(root){
  'use strict';
- const node=id=>document.getElementById(id),SKEY='tvlake_department_report_v1_',MODEL=3,COLORS=['#36856b','#789a39','#c2a036','#cf7532','#b94c4f','#78456e'],ACOLORS=['#3588bd','#39926c','#d88438','#875caa'];
+ const node=id=>document.getElementById(id),SKEY='tvlake_department_report_v1_',MODEL=4,COLORS=['#36856b','#789a39','#c2a036','#cf7532','#b94c4f','#78456e'],ACOLORS=['#3588bd','#39926c','#d88438','#875caa'];
  let owner=null,state={},result=null,draft=null,draftLayer=null,boundary=null,terrain=null,edges=null,profileLayer=null,worker=null,cancelWorker=null,generation=0,busy=false,lastError='',loaded=null,legend=null,hitRenderer=null,autoTimer=null,autoOnline=null,autoAttempts=0;
  const uid=()=>typeof sbUser!=='undefined'?sbUser?.id:null,key=()=>SKEY+encodeURIComponent(owner||''),valid=()=>owner&&uid()===owner;
  const toast=s=>showToast(s),number=(n,d=1)=>Number.isFinite(n)?n.toLocaleString('bs',{maximumFractionDigits:d}):'—';
@@ -174,7 +174,7 @@
   node('dr-aspect-flat').textContent=number(s.flat)+'%';
   const rows=arr=>arr.map(r=>'<div class="dr-stat-row'+(r.percent>0?'':' dr-stat-zero')+'"><span><i style="background:'+r.color+'"></i>'+r.name+'</span><div><b>'+number(r.percent)+'%</b><small>'+number(r.ha,2)+' ha</small></div><progress max="100" value="'+r.percent+'" aria-label="'+r.name+'" style="--dr-color:'+r.color+'"></progress></div>').join('');
   node('dr-slopes').innerHTML=rows(s.slope);node('dr-aspects').innerHTML=rows(s.aspect);
-  node('dr-coverage').textContent='DEM Mapzen / EU-DEM · uzorak oko '+number(s.resolution,0)+' m, nagib se računa na ~30 m (Hornov 3×3 kernel); izvorni DEM ima oko 30 m i ±nekoliko m visinske greške, pa je nagib procjena a ne mjerenje na terenu. Visine dostupne za '+number(s.coverage)+'% površine; nagib za '+number(s.slopeCoverage)+'%. Površine i teren su DEM procjena.';
+  node('dr-coverage').textContent='DEM Mapzen / EU-DEM · uzorak oko '+number(s.resolution,0)+' m, visine se prije nagiba izglađuju na ~100 m (šum DEM-a i krošnje lažno povećavaju nagib), zatim Hornov 3×3 kernel; izvorni DEM ima oko 30 m i ±nekoliko m visinske greške, pa je nagib procjena a ne mjerenje na terenu. Visine dostupne za '+number(s.coverage)+'% površine; nagib za '+number(s.slopeCoverage)+'%. Površine i teren su DEM procjena.';
  }
  function clearAutoRetry(){if(autoTimer){clearTimeout(autoTimer);autoTimer=null;}if(autoOnline){root.removeEventListener?.('online',autoOnline);autoOnline=null;}}
  function scheduleAutoRetry(delay=1600){

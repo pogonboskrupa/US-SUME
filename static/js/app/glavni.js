@@ -7616,8 +7616,9 @@ let _fotoSnapPos = null; // GPS pozicija zabilježena kad se pritisne dugme za f
 
 var _tragFotoCeka = false;   // sljedeća slika iz kamere pripada tragu koji se snima
 function startLocPhoto() {
-  _tragFotoCeka = false;
-  if (!lastP) { showToast('Nema GPS signala — pokreni GPS prvo'); return; }
+  // Dok se snima trag, svaka slika iz kamere pripada tragu (najviše 30), ne samo ona sa dugmeta u traci.
+  _tragFotoCeka = typeof _tragOn !== 'undefined' && !!_tragOn && (((typeof _tragLiveMeta !== 'undefined' && _tragLiveMeta && _tragLiveMeta.fotos) || []).length < 30);
+  if (!lastP) { _tragFotoCeka = false; showToast('Nema GPS signala — pokreni GPS prvo'); return; }
   const inp = document.getElementById('loc-photo-cam');
   if (!inp || inp.disabled) return;
   const project=(_projekti||[]).find(p=>p.id===_aktivniProjektId);
@@ -16961,7 +16962,7 @@ function _tragPopupHtml(t, lenM) {
   const style = t.dashStyle || 'solid';
   return `<div class="trag-popup">
     <b>${_escHtml(_tragIme(t))}</b>
-    <div class="trag-popup-meta">${dt}<br>${_tragFmtLen(lenM)} · ${t.pts.length} tačaka</div>
+    <div class="trag-popup-meta">${dt}<br>${_tragFmtLen(lenM)} · ${t.pts.length} tačaka${t.fotos && t.fotos.length ? ' · 📷 ' + t.fotos.length : ''}</div>
     <div class="trag-popup-btns">
       <button type="button" data-id="${_escHtml(String(t.id))}" onclick="_tragRegVodi(this.dataset.id)"><svg class="ic"><use href="#ic-kompas"/></svg> Vodi me</button>
       <button onclick="_tragRegRename('${t.id}')"><svg class="ic"><use href="#ic-crtaj"/></svg> Preimenuj</button>
@@ -17695,12 +17696,12 @@ function _bajtiUBase64(u) { let s = ''; const K = 0x8000; for (let i = 0; i < u.
 // canShare({files}) tiho vrati false), pa se prvo pokuša native AndroidShare
 // most (pravi Intent.ACTION_SEND chooser sa Viber/Messenger/Bluetooth/mail...).
 // Web Share API i obično preuzimanje ostaju fallback za webapp (Pages)/desktop.
-async function _tragRegShare(id) {
+async function _tragRegShare(id, bezSlika) {
   const t = _tragRegistry.find(x => x.id === id);
   if (!t) return;
   const ime = _tragIme(t);
   let kmz = null;
-  try { kmz = await _tragKmzBajti(t); } catch (e) { console.error('kmz', e); }
+  if (!bezSlika) { try { kmz = await _tragKmzBajti(t); } catch (e) { console.error('kmz', e); } }
   if (kmz) {
     const fn = _tragKmlIme(t).replace(/\.kml$/, '.kmz');
     if (typeof AndroidShare !== 'undefined' && AndroidShare.shareFile) {
@@ -17712,7 +17713,7 @@ async function _tragRegShare(id) {
     }
     return _tragKmlSacuvaj(id);
   }
-  await _shareKmlOrDownload(_tragKmlIme(t), _tragToKml(t), ime, 'Trag: ' + ime, () => _tragKmlSacuvaj(id));
+  await _shareKmlOrDownload(_tragKmlIme(t), _tragToKml(t), ime, 'Trag: ' + ime, () => _tragKmlSacuvaj(id, true));
 }
 
 // Ime fajla iz naziva traga — dijakritika ostaje (Android je podržava), a
@@ -17725,11 +17726,11 @@ function _tragKmlIme(t) {
 
 // Sačuvaj na uređaj: u APK-u <a download> presreće AndroidDownload most
 // (blob → Downloads), u browseru je obično preuzimanje.
-async function _tragKmlSacuvaj(id) {
+async function _tragKmlSacuvaj(id, bezSlika) {
   const t = _tragRegistry.find(x => x.id === id);
   if (!t) return;
   let kmz = null;
-  try { kmz = await _tragKmzBajti(t); } catch (e) {}
+  if (!bezSlika) { try { kmz = await _tragKmzBajti(t); } catch (e) {} }
   if (kmz) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([kmz], { type: 'application/vnd.google-earth.kmz' }));
@@ -17753,14 +17754,21 @@ async function _tragKmlMeni(id) {
   const t = _tragRegistry.find(x => x.id === id);
   if (!t) return;
   try { map.closePopup(); } catch (e) {}
-  const i = await _dlgActions('📄 ' + _tragIme(t) + ' — KML', [
-    { label: '<svg class="ic"><use href="#ic-posalji"/></svg> Podijeli (Viber, WhatsApp, e-mail…)' },
-    { label: '<svg class="ic"><use href="#ic-uvezi"/></svg> Sačuvaj .kml na telefon' },
-    { label: '<svg class="ic"><use href="#ic-korisnik"/></svg> Pošalji kolegu iz šumarije (ostaje samo kod njega)' },
-  ]);
-  if (i === 0) _tragRegShare(id);
-  else if (i === 1) _tragKmlSacuvaj(id);
-  else if (i === 2) podaciPosalji('trag', _tragIme(t), _tragToKml(t));
+  // Trag sa slikama: korisnik bira da li slike putuju uz trag (KMZ) ili se dijeli samo trag (KML).
+  const nF = (t.fotos && t.fotos.length) || 0;
+  const ico = n => '<svg class="ic"><use href="#' + n + '"/></svg> ';
+  const akcije = nF ? [
+    { label: ico('ic-posalji') + 'Podijeli trag SA slikama (' + nF + ') — .kmz', radi: () => _tragRegShare(id) },
+    { label: ico('ic-posalji') + 'Podijeli SAMO trag (bez slika) — .kml', radi: () => _tragRegShare(id, true) },
+    { label: ico('ic-uvezi') + 'Sačuvaj na telefon sa slikama (.kmz)', radi: () => _tragKmlSacuvaj(id) },
+    { label: ico('ic-uvezi') + 'Sačuvaj na telefon samo trag (.kml)', radi: () => _tragKmlSacuvaj(id, true) },
+  ] : [
+    { label: ico('ic-posalji') + 'Podijeli (Viber, WhatsApp, e-mail…)', radi: () => _tragRegShare(id) },
+    { label: ico('ic-uvezi') + 'Sačuvaj .kml na telefon', radi: () => _tragKmlSacuvaj(id) },
+  ];
+  akcije.push({ label: ico('ic-korisnik') + 'Pošalji kolegu iz šumarije (ostaje samo kod njega)', radi: () => podaciPosalji('trag', _tragIme(t), _tragToKml(t)) });
+  const i = await _dlgActions('📄 ' + _tragIme(t) + ' — izvoz', akcije.map(a => ({ label: a.label })));
+  if (i >= 0 && akcije[i]) akcije[i].radi();
 }
 
 function _toggleLocPopup() {
@@ -20936,7 +20944,7 @@ function pkml(doc, col, op, opts) {
     for (const pt of pm.getElementsByTagName('Point')) {
       const cs = pcs(tag1(pt, 'coordinates')?.textContent);
       if (cs.length > 0) {
-        const m = L.circleMarker(cs[0], {radius:5, color:col, fillColor:col, opacity:op, fillOpacity:op});
+        const m = L.circleMarker(cs[0], {radius:3, color:col, fillColor:col, opacity:op, fillOpacity:op});
         m._kmlIsPoint = true;
         m._kmlPmIndex=pmIndex;m._kmlName = name; m._kmlDesc = desc; m._kmlExtData = extData;
         m.addTo(g);
@@ -21069,6 +21077,7 @@ function _kmlHitTest(latlng, onlyPolygons) {
       }
 
       if (l._kmlIsPolygon) {
+        if (l._kmlSakriven && !onlyPolygons) continue;
         let inside = false;
         try { inside = !!(l._containsPoint && l._containsPoint(lp)); } catch(e) {}
         if (!inside && typeof turf!=='undefined' && l.getBounds?.().contains(latlng)) {
@@ -21240,12 +21249,14 @@ function _coordsCentroid(cs) {
 
 // Kreira L.marker sa permanentnom labelom na datoj poziciji
 function _kmlLabelMarker(pos, text) {
-  return L.marker(pos, {
+  const mk = L.marker(pos, {
     // _escHtml ovdje (ne na mjestu poziva) — text dolazi iz uvezenog KML/GeoJSON/.dbf
     // fajla, štiti oba pozivaoca odjednom (XSS preko <name>/atributa).
     icon: L.divIcon({ className: 'kml-label', html: `<div>${_escHtml(text)}</div>`, iconSize: null, iconAnchor: [0, 0] }),
     interactive: false, zIndexOffset: 100
   });
+  mk._kmlLabel = true;
+  return mk;
 }
 
 // Stilizovani KML parser — prima options za boju/debljinu/crtanje
@@ -21292,7 +21303,7 @@ function pkmlStyled(doc, opts) {
     for (const pt of pm.getElementsByTagName('Point')) {
       const cs = pcs(tag1(pt, 'coordinates')?.textContent);
       if (cs.length > 0) {
-        const m = L.circleMarker(cs[0], { radius: 4, color: opts.color, fillColor: opts.color, fillOpacity: 0.8 });
+        const m = L.circleMarker(cs[0], { radius: 3, color: opts.color, fillColor: opts.color, fillOpacity: 0.8 });
         m._kmlIsPoint = true;
         m._kmlName = name; m._kmlDesc = desc; m._kmlExtData = extData;
         m.addTo(g);
@@ -21368,7 +21379,7 @@ function saveKmlStyles() {
     if (!k._key || k.grp===null || k._downloaded===false) return;
     userMap[k._key] = { col: k.col, dash: k.dash, weight: k.weight, opacity: k.opacity ?? 0.9, vis: k.vis,
       fill: k.fill || false, fillCol: k.fillCol || k.col, fillPattern: k.fillPattern || 'solid', fillOpacity: k.fillOpacity ?? 0.35,
-      tag: k.tag || '', onlyPolygon: k.onlyPolygon===true, ptR: k.ptR || 5 };
+      tag: k.tag || '', onlyPolygon: k.onlyPolygon===true, ptR: k.ptR || 3, ptRRucno: k.ptRRucno===true, poligoniVidljivi: k.poligoniVidljivi===true };
   });
   localStorage.setItem(_KML_USER_STYLES_KEY, JSON.stringify(userMap));
   if(_localKmlSaveAll(false)===false)throw Error('Lokalni stil nije sačuvan');
@@ -21426,12 +21437,30 @@ function applyKmlStyle(i) {
 
   // Jednom po sloju (ranije po svakom poligonu: Object.keys nad hiljadama objekata za svaki → O(n²)).
   const _velik = !!(k.grp && k.grp._layers && Object.keys(k.grp._layers).length >= (typeof _KML_CULL_MIN === 'number' ? _KML_CULL_MIN : 1500));
+  // Fajl s tačkama: tačke su glavni sadržaj, pa se poligoni ne vide (ni obrub, ni ispuna, ni naziv,
+  // ni klik) dok ih korisnik izričito ne uključi ("Prikaži poligone" u stilu sloja).
+  if (k._vrsteGrp !== k.grp) {
+    k._vrsteGrp = k.grp; k._imaTacke = false;
+    const traziTacku = g => g?.eachLayer?.(l => { if (k._imaTacke) return; if (l._kmlIsPoint) k._imaTacke = true; else if (l.eachLayer && !l._kmlIsPolygon) traziTacku(l); });
+    traziTacku(k.grp);
+  }
+  const sakrijPoligone = k._imaTacke === true && k.poligoniVidljivi !== true;
   const styleLayer = l => {
     // SHP GeoJSON i MultiGeometry sadrže dodatne grupe; stilizuj stvarne elemente.
     if (l.eachLayer && !l._kmlIsPolygon && !l._kmlIsPoint) { l.eachLayer(styleLayer); return; }
+    if (l._kmlLabel) { l.setOpacity?.(sakrijPoligone ? 0 : 1); return; }
     if (!l.setStyle) return;
     const lo = {...base};
+    if (l._kmlIsPolygon && sakrijPoligone) {
+      lo.opacity = 0; lo.fill = false; lo.fillOpacity = 0;
+      l._kmlSakriven = true;
+      l.setStyle(lo);
+      // Canvas hvata klik po geometriji bez obzira na providnost — sakriven poligon ne smije krasti klik tačkama.
+      l.options.interactive = false;
+      return;
+    }
     if (l._kmlIsPolygon) {
+      l._kmlSakriven = false; l.options.interactive = true;
       // Hit-test cijele površine ostaje (fill:true i kad je prozirno) — osim za veliki sloj: tamo je
       // prozirna ispuna samo trošak crtanja hiljada poligona, a klik unutar poligona i dalje hvata
       // _kmlHitTest u map.on('click').
@@ -21445,7 +21474,7 @@ function applyKmlStyle(i) {
     } else {
       lo.fillColor = k.col;
       lo.fillOpacity = l._kmlIsPoint ? op : 0;
-      if (l._kmlIsPoint) { lo.radius = k.ptR || 5; lo.weight = 1.5; lo.dashArray = null; }
+      if (l._kmlIsPoint) { lo.radius = k.ptR || 3; lo.weight = 1.5; lo.dashArray = null; }
     }
     l.setStyle(lo);
     if(l._kmlIsPolygon&&l._path)l._path.style.pointerEvents='all';
@@ -21649,7 +21678,9 @@ function _localKmlSaveAll(prune=true) {
       store[origName].fillCol      = k.fillCol || k.col;
       store[origName].fillPattern  = k.fillPattern || 'solid';
       store[origName].fillOpacity  = k.fillOpacity ?? 0.35;
-      store[origName].ptR          = k.ptR || 5;
+      store[origName].ptR          = k.ptR || 3;
+      store[origName].ptRRucno     = k.ptRRucno===true;
+      store[origName].poligoniVidljivi = k.poligoniVidljivi===true;
       store[origName].tag          = k.tag || '';
       store[origName]._loadedAt    = k._loadedAt || store[origName]._loadedAt || 0;
     });
@@ -21700,7 +21731,9 @@ async function _localKmlRestore() {
           grp, col, dash: data.dash || '', weight: data.weight || 2,
           opacity: data.opacity ?? 0.9, vis: data.vis !== false,
           fill: data.fill || false, fillCol: data.fillCol || col,
-          fillPattern: data.fillPattern || 'solid', fillOpacity: data.fillOpacity ?? 0.35, ptR: data.ptR || 5,
+          fillPattern: data.fillPattern || 'solid', fillOpacity: data.fillOpacity ?? 0.35,
+          // Spremljeno 5 px je bilo samo staro zadano — poštuje se jedino ako ga je korisnik sam izabrao.
+          ptR: data.ptRRucno ? (data.ptR || 3) : 3, ptRRucno: data.ptRRucno===true, poligoniVidljivi: data.poligoniVidljivi===true,
           onlyPolygon: data.onlyPolygon===true, tag: data.tag || '', _loadedAt: data._loadedAt || 0
         };
         layer.onlyPolygon=globalThis.GithubLayers?.defaultOnlyPolygon(layer)??layer.onlyPolygon;
@@ -33151,7 +33184,7 @@ async function _loadOneKml(bucketName, file, opts, extractOdjeli, cacheOnly=fals
     col: _fc, dash: finalOpts.dashArray || finalOpts.dash || '',
     weight: finalOpts.weight || 2, opacity: finalOpts.opacity ?? 0.9,
     vis: finalOpts.vis !== false,
-    fill: finalOpts.fill===true, fillCol: finalOpts.fillCol||_fc, fillPattern: finalOpts.fillPattern||'solid', fillOpacity: finalOpts.fillOpacity??0.35, ptR: finalOpts.ptR||5,
+    fill: finalOpts.fill===true, fillCol: finalOpts.fillCol||_fc, fillPattern: finalOpts.fillPattern||'solid', fillOpacity: finalOpts.fillOpacity??0.35, ptR: finalOpts.ptRRucno ? (finalOpts.ptR||3) : 3, ptRRucno: finalOpts.ptRRucno===true, poligoniVidljivi: finalOpts.poligoniVidljivi===true,
     onlyPolygon: finalOpts.onlyPolygon===true, tag: finalOpts.tag||'', _loadedAt: Date.now(), _downloaded: true });
   applyKmlStyle(kmlLs.length-1);
   // Apply visibility
@@ -33232,7 +33265,7 @@ async function _loadOneShp(bucketName, file, opts, extractOdjeli, existingPaths,
     try {
       const layer = L.geoJSON(f, {
         style: () => styleOpts,
-        pointToLayer: (_, ll) => L.circleMarker(ll, { radius: 4, ...styleOpts }),
+        pointToLayer: (_, ll) => L.circleMarker(ll, { radius: 3, ...styleOpts }),
       });
       if (nm) layer.bindTooltip(_escHtml(String(nm)), { sticky: true, opacity: 0.9 });
       // Isti info-popup kao za KML: SHP je u istoj listi "Granice" i korisnik s
@@ -35370,7 +35403,6 @@ function dozPauseGPS() {
 }
 
 function _dozUpdGpsStats(acc) {
-  if (typeof _fieldStatusUpdate==='function') _fieldStatusUpdate.accuracyDoz=acc;
   if (document.hidden) return;
   // IDB/native dopuna može donijeti više tačaka prije sljedećeg frame-a.
   // Spremanje ostaje po tački, a ekran crta samo najnovije potvrđeno stanje.

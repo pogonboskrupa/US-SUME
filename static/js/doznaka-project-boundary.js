@@ -15,6 +15,11 @@
  const el=id=>document.getElementById(id);
  let sources=[],items=[],selectedSource=0,previous=null,shown=[],pendingDownload=false,busy=false,owner=null,client=null;
  const styles=new Map(),visibility=new Map();
+ // Izabran odsjek mora se jasno vidjeti: plava ispuna i debela linija, boje kakve nema ni u jednom
+ // zadanom stilu fajla. `fill:true` je obavezan — veliki fajlovi granica imaju ispunu isključenu, pa
+ // bi se bez njega promijenila samo linija (u boji sličnoj fajlu) i izbor se ne bi primijetio.
+ const SELEKTOVAN={fill:true,color:'#1d4ed8',fillColor:'#3b82f6',fillOpacity:.5,opacity:1,weight:4,dashArray:null};
+ function oznaci(layer){layer.setStyle(SELEKTOVAN);try{layer.bringToFront();}catch(e){}}
  function getSources(){
   const result=[];for(const k of kmlLs){if(!k.grp)continue;const rows=[];const walk=g=>g.eachLayer(l=>{if(l._kmlIsPolygon)rows.push({layer:l});else if(l.eachLayer)walk(l);});walk(k.grp);if(rows.length)result.push({k,rows});}
   return result.sort((a,b)=>(GithubLayers.role(b.k)==='boundaries')-(GithubLayers.role(a.k)==='boundaries'));
@@ -40,7 +45,7 @@
   if(busy||!allows(layer)||sbUser?.id!==owner)return;
   const idx=_dozKmlSelLayers.indexOf(layer);
   if(idx>=0){_dozKmlSelLayers.splice(idx,1);layer.setStyle(styles.get(layer)||{});}else{
-   if(!styles.has(layer))styles.set(layer,{...layer.options});layer.setStyle({color:'#f59e0b',fillColor:'#f59e0b',fillOpacity:.35,opacity:1,weight:3});_dozKmlSelLayers.push(layer);
+   if(!styles.has(layer))styles.set(layer,{...layer.options});oznaci(layer);_dozKmlSelLayers.push(layer);
   }update();
  }
  function clear(){if(busy)return;_dozKmlSelLayers.forEach(l=>l.setStyle(styles.get(l)||{}));_dozKmlSelLayers=[];update();}
@@ -72,7 +77,7 @@
   if(shown.length>80){const p=document.createElement('p');p.textContent=`Prikazano 80 od ${shown.length}. Približi kartu svom odjelu ili biraj direktno na karti.`;list.append(p);}
   el('doz-picker-all').disabled=busy||!shown.length||shown.length>300;el('doz-picker-all').textContent='Odaberi sve prikazane ('+shown.length+')';update();
  }
- function selectVisible(){if(busy||!shown.length||shown.length>300)return;for(const row of shown)if(!_dozKmlSelLayers.includes(row.layer)){if(!styles.has(row.layer))styles.set(row.layer,{...row.layer.options});row.layer.setStyle({color:'#f59e0b',fillColor:'#f59e0b',fillOpacity:.35,opacity:1,weight:3});_dozKmlSelLayers.push(row.layer);}update();}
+ function selectVisible(){if(busy||!shown.length||shown.length>300)return;for(const row of shown)if(!_dozKmlSelLayers.includes(row.layer)){if(!styles.has(row.layer))styles.set(row.layer,{...row.layer.options});oznaci(row.layer);_dozKmlSelLayers.push(row.layer);}update();}
  function finishUi(){
   for(const [l,style] of styles)try{l.setStyle(style);}catch(e){}
   for(const [k,wasVisible] of visibility){if(!wasVisible)map.removeLayer(k.grp);}
