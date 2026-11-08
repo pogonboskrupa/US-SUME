@@ -537,6 +537,7 @@ public class MainActivity extends Activity {
             }
 
             String apkUrl = null;
+            String apkApiUrl = null;
             long apkVelicina = -1;
             String apkDigest = null;
             org.json.JSONArray assets = rel.optJSONArray("assets");
@@ -548,6 +549,7 @@ public class MainActivity extends Activity {
                     if (a.optString("name", "").endsWith(".apk")
                             && "uploaded".equals(a.optString("state", "uploaded"))) {
                         apkUrl = a.optString("browser_download_url", null);
+                        apkApiUrl = a.optString("url", null);
                         apkVelicina = a.optLong("size", -1);
                         apkDigest = a.isNull("digest") ? "" : a.optString("digest", "");
                         break;
@@ -572,7 +574,14 @@ public class MainActivity extends Activity {
             if (!gotov) {
                 if (apk.exists()) //noinspection ResultOfMethodCallIgnored
                     apk.delete();
-                preuzmiSaNastavkom(apkUrl, dio, apkVelicina, verNova);
+                // API put prvo: github.com/.../releases/download zna dugo vraćati HTTP 504
+                // (izmjereno 2026-11-08, i za starije verzije), dok api.github.com
+                // assets/{id} uz Accept: application/octet-stream odmah preusmjeri na
+                // isti CDN fajl. Stari URL ostaje rezerva.
+                java.util.List<String> izvori = new java.util.ArrayList<>();
+                if (apkApiUrl != null && apkApiUrl.startsWith("https://api.github.com/")) izvori.add(apkApiUrl);
+                izvori.add(apkUrl);
+                preuzmiSaNastavkom(izvori, dio, apkVelicina, verNova);
                 // Veza koja se tiho zatvori prije kraja daje NEPOTPUN APK, a Android na
                 // njemu javi samo "greška pri parsiranju paketa" — zato provjera veličine.
                 if (apkVelicina > 0 && dio.length() != apkVelicina) {
@@ -590,7 +599,8 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> instalirajApk(apk, ver));
         }
 
-        private void preuzmiSaNastavkom(String url, File dio, long ukupno, String ver) throws IOException {
+        private void preuzmiSaNastavkom(java.util.List<String> izvori, File dio, long ukupno, String ver) throws IOException {
+            int izvor = 0;
             preuzimanjePocelo = true;
             IOException zadnja = null;
             // Prekid POSLIJE stvarnog napretka (CDN zatvori dugu vezu, promjena ćelije)
@@ -601,7 +611,7 @@ public class MainActivity extends Activity {
                 if (otkazano) throw new OtkazanoException();
                 long prije = dio.exists() ? dio.length() : 0;
                 try {
-                    preuzmiDio(url, dio, ukupno, ver, krug);
+                    preuzmiDio(izvori.get(izvor), dio, ukupno, ver, krug);
                     return;
                 } catch (OtkazanoException e) {
                     throw e;
@@ -611,7 +621,11 @@ public class MainActivity extends Activity {
                 }
                 long poslije = dio.exists() ? dio.length() : 0;
                 boolean napredovalo = poslije > prije + 256 * 1024;
-                if (!napredovalo) pokusaj++;
+                if (!napredovalo) {
+                    pokusaj++;
+                    // Bez ijednog novog bajta: sljedeći pokušaj ide drugim putem do istog fajla.
+                    izvor = (izvor + 1) % izvori.size();
+                }
                 if (pokusaj > MAX_POKUSAJA) break;
                 boolean serverGreska = zadnja != null && zadnja.getMessage() != null && zadnja.getMessage().matches("HTTP 5\\d\\d");
                 long cekaj = napredovalo ? 1000L : Math.min((serverGreska ? 5000L : 2000L) << (pokusaj - 2), serverGreska ? 30000L : 16000L);
@@ -643,6 +657,7 @@ public class MainActivity extends Activity {
                 c.setConnectTimeout(20000);
                 c.setReadTimeout(30000);
                 c.setRequestProperty("User-Agent", "DendroMap-Android");
+                if (urlStr.startsWith("https://api.github.com/")) c.setRequestProperty("Accept", "application/octet-stream");
                 if (vec > 0) c.setRequestProperty("Range", "bytes=" + vec + "-");
                 int status = c.getResponseCode();
                 boolean nastavak;
