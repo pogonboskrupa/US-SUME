@@ -1,4 +1,4 @@
-// Meni → "Preuzmi APK fajl": samo admin, najnoviji release sa GitHub-a (prerelease
+// Meni → "Preuzmi APK fajl": svi korisnici (od v3.6.8), najnoviji release sa GitHub-a (prerelease
 // uključen), APK otvara vanjski preglednik kroz postojeći shouldOverrideUrlLoading.
 const assert = require('assert');
 const src = require('./_izvor').izvor();
@@ -37,7 +37,7 @@ const ta = async (ime, f) => { await f(); ok++; };
     const loc = { hostname: apk ? 'appassets.androidplatform.net' : 'pogonboskrupa.github.io', set href(v) { st.href = v; } };
     const doc = { body: { appendChild() {} }, createElement: () => ({ click() { st.otvoreno.push(this.href); }, remove() {} }) };
     const f = new Function('sbProfile', 'showToast', '_fetchT', '_dlg', '_dlgActions', 'location', 'window', 'document', 'APP_VER', '_updMB', 'navigator',
-      konst('_APK_RELEASES_API') + ';' + konst('_APK_RELEASES_STR') + ';' + asset + ';' + fn('_apkOtvoriUrl') + ';' + fn('preuzmiApkAdmin') + '; return preuzmiApkAdmin;')(
+      konst('_APK_RELEASES_API') + ';' + konst('_APK_RELEASES_STR') + ';' + konst('_APK_STALNI') + ';' + fn('_apkKopirajLink') + ';' + asset + ';' + fn('_apkOtvoriUrl') + ';' + fn('preuzmiApkAdmin') + '; return preuzmiApkAdmin;')(
       admin ? { is_admin: true } : { is_admin: false }, m => st.toast.push(m),
       async (url, ms) => { st.fetch.push([url, ms]); if (baci) throw new TypeError('fetch'); return odgovor; },
       async o => { st.dlg.push(o); return izbor; }, async (t, a) => { st.dlg.push({ title: t, actions: a }); return izbor; },
@@ -46,10 +46,17 @@ const ta = async (ime, f) => { await f(); ok++; };
   }
   const rel = { ok: true, status: 200, json: async () => [{ tag_name: 'v3.2.5', assets: [{ name: 'D.apk', state: 'uploaded', size: 1048576, browser_download_url: 'https://github.com/x/D.apk' }] }] };
 
-  await ta('ne-admin ne dira mrežu', async () => {
+  await ta('i obični korisnik može preuzeti APK', async () => {
     const { f, st } = okolina({ admin: false, odgovor: rel });
     await f();
-    assert.strictEqual(st.fetch.length, 0); assert.strictEqual(st.href, null);
+    assert.strictEqual(st.href, 'https://github.com/x/D.apk');
+  });
+  await ta('API odbijen (limit): preuzimanje ide preko stalnog linka', async () => {
+    const { f, st } = okolina({ odgovor: { ok: false, status: 403 }, izbor: 0 });
+    await f();
+    assert.strictEqual(st.href, 'https://github.com/pogonboskrupa/US-SUME/releases/latest/download/app-debug.apk');
+    assert.ok(st.toast.some(t => /403/.test(t)));
+    assert.ok(!st.toast.some(t => /GitHub/.test(t)), 'korisnik vidi "server", ne "GitHub"');
   });
   await ta('APK: preuzimanje ide navigacijom (ACTION_VIEW)', async () => {
     const { f, st } = okolina({ odgovor: rel });
@@ -65,14 +72,17 @@ const ta = async (ime, f) => { await f(); ok++; };
     assert.deepStrictEqual(st.otvoreno, ['https://github.com/x/D.apk']); assert.strictEqual(st.href, null);
   });
   await ta('bez mreže: nudi stranicu sa verzijama, ne baca', async () => {
-    const { f, st } = okolina({ baci: true, izbor: 0 });
+    const { f, st } = okolina({ baci: true, izbor: 2 });
     await f();
     assert.strictEqual(st.href, 'https://github.com/pogonboskrupa/US-SUME/releases');
     assert.ok(st.toast.some(t => /Nema veze/.test(t)));
   });
-  await ta('meni stavka je skrivena i gejtovana na admina', () => {
-    assert.ok(/id="menu-apk-download" hidden/.test(src));
-    assert.ok(/apkItem\.hidden = !isAdm/.test(fn('_primijeniUlogeUI')));
+  await ta('meni stavka je vidljiva svima', () => {
+    assert.ok(!/id="menu-apk-download" hidden/.test(src));
+    assert.ok(/apkItem\.hidden = false/.test(fn('_primijeniUlogeUI')));
+  });
+  await ta('greška ažuriranja nudi preuzimanje u pregledniku', () => {
+    assert.ok(/Preuzmi u pregledniku', '_apkOtvoriUrl\(_APK_STALNI\)'/.test(fn('_azurirajNapredak')));
   });
   console.log('apk-preuzmi-admin: ' + ok + ' OK');
 })().catch(e => { console.error(e); process.exit(1); });

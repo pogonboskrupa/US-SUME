@@ -1655,7 +1655,7 @@ function _primijeniUlogeUI(data) {
   const postavkeItem = document.getElementById('menu-postavke-item');
   if (postavkeItem) postavkeItem.style.display = isAdm ? 'block' : 'none';
   const apkItem = document.getElementById('menu-apk-download');
-  if (apkItem) apkItem.hidden = !isAdm;
+  if (apkItem) apkItem.hidden = false;
   const debugItem = document.getElementById('menu-debug-item');
   if (debugItem) debugItem.style.display = isAdm ? 'block' : 'none';
   // Izvještaji (sedmični/mjesečni po projektantu): nadzorni prikaz — admin + vodeći
@@ -32111,6 +32111,21 @@ function _updPonovo() { azurirajAplikaciju(); }
 // pa preuzimanje radi Android preglednik/DownloadManager — bez nove Java izmjene.
 const _APK_RELEASES_API = 'https://api.github.com/repos/pogonboskrupa/US-SUME/releases?per_page=1';
 const _APK_RELEASES_STR = 'https://github.com/pogonboskrupa/US-SUME/releases';
+// Stalni link: uvijek vodi na APK zadnje objave (CI je od v3.6.8 objavljuje kao
+// "latest"). Radi u svakom pregledniku bez prijave i bez API limita, pa ga može
+// koristiti svaki korisnik kad ažuriranje u app-u ne prođe, i može se poslati
+// kolegama (Viber, SMS) — link se ne mijenja sa verzijom.
+const _APK_STALNI = 'https://github.com/pogonboskrupa/US-SUME/releases/latest/download/app-debug.apk';
+
+async function _apkKopirajLink(url) {
+  try {
+    if (window.AndroidShare && typeof window.AndroidShare.shareText === 'function') {
+      window.AndroidShare.shareText('Dendro Map — najnovija verzija', url); return;
+    }
+  } catch (e) {}
+  try { await navigator.clipboard.writeText(url); showToast('📋 Link kopiran'); }
+  catch (e) { showToast(url); }
+}
 
 function _apkAssetIzReleasea(release) {
   if (!release || release.draft) return null;
@@ -32126,8 +32141,9 @@ function _apkOtvoriUrl(url) {
   document.body.appendChild(a); a.click(); a.remove();
 }
 
+// Dostupno SVIM korisnicima (bilo samo admin): kad ažuriranje u app-u ne prođe
+// (API limit na mobilnoj mreži, stariji APK), preglednik i stalni link uvijek rade.
 async function preuzmiApkAdmin() {
-  if (!sbProfile?.is_admin) { showToast('⚠ Samo za admina'); return; }
   if (typeof _mrezaSila === 'function') _mrezaSila(60000);
   showToast('🔄 Tražim najnoviji APK…');
   let apk = null, greska = '';
@@ -32137,11 +32153,16 @@ async function preuzmiApkAdmin() {
     else greska = 'Server je odgovorio ' + r.status + '.';
   } catch (e) { greska = 'Nema veze sa serverom.'; }
   if (!apk) {
+    // API zna odbiti (limit po IP-u) iako veza radi — stalni link ne ide kroz API.
     const izbor = await _dlgActions('Preuzmi APK fajl', [
+      { label: '⬇ Preuzmi najnoviji APK' },
+      { label: '🔗 Podijeli / kopiraj link' },
       { label: '🌐 Otvori stranicu sa verzijama' },
       { label: 'Zatvori' },
     ]);
-    if (izbor === 0) _apkOtvoriUrl(_APK_RELEASES_STR);
+    if (izbor === 0) _apkOtvoriUrl(_APK_STALNI);
+    else if (izbor === 1) await _apkKopirajLink(_APK_STALNI);
+    else if (izbor === 2) _apkOtvoriUrl(_APK_RELEASES_STR);
     if (greska) showToast('⚠ ' + greska);
     return;
   }
@@ -32150,13 +32171,11 @@ async function preuzmiApkAdmin() {
   const izbor = await _dlg({
     title: 'Preuzmi APK fajl', mode: 'actions',
     msg: apk.ime + ' (v' + apk.ver + vel + ') — na ovom uređaju je v' + lokalna + '.',
-    actions: [{ label: '⬇ Preuzmi APK' }, { label: '📋 Kopiraj link' }, { label: 'Zatvori' }],
+    actions: [{ label: '⬇ Preuzmi APK' }, { label: '🔗 Podijeli / kopiraj link' }, { label: 'Zatvori' }],
   });
   if (izbor === 0) _apkOtvoriUrl(apk.url);
-  else if (izbor === 1) {
-    try { await navigator.clipboard.writeText(apk.url); showToast('📋 Link kopiran'); }
-    catch (e) { showToast(apk.url); }
-  }
+  // Dijeli se STALNI link: kolega koji ga otvori sutra dobija tada najnoviju verziju.
+  else if (izbor === 1) await _apkKopirajLink(_APK_STALNI);
 }
 
 function _updDugme(tip, ico, tekst, akcija) {
@@ -32253,6 +32272,10 @@ function _azurirajNapredak(p) {
     btns = _updDugme('', '', 'Zatvori', '_updZatvori()') + _updDugme('pri', 'ic-naprijed', 'Nastavi', '_updPonovo()');
   } else if (p.faza === 'najnovija') {
     btns = _updDugme('pri', 'ic-potvrdi', 'U redu', '_updZatvori()');
+  } else if (p.faza === 'greska') {
+    // Kad ažuriranje u app-u ne prođe, preglednik preko stalnog linka i dalje radi.
+    btns = _updDugme('', '', 'Zatvori', '_updZatvori()') + _updDugme('', 'ic-uvezi', 'Preuzmi u pregledniku', '_apkOtvoriUrl(_APK_STALNI)')
+      + _updDugme('pri', 'ic-ponovi', 'Pokušaj ponovo', '_updPonovo()');
   } else {
     btns = _updDugme('', '', 'Zatvori', '_updZatvori()') + _updDugme('pri', 'ic-ponovi', 'Pokušaj ponovo', '_updPonovo()');
   }
