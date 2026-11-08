@@ -5015,3 +5015,7 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 ### Ažuriranje APK-a — prekidi i HTTP 5xx (v3.6.4)
 - `preuzmiSaNastavkom`: prekid POSLIJE napretka (>256 KB) ne troši pokušaj (kapa 40 krugova); poruka nosi razlog (`kratkiRazlog`: "veza resetovana", "server ne odgovara", "GitHub server privremeno ne odgovara, HTTP 504"…), a 5xx čeka duže (5→30 s). Log `DendroUpdate`.
 - APK se uzima samo kad je asset `state == "uploaded"`: release je vidljiv prije kraja CI uploada, pa je preuzimanje u tom prozoru davalo HTTP 504/404. Tada poruka kaže da se verzija upravo objavljuje.
+
+### CI brži — browser testovi paralelno (v3.6.5)
+- Korak "Pregled Menija…" je 53 browser testa vrtio redom (~8 od ~15 min do Release-a). Sad ih pokreće `tests/browser/run-ci.sh`: nezavisni po 3 paralelno (`xargs -P 3`), a testovi koji MJERE vrijeme ili su teški (`kml-50000`, `kml-tacke-canvas`, `field-five-hours`, `field-offline-5400`, `slow-render-289`) sami na kraju. Pad ispisuje zadnjih 40 redova tog testa (`::group::PAO …`). Lokalno: 3 min 40 s (bilo ~8 min).
+- **Novi browser test se dodaje u `run-ci.sh`** (niz `PARALELNO`, ili `SAMI_LISTA` ako mjeri vrijeme), ne u workflow.
