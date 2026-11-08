@@ -62,59 +62,7 @@ jobs:
         run: |
           python -m pip install playwright==1.55.0
           python -m playwright install --with-deps chromium
-          timeout 120s python tests/browser/terrain-workspace-243.py
-          timeout 180s python tests/browser/inline-split-startup.py
-          timeout 240s python tests/browser/kml-50000.py
-          timeout 240s python tests/browser/kml-tacke-canvas.py
-          timeout 240s python tests/browser/labele-vlaka.py
-          timeout 240s python tests/browser/field-five-hours.py
-          timeout 180s python tests/browser/offline-import-240.py
-          timeout 90s python tests/browser/explorer-full-239.py
-          python tests/browser/explorer-239.py
-          python tests/browser/access-238.py
-          python tests/browser/overlays-237.py
-          python tests/browser/explorer-236.py
-          python tests/browser/measurements-235.py
-          python tests/browser/server-confirm-234.py
-          python tests/browser/load-map-233.py
-          python tests/browser/labels-offline-265.py
-          python tests/browser/thematic-files-266.py
-          python tests/browser/thematic-source-268.py
-          python tests/browser/manual-draw-270.py
-          python tests/browser/audit-parts-271.py
-          python tests/browser/audit-parts-272.py
-          timeout 120s python tests/browser/device-workflow-273.py
-          timeout 120s python tests/browser/day-layout-274.py
-          timeout 180s python tests/browser/day-all-panels-275.py
-          timeout 120s python tests/browser/doznaka-project-boundary-276.py
-          timeout 120s python tests/browser/kml-editor-277.py
-          timeout 120s python tests/browser/department-report-277.py
-          timeout 120s python tests/browser/slow-render-289.py
-          timeout 120s python tests/browser/navigation-design-278.py
-          timeout 120s python tests/browser/style-library-280.py
-          timeout 120s python tests/browser/vlaka-style-286.py
-          timeout 120s python tests/browser/project-auto-sync-287.py
-          timeout 180s python tests/browser/doznaka-plan-281.py
-          timeout 120s python tests/browser/photo-settings-281.py
-          python tests/browser/offline-preview-266.py
-          python tests/browser/preferences-266.py
-          python tests/browser/server-design-232.py
-          python tests/browser/print-styles-232.py
-          timeout 90s python tests/browser/print-responsive-274.py
-          python tests/browser/dem-winter-232.py
-          python tests/browser/doznaka-sixdays-232.py
-          python tests/browser/doznaka-boundary-231.py
-          python tests/browser/menu-print-day.py
-          python tests/browser/menu-tools.py
-          python tests/browser/server-map-218.py
-          python tests/browser/map-library-219.py
-          python tests/browser/project-vlake-220.py
-          python tests/browser/project-terrain-222.py
-          python tests/browser/reference-vlake-224.py
-          python tests/browser/project-arrows-226.py
-          python tests/browser/doznaka-restore-227.py
-          python tests/browser/doznaka-gps-controls-267.py
-          python tests/browser/field-offline-5400.py
+          bash tests/browser/run-ci.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:

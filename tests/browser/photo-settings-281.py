@@ -25,7 +25,7 @@ async def main():
   page=await ctx.new_page();page.on('pageerror',lambda e:errors.append(str(e)));await page.goto('https://device.test/');await page.wait_for_function('testFotoRestoreDone&&typeof _tvPhotoSet==="function"');await page.evaluate(SETUP)
   await page.evaluate("async()=>{for(let i=0;i<2;i++){const f={la:44.902,lo:16.001+i*.002,ts:100+i,thumb:photoRow.thumb,full:photoRow.thumb};f.marker=_buildFotoMarker(f.la,f.lo,f.thumb,f.full,i,f.ts,true);_locFotos.push(f)}_saveFotos();await sbLoadSharedFotos();}")
   assert await page.evaluate('_locFotos.length===2&&_sharedFotos.length===1&&[..._locFotos,..._sharedFotos].every(f=>map.hasLayer(f.marker))')
-  await page.evaluate("openOznakePanel();_libraryFilter('photos')");await page.locator('.ml-card').first.get_by_role('button',name='Sakrij',exact=True).click()
+  await page.evaluate("openOznakePanel();_libraryFilter('photos');_librarySort('department')");await page.locator('.ml-card').first.get_by_role('button',name='Sakrij',exact=True).click()
   hidden=await page.evaluate('_locFotos.map(f=>!_tvPhotoVisible(f,false))');assert hidden.count(True)==1
   await page.evaluate('_tvPhotoSet(_sharedFotos[0],true,false);closeOznakePanel()')
   async def zoom(z):await page.evaluate('(z)=>{map.setZoom(z,{animate:false});_updMapScale()}',z)

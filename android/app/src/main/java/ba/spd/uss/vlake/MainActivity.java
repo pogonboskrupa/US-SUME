@@ -537,14 +537,19 @@ public class MainActivity extends Activity {
             }
 
             String apkUrl = null;
+            String apkApiUrl = null;
             long apkVelicina = -1;
             String apkDigest = null;
             org.json.JSONArray assets = rel.optJSONArray("assets");
             if (assets != null) {
                 for (int i = 0; i < assets.length(); i++) {
                     org.json.JSONObject a = assets.getJSONObject(i);
-                    if (a.optString("name", "").endsWith(".apk")) {
+                    // Release je vidljiv PRIJE nego CI završi upload APK-a (state "starter"/"new");
+                    // URL tada vraća 404/504 sa GitHub CDN-a. Uzima se samo potpuno postavljen fajl.
+                    if (a.optString("name", "").endsWith(".apk")
+                            && "uploaded".equals(a.optString("state", "uploaded"))) {
                         apkUrl = a.optString("browser_download_url", null);
+                        apkApiUrl = a.optString("url", null);
                         apkVelicina = a.optLong("size", -1);
                         apkDigest = a.isNull("digest") ? "" : a.optString("digest", "");
                         break;
@@ -552,7 +557,7 @@ public class MainActivity extends Activity {
                 }
             }
             if (apkUrl == null) {
-                napredak("greska", 0, 0, verNova, "Nova verzija v" + verNova + " postoji, ali APK nije pronađen u objavi.");
+                napredak("greska", 0, 0, verNova, "Nova verzija v" + verNova + " se upravo objavljuje — APK još nije postavljen. Pokušaj za 2–3 minute.");
                 return;
             }
 
@@ -569,7 +574,14 @@ public class MainActivity extends Activity {
             if (!gotov) {
                 if (apk.exists()) //noinspection ResultOfMethodCallIgnored
                     apk.delete();
-                preuzmiSaNastavkom(apkUrl, dio, apkVelicina, verNova);
+                // API put prvo: github.com/.../releases/download zna dugo vraćati HTTP 504
+                // (izmjereno 2026-11-08, i za starije verzije), dok api.github.com
+                // assets/{id} uz Accept: application/octet-stream odmah preusmjeri na
+                // isti CDN fajl. Stari URL ostaje rezerva.
+                java.util.List<String> izvori = new java.util.ArrayList<>();
+                if (apkApiUrl != null && apkApiUrl.startsWith("https://api.github.com/")) izvori.add(apkApiUrl);
+                izvori.add(apkUrl);
+                preuzmiSaNastavkom(izvori, dio, apkVelicina, verNova);
                 // Veza koja se tiho zatvori prije kraja daje NEPOTPUN APK, a Android na
                 // njemu javi samo "greška pri parsiranju paketa" — zato provjera veličine.
                 if (apkVelicina > 0 && dio.length() != apkVelicina) {
@@ -587,24 +599,39 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> instalirajApk(apk, ver));
         }
 
-        private void preuzmiSaNastavkom(String url, File dio, long ukupno, String ver) throws IOException {
+        private void preuzmiSaNastavkom(java.util.List<String> izvori, File dio, long ukupno, String ver) throws IOException {
+            int izvor = 0;
             preuzimanjePocelo = true;
             IOException zadnja = null;
-            for (int pokusaj = 1; pokusaj <= MAX_POKUSAJA; pokusaj++) {
+            // Prekid POSLIJE stvarnog napretka (CDN zatvori dugu vezu, promjena ćelije)
+            // ne troši pokušaj: nastavak ionako ide od preuzetog bajta. Troše ga samo
+            // pokušaji bez ijednog novog bajta; ukupna kapa sprječava beskonačnu petlju.
+            int pokusaj = 1;
+            for (int krug = 1; krug <= 40; krug++) {
                 if (otkazano) throw new OtkazanoException();
+                long prije = dio.exists() ? dio.length() : 0;
                 try {
-                    preuzmiDio(url, dio, ukupno, ver, pokusaj);
+                    preuzmiDio(izvori.get(izvor), dio, ukupno, ver, krug);
                     return;
                 } catch (OtkazanoException e) {
                     throw e;
                 } catch (IOException e) {
                     zadnja = e;
+                    android.util.Log.w("DendroUpdate", "preuzimanje prekinuto (krug " + krug + ")", e);
                 }
-                if (pokusaj == MAX_POKUSAJA) break;
-                long cekaj = Math.min(2000L << (pokusaj - 1), 16000L);
-                napredak("ponovo", dio.length(), ukupno, ver,
-                        "Veza prekinuta — nastavljam za " + (cekaj / 1000) + " s (pokušaj "
-                                + (pokusaj + 1) + "/" + MAX_POKUSAJA + ")");
+                long poslije = dio.exists() ? dio.length() : 0;
+                boolean napredovalo = poslije > prije + 256 * 1024;
+                if (!napredovalo) {
+                    pokusaj++;
+                    // Bez ijednog novog bajta: sljedeći pokušaj ide drugim putem do istog fajla.
+                    izvor = (izvor + 1) % izvori.size();
+                }
+                if (pokusaj > MAX_POKUSAJA) break;
+                boolean serverGreska = zadnja != null && zadnja.getMessage() != null && zadnja.getMessage().matches("HTTP 5\\d\\d");
+                long cekaj = napredovalo ? 1000L : Math.min((serverGreska ? 5000L : 2000L) << (pokusaj - 2), serverGreska ? 30000L : 16000L);
+                napredak("ponovo", poslije, ukupno, ver,
+                        "Prekid (" + kratkiRazlog(zadnja) + ") — nastavljam za " + (cekaj / 1000) + " s"
+                                + (napredovalo ? "" : " (pokušaj " + pokusaj + "/" + MAX_POKUSAJA + ")"));
                 for (long t = 0; t < cekaj; t += 250) {
                     if (otkazano) throw new OtkazanoException();
                     try { Thread.sleep(250); } catch (InterruptedException ie) { throw new OtkazanoException(); }
@@ -630,6 +657,7 @@ public class MainActivity extends Activity {
                 c.setConnectTimeout(20000);
                 c.setReadTimeout(30000);
                 c.setRequestProperty("User-Agent", "DendroMap-Android");
+                if (urlStr.startsWith("https://api.github.com/")) c.setRequestProperty("Accept", "application/octet-stream");
                 if (vec > 0) c.setRequestProperty("Range", "bytes=" + vec + "-");
                 int status = c.getResponseCode();
                 boolean nastavak;
@@ -744,6 +772,20 @@ public class MainActivity extends Activity {
             }
         }
 
+        /** Kratak, čitljiv razlog prekida — da poruka kaže ŠTA je puklo, ne samo "veza". */
+        private String kratkiRazlog(IOException e) {
+            if (e == null) return "nepoznato";
+            if (e instanceof java.net.SocketTimeoutException) return "server ne odgovara";
+            if (e instanceof java.net.UnknownHostException) return "nema DNS-a";
+            if (e instanceof javax.net.ssl.SSLException) return "sigurna veza prekinuta";
+            if (e instanceof java.net.SocketException) return "veza resetovana";
+            String m = e.getMessage();
+            if (m != null && m.matches("HTTP 5\\d\\d")) return "GitHub server privremeno ne odgovara, " + m;
+            if (m != null && m.startsWith("HTTP ")) return "server " + m;
+            if (m != null && !m.isEmpty()) return m.length() > 60 ? m.substring(0, 60) : m;
+            return e.getClass().getSimpleName();
+        }
+
         private String opisGreske(Exception e) {
             String ime = e.getClass().getSimpleName();
             if (e instanceof java.net.UnknownHostException)
@@ -757,6 +799,9 @@ public class MainActivity extends Activity {
             if (e instanceof org.json.JSONException)
                 return "GitHub je vratio neočekivan odgovor. Pokušaj ponovo za par minuta.";
             String m = e.getMessage();
+            if (m != null && m.matches("HTTP 5\\d\\d"))
+                return "GitHub server trenutno ne odgovara (" + m + ") — ne do tvoje veze. "
+                        + (preuzimanjePocelo ? "Preuzeti dio je sačuvan; " : "") + "pokušaj ponovo za par minuta.";
             return "Ažuriranje nije uspjelo: " + (m != null && !m.isEmpty() ? m : ime);
         }
 

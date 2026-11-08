@@ -53,3 +53,12 @@ html[data-field-theme=day] #menu-dropdown .mdrop-hdr svg{color:#207d60;}
 
 /* Prva radnja Menija: server je jasan i u dnevnom i u tamnom prikazu. */
 html #menu-dropdown #mdrop-server{background:#173b59;border:1px solid #467ca2;color:#f0f8ff!important;margin:4px 0;padding:11px 10px;min-height:64px;box-shadow:inset 3px 0 #66c6ec}html #menu-dropdown #mdrop-server .mdrop-ico{background:#225475;color:#d6f1ff}html #menu-dropdown #mdrop-server:hover{background:#204c6b}html[data-field-theme=day] #menu-dropdown #mdrop-server{background:#e0f2fe;border-color:#6b8eac;color:#123651!important;box-shadow:inset 3px 0 #087aa6}html[data-field-theme=day] #menu-dropdown #mdrop-server .mdrop-ico{background:#c5e7fa;color:#123651}html[data-field-theme=day] #menu-dropdown #mdrop-server:hover{background:#cceafd}
+/* Ažuriraj aplikaciju: svijetlo zlatna kartica; s novom verzijom jače istaknuta (v3.5.9). */
+html #menu-dropdown #menu-azuriraj{background:#3a2e10;border:1px solid #a8801f;color:#fde68a!important;margin:4px 0;box-shadow:inset 3px 0 #fbbf24}
+html #menu-dropdown #menu-azuriraj .mdrop-ico{background:#5a4514;color:#fde68a;--dm-accent:#fbbf24}
+html #menu-dropdown #menu-azuriraj:hover{background:#4a3a14}
+html #menu-dropdown #menu-azuriraj.ima-novu{background:#5a4210;border-color:#fbbf24;box-shadow:inset 5px 0 #fbbf24,0 0 0 2px #fbbf2455}
+html[data-field-theme=day] #menu-dropdown #menu-azuriraj{background:#fef3c7;border-color:#d6a63a;color:#5c3b00!important;box-shadow:inset 3px 0 #d97706}
+html[data-field-theme=day] #menu-dropdown #menu-azuriraj .mdrop-ico{background:#fde68a;color:#6b4500;--dm-accent:#b45309}
+html[data-field-theme=day] #menu-dropdown #menu-azuriraj:hover{background:#fde68a}
+html[data-field-theme=day] #menu-dropdown #menu-azuriraj.ima-novu{background:#fde68a;border-color:#b45309;box-shadow:inset 5px 0 #b45309,0 0 0 2px #f59e0b66}

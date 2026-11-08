@@ -1442,7 +1442,7 @@ async function initAuth() {
       try {
         sbUser = session.user;
         if (_appEntered) { await _upgradeToOnlineSession(); }
-        else { await sbLoadProfile(); showApp(); }
+        else { await _sbLoadProfileRok(); showApp(); }
         return;
       } catch(e) {
         console.error('Auth init error:', e);
@@ -1462,7 +1462,7 @@ async function initAuth() {
   if (startupSessionUser) {
     sbUser = startupSessionUser;
     if (_appEntered) await _upgradeToOnlineSession();
-    else { await sbLoadProfile(); if (sbProfile) await showApp(); }
+    else { await _sbLoadProfileRok(); if (sbProfile) await showApp(); }
     return;
   }
 
@@ -1579,6 +1579,18 @@ async function _offCredProvjeri(ime, prezime, pin) {
   return null;
 }
 
+// Profil sa servera uz ROK: na sporoj vezi sbLoadProfile zna čekati i 30–45 s (ponavljanja GET-a),
+// a ulaz u app je stajao iza toga. Kad rok istekne a profil ovog korisnika postoji u kešu, ulazi se
+// na kešu (svjež profil stigne u pozadini i sam osvježi meni/uloge); bez keša se i dalje čeka.
+async function _sbLoadProfileRok(ms) {
+  const p = sbLoadProfile();
+  try { await _withTimeout(p, ms || 10000); }
+  catch (e) {
+    const c = _profileLoad(sbUser?.id);
+    if (c) { sbProfile = c; try { _primijeniUlogeUI(c); } catch (_) {} }
+    else await p;
+  }
+}
 async function sbLoadProfile() {
   let data = null;
   try {
@@ -1687,6 +1699,8 @@ async function showApp() {
   // korisnika prije nego _checkDeviceUserSwitch odradi brisanje.
   const _gateMozeBlokirati = !!(sbProfile && sbProfile.odobren === false && !sbProfile.is_admin && !(typeof AccessPolicy!=='undefined' && AccessPolicy.canUse(sbProfile)));
   if (!_gateMozeBlokirati && !_appEntered) _revealApp();
+  // Meni odmah nosi ime (iz keša) — inače do kraja provjera ispod stoji zadani "Nije prijavljen".
+  try { if (typeof _menuIdentityRender === 'function') _menuIdentityRender(); } catch (e) {}
 
   if (sbProfile && sbProfile.odobren === false && !sbProfile.is_admin && !(typeof AccessPolicy!=='undefined' && AccessPolicy.canUse(sbProfile)) && sbUser && sb) {
     try {
@@ -1776,31 +1790,49 @@ function _startupRestore() {
     document.addEventListener('DOMContentLoaded', _startupRestore, { once: true });
     return;
   }
-  if (_startupRestore._done) return;   // idempotentno (showApp može doći dvaput)
-  _startupRestore._done = true;
+  // _pokrenut: idempotentno (showApp može doći dvaput). _done: kritični koraci GOTOVI (postavlja
+  // se na kraju lanca ispod) — na to čekaju testovi i sve što pretpostavlja učitane projekte/kartu.
+  if (_startupRestore._pokrenut) return;
+  _startupRestore._pokrenut = true;
+  _startupRestore._done = false;
   _startupRestore._t = performance.now();   // samo mjerenje (_startupMjeri), bez uticaja na tok
   const owner = sbUser?.id;
   const generation = (_startupRestore._generation || 0) + 1;
   _startupRestore._generation = generation;
   const alive = () => !!owner && sbUser?.id === owner && _startupRestore._generation === generation;
 
-  const korak = (ime, fn) => { if (!alive()) return; const t0 = performance.now(); try { Promise.resolve(fn()).catch(e => console.warn('startup:' + ime, e)); } catch(e) { console.warn('startup:' + ime, e); } try { (window._PERF_KORACI = window._PERF_KORACI || []).push({ ime, sync: Math.round(performance.now() - t0), at: Math.round(t0) }); } catch(e) {} };
+  // Bilježi i SINHRONI dio (sync) i UKUPNO sa nastavcima async koraka (ukupno, upisuje ga sljedeći korak):
+  // nastavci (mikrozadaci) se izvršavaju tek poslije sinhronog dijela, pa sync sam ne vidi teški posao.
+  let _zadnjiKorak = null;
+  const _zavrsiKorak = () => { if (_zadnjiKorak && _zadnjiKorak.ukupno == null) _zadnjiKorak.ukupno = Math.round(performance.now() - _zadnjiKorak.at); };
+  const korak = (ime, fn) => { if (!alive()) return; _zavrsiKorak(); const t0 = performance.now(); try { Promise.resolve(fn()).catch(e => console.warn('startup:' + ime, e)); } catch(e) { console.warn('startup:' + ime, e); } try { const z = { ime, sync: Math.round(performance.now() - t0), at: Math.round(t0) }; (window._PERF_KORACI = window._PERF_KORACI || []).push(z); _zadnjiKorak = z; } catch(e) {} };
 
-  korak('bufferStyle', () => { if(typeof _bufRestorePrefs==='function')_bufRestorePrefs(); });
-  korak('visibility', () => { if(typeof _tvVisibilityRestore==='function')_tvVisibilityRestore(); });
-  korak('switchTab',   () => switchTab('karta'));
-  korak('sqlmapRestore', async () => { await sqlmapRestoreAll(); if(alive() && window.MapDownloads?.available()){await MapDownloads.resume();if(alive())await MapDownloads.openFromNotification();} });
-  korak('projectPolygon',()=>{if(typeof ProjectTerrain!=='undefined')ProjectTerrain.refresh();});
-  korak('loadProj',    () => loadProj());        // lokalni podaci odmah (sinhrono, brzo)
-  if (typeof FieldStore !== 'undefined') korak('fieldStore', async () => { await FieldStore.init(); if(alive())_updSyncBadge(); });
-  korak('sbInitData',  () => Promise.resolve(sbInitData()).catch(e => console.warn('sbInitData:', e)));   // Supabase podaci u pozadini
-  korak('queue', () => _processOfflineQueue());   // red sam odlučuje o vezi
-  korak('primljeni', () => { _primljeniBadge(); return _primljeniSync(); });
-  _startupRestore._tSync = performance.now();
-  // Ostali restore koraci ne blokiraju početak čitanja aktivne karte.
-
-  // Ostali nekritični restores iza prvog painta
-  setTimeout(() => {
+  // Kritični koraci idu SVAKI U SVOM ZADATKU (setTimeout 0), istim redoslijedom. Ranije su svi bili
+  // u jednom: sa nastavcima async koraka to je na srednjem Xiaomiju bio JEDAN blok od 1,2 s pri
+  // pokretanju (ekran ne reaguje). Ovako se između koraka iscrta karta i prihvati dodir.
+  const kriticni = [
+    ['bufferStyle', () => { if(typeof _bufRestorePrefs==='function')_bufRestorePrefs(); }],
+    ['visibility', () => { if(typeof _tvVisibilityRestore==='function')_tvVisibilityRestore(); }],
+    ['switchTab',   () => switchTab('karta')],
+    ['sqlmapRestore', async () => { await sqlmapRestoreAll(); if(alive() && window.MapDownloads?.available()){await MapDownloads.resume();if(alive())await MapDownloads.openFromNotification();} }],
+    ['projectPolygon',()=>{if(typeof ProjectTerrain!=='undefined')ProjectTerrain.refresh();}],
+    ['loadProj',    () => loadProj()],        // lokalni podaci odmah
+    typeof FieldStore !== 'undefined' ? ['fieldStore', async () => { await FieldStore.init(); if(alive())_updSyncBadge(); }] : null,
+    ['sbInitData',  () => Promise.resolve(sbInitData()).catch(e => console.warn('sbInitData:', e))],   // Supabase podaci u pozadini
+    ['queue', () => _processOfflineQueue()],   // red sam odlučuje o vezi
+    ['primljeni', () => { _primljeniBadge(); return _primljeniSync(); }],
+  ].filter(Boolean);
+  let _ki = 0;
+  const _sljedeci = () => {
+    if (!alive()) return;
+    if (_ki < kriticni.length) { const [ime, fn] = kriticni[_ki++]; korak(ime, fn); setTimeout(_sljedeci, 0); return; }
+    _zavrsiKorak();
+    _startupRestore._done = true;
+    _startupRestore._tSync = performance.now();
+    _ostali();
+  };
+  // Ostali nekritični restores iza prvog painta (poslije kritičnih)
+  const _ostali = () => setTimeout(() => {
     if (!alive()) return;
     korak('geojsonOdjeli', () => geojsonOdjeliRestore());
     korak('tragReg',       () => _tragRegLoad());
@@ -1828,8 +1860,10 @@ function _startupRestore() {
         navigator.storage.persisted().then(p => { if (!p) navigator.storage.persist(); });
       }
     });
+    korak('kraj', () => {});   // zatvara mjerenje zadnjeg koraka
     // Vodeći projektant: nalog služi isključivo nadzoru — odmah otvori pregled
   }, 80);
+  _sljedeci();
 }
 
 // --- Auth form helpers ---
@@ -2085,7 +2119,7 @@ async function doLogin() {
   }
 
   sbUser = (await sb.auth.getUser()).data.user;
-  await sbLoadProfile();
+  await _sbLoadProfileRok();
   showApp();
   } catch(e) { showAuthErr('Greška: ' + e.message); }
   finally {
@@ -2291,7 +2325,7 @@ async function doLogout() {
   if(typeof _accessTrialStop!=='undefined'&&_accessTrialStop){_accessTrialStop();_accessTrialStop=null;}
   if(typeof closeVlakaStyle==='function')closeVlakaStyle();
   sbUser = null; sbProfile = null;
-  _startupRestore._done = false;
+  _startupRestore._done = false; _startupRestore._pokrenut = false;
   _startupRestore._generation = (_startupRestore._generation || 0) + 1;
   _appEntered = false;
   if(typeof SpdProfile!=='undefined')SpdProfile.sync();
@@ -2447,6 +2481,8 @@ async function _checkDeviceUserSwitch(uid) {
   if (!uid) return;
   const last = localStorage.getItem(_DEVICE_LAST_USER_KEY);
   if (last && last !== uid) {
+    // Arhiviranje/vraćanje podataka računa zna potrajati — bez poruke ekran izgleda zamrznuto.
+    try { showToast('⏳ Pripremam podatke ovog računa…'); } catch (e) {}
     if (document.readyState === 'loading') await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, {once:true}));
     // Arhiva se mora potvrditi PRIJE brisanja. Neuspjeh prekida promjenu naloga.
     await _archiveFieldData(last);
@@ -11082,7 +11118,7 @@ const CachedSat  = makeCachedTileLayer();
 let _initMapCenter = _defCenter, _initMapZoom = _defZoom;
 try {
   const _lp = JSON.parse(localStorage.getItem('tvlake_last_pos') || 'null');
-  if (_lp && [_lp.la,_lp.lo,_lp.z].every(Number.isFinite) && Math.abs(_lp.la)<=85 && Math.abs(_lp.lo)<=180 && _lp.z>=0 && _lp.z<=22) { _initMapCenter = [_lp.la, _lp.lo]; _initMapZoom = _lp.z; }
+  if (_lp && [_lp.la,_lp.lo,_lp.z].every(Number.isFinite) && Math.abs(_lp.la)<=85 && Math.abs(_lp.lo)<=180 && _lp.z>=6 && _lp.z<=22) { _initMapCenter = [_lp.la, _lp.lo]; _initMapZoom = _lp.z; }
 } catch(e) {}
 const _renderCfg = window.DendroRender?.state || {
   tileBuffer:4,overlayBuffer:2,sqlCache:160,mainTileConcurrency:8,
@@ -11111,6 +11147,25 @@ const map = L.map('map',{
   tapTolerance:15,
   preferCanvas:true
 }).setView(_initMapCenter, _initMapZoom);
+// fitBounds na SKRIVENOJ karti (drugi panel otvoren, kontejner 0×0) daje besmislen zum/centar, a
+// moveend ga onda sačuva kao zadnji prikaz → sljedeće pokretanje otvori kartu na "nasumičnom" mjestu.
+// Sva mjesta (38) prolaze kroz ovo: na skrivenoj karti se čeka da postane vidljiva, pa se tek onda fituje.
+(function () {
+  const fitOrig = map.fitBounds.bind(map);
+  map.fitBounds = function (b, o) {
+    const s = this.getSize();
+    if (s.x >= 50 && s.y >= 50) return fitOrig(b, o);
+    let n = 0;
+    const pokusaj = () => {
+      try { this.invalidateSize(false); } catch (e) {}
+      const z = this.getSize();
+      if (z.x >= 50 && z.y >= 50) { try { fitOrig(b, o); } catch (e) {} }
+      else if (++n < 40) setTimeout(pokusaj, 100);
+    };
+    setTimeout(pokusaj, 60);
+    return this;
+  };
+})();
 // Grafičko mjerilo (v2.9.8): "1:50 000" u traci je broj, a na terenu se udaljenost
 // procjenjuje okom — traka "0–200 m" je za to brža. Štampa ga sakriva (ima svoje).
 try { L.control.scale({ metric: true, imperial: false, position: 'bottomright', maxWidth: 110 }).addTo(map); } catch (e) {}
@@ -11125,6 +11180,8 @@ window.Explorer = ExplorerNavigation.create({
 
 map.on('moveend', () => {
   if(document.body.classList.contains('stampa-on'))return;
+  // Skrivena karta (0×0) nema stvaran prikaz — ne pamti ga (vidi omotač fitBounds iznad).
+  try { const sz = map.getSize(); if (sz.x < 50 || sz.y < 50) return; } catch (e) { return; }
   try {const c=map.getCenter();localStorage.setItem('tvlake_last_pos',JSON.stringify({la:c.lat,lo:c.lng,z:map.getZoom()}));const sl=_sqlLayers.find(s=>s.visible&&map.hasLayer(s.layer));if(sl)_sqlMapSaveView(sl.name);}catch(e){}
 });
 // Spriječi da automatski startup fit-ovi (vlake/granice) pregaze podrazumijevani prikaz
@@ -12755,7 +12812,7 @@ function _menuIdentityRender() {
   if(typeof SpdProfile!=='undefined')SpdProfile.sync();
   const p = sbUser && sbProfile?.id === sbUser.id ? sbProfile : null;
   const name = document.getElementById('menu-user-label');
-  if (name) name.textContent = p ? [p.ime,p.prezime].filter(Boolean).join(' ').trim() || 'Korisnik' : sbUser ? 'Profil nije dostupan' : 'Nije prijavljen';
+  if (name) name.textContent = p ? [p.ime,p.prezime].filter(Boolean).join(' ').trim() || 'Korisnik' : sbUser ? (sbProfile ? 'Profil nije dostupan' : 'Učitavam profil…') : 'Nije prijavljen';
   const role = document.getElementById('menu-user-role');
   if (role) role.textContent = p ? [p.is_admin ? 'Administrator' : typeof isVodeci === 'function' && isVodeci() ? 'Vodeći projektant' : typeof isSpdField === 'function' && isSpdField() ? 'Terenski korisnik' : 'Projektant',p.sumarija].filter(Boolean).join(' · ') : '';
   const version = document.getElementById('menu-app-ver');
@@ -20567,10 +20624,13 @@ function _kmlTackeKlasa() {
   _KmlTackeSloj = L.Layer.extend({
     initialize(grp) { this._grp = grp; this._pz = null; },
     onAdd(map) {
-      const c = this._c = L.DomUtil.create('canvas', 'kml-tacke-canvas leaflet-zoom-hide');
+      // Prati animaciju zuma (pinch i dugmad) kao Leafletov renderer — bez toga su tačke pri
+      // odzumiranju stajale pomjerene u odnosu na kartu dok se ne pusti prst.
+      const c = this._c = L.DomUtil.create('canvas', 'kml-tacke-canvas leaflet-zoom-animated');
       c.style.pointerEvents = 'none'; c.style.position = 'absolute';
       map.getPanes().overlayPane.appendChild(c);
       map.on('moveend zoomend resize viewreset', this._crtaj, this);
+      map.on('zoom', this._naZoom, this); map.on('zoomanim', this._naZoomAnim, this);
       // Naziv tačke na prelazak mišem (na dodirnom ekranu ga nema ni kod pojedinačnih tačaka).
       if (window.matchMedia?.('(hover:hover)').matches) map.on('mousemove', this._hover, this);
       this._crtaj();
@@ -20592,9 +20652,21 @@ function _kmlTackeKlasa() {
     },
     onRemove(map) {
       map.off('moveend zoomend resize viewreset', this._crtaj, this);
+      map.off('zoom', this._naZoom, this); map.off('zoomanim', this._naZoomAnim, this);
       map.off('mousemove', this._hover, this);
       if (this._tip) { map.removeLayer(this._tip); this._tip = null; } this._hL = null;
       this._c?.remove(); this._c = null; this._pz = null;
+    },
+    _naZoom() { this._xf(this._map.getCenter(), this._map.getZoom()); },
+    _naZoomAnim(e) { this._xf(e.center, e.zoom); },
+    // Isti račun kao L.Renderer._updateTransform: skaliraj nacrtani canvas oko njegovog centra.
+    _xf(center, zoom) {
+      const map = this._map;
+      if (!map || !this._c || this._z == null) return;
+      const scale = map.getZoomScale(zoom, this._z), half = map.getSize().multiplyBy(0.5 + this._pad);
+      const cp = map.project(this._centar, zoom);
+      const off = half.multiplyBy(-scale).add(cp).subtract(map._getNewPixelOrigin(center, zoom));
+      L.DomUtil.setTransform(this._c, off, scale);
     },
     osvjezi() { this._pz = null; if (this._map && !this._t) this._t = setTimeout(() => { this._t = null; this._crtaj(); }, 50); },
     redraw() { this._pz = null; this._crtaj(); return this; },
@@ -20613,7 +20685,8 @@ function _kmlTackeKlasa() {
     _crtaj() {
       const map = this._map, c = this._c;
       if (!map || !c) return;
-      const z = map.getZoom(), sz = map.getSize(), pad = 0.3;
+      const z = map.getZoom(), sz = map.getSize(), pad = this._pad = 0.3;
+      this._z = z; this._centar = map.getCenter();
       const w = Math.round(sz.x * (1 + 2 * pad)), h = Math.round(sz.y * (1 + 2 * pad)), dpr = Math.min(window.devicePixelRatio || 1, 2);
       const tl = map.containerPointToLayerPoint([-sz.x * pad, -sz.y * pad]).round();
       L.DomUtil.setPosition(c, tl);
@@ -20707,7 +20780,9 @@ function _kmlGrupa() {
         const { C, idx, svuda } = this._idx, b = map.getBounds().pad(0.15);
         const x0 = Math.floor(b.getWest() / C), x1 = Math.floor(b.getEast() / C), y0 = Math.floor(b.getSouth() / C), y1 = Math.floor(b.getNorth() / C);
         let cand;
-        if ((x1 - x0 + 1) * (y1 - y0 + 1) > 6000) cand = new Set(Object.values(this._layers).filter(l => !(this._tackeZasebno && l._kmlIsPoint)));   // daleko odzumirano: sve
+        // Daleko odzumirano: ranije se dodavalo SVE (hiljade poligona odjednom) — telefon se zamrzne
+        // dok se ne nacrta, a sitni objekti se na tom zumu ionako ne vide. Sad samo veliki (svuda).
+        if ((x1 - x0 + 1) * (y1 - y0 + 1) > 6000) cand = new Set(svuda);
         else {
           cand = new Set(svuda);
           for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) { const a = idx.get(x + ':' + y); if (a) for (const l of a) cand.add(l); }
@@ -20906,21 +20981,10 @@ function _bindKmlPopup(layer) {
   layer.on('click', _onClick);
   layer.on('add',()=>{if(layer._kmlIsPolygon&&layer._path)layer._path.style.pointerEvents='all';});
 
-  // KML granice/linije su tanke i često isprekidane — bez šireg nevidljivog
-  // hit-sloja tap prstom na terenu skoro nikad ne pogodi samu liniju (isti
-  // problem i rješenje kao attachPolyClick za vlaka linije, 24px "duh" sloj).
-  // Poligoni (fillOpacity može biti 0, ali fill hit-test i dalje radi kroz
-  // cijelu unutrašnjost) i tačke (već imaju radius) to ne trebaju.
-  if (!layer._kmlIsPolygon && !layer._kmlIsPoint && layer.getLatLngs) {
-    const hit = L.polyline(layer.getLatLngs(), {
-      weight: 20, opacity: 0.001, color: '#000',
-      pane: layer.options.pane, renderer: layer.options.renderer, interactive: true
-    });
-    layer.on('add',    () => { try { hit.addTo(map); } catch(e) {} });
-    layer.on('remove', () => { try { map.removeLayer(hit); } catch(e) {} });
-    if (layer._map) { try { hit.addTo(layer._map); } catch(e) {} }
-    hit.on('click', _onClick);
-  }
+  // Ranije: nevidljiva linija od 20 px uz SVAKU KML liniju (lakši dodir prstom). Za fajl sa 2000 linija
+  // to je 2000 dodatnih slojeva na karti i 2000 širokih poteza koje canvas crta pri svakom zumu/pomaku.
+  // Nije potrebna: klik koji ne pogodi tanku liniju ide na kartu, a map.on('click') → _kmlHitTest
+  // hvata liniju sa istom tolerancijom (TOL_LINE = 20 px) i otvara isti popup.
 }
 
 // ── Zašto KML klik treba fallback preko map.on('click') ──────────────────────
@@ -21105,6 +21169,15 @@ function _kmlPopStyleToggle(uid) {
 
 function _kmlPopStylePanel(uid, layer, idx) { return _layerStyleControls(idx!==undefined?idx:_kmlPopFindIdx(uid)); }
 
+// Šta fajl sadrži: tačke (npr. doznačena stabla), linije, poligoni — stil se nudi prema tome.
+function _kmlGrpVrste(i) {
+  const v = { tacke: 0, linije: 0, poligoni: 0 };
+  const walk = g => g?.eachLayer?.(l => {
+    if (l._kmlIsPolygon) v.poligoni++; else if (l._kmlIsPoint) v.tacke++;
+    else if (l.eachLayer) walk(l); else if (l._kmlName !== undefined) v.linije++;
+  });
+  walk(kmlLs[i]?.grp); return v;
+}
 function _kmlGrpHasPolygon(i) {
   let has=false;
   const walk=g=>g?.eachLayer?.(l=>{if(l._kmlIsPolygon)has=true;else if(l.eachLayer)walk(l);});
@@ -21265,7 +21338,7 @@ function saveKmlStyles() {
     if (!k._key || k.grp===null || k._downloaded===false) return;
     userMap[k._key] = { col: k.col, dash: k.dash, weight: k.weight, opacity: k.opacity ?? 0.9, vis: k.vis,
       fill: k.fill || false, fillCol: k.fillCol || k.col, fillPattern: k.fillPattern || 'solid', fillOpacity: k.fillOpacity ?? 0.35,
-      tag: k.tag || '', onlyPolygon: k.onlyPolygon===true };
+      tag: k.tag || '', onlyPolygon: k.onlyPolygon===true, ptR: k.ptR || 5 };
   });
   localStorage.setItem(_KML_USER_STYLES_KEY, JSON.stringify(userMap));
   if(_localKmlSaveAll(false)===false)throw Error('Lokalni stil nije sačuvan');
@@ -21342,6 +21415,7 @@ function applyKmlStyle(i) {
     } else {
       lo.fillColor = k.col;
       lo.fillOpacity = l._kmlIsPoint ? op : 0;
+      if (l._kmlIsPoint) { lo.radius = k.ptR || 5; lo.weight = 1.5; lo.dashArray = null; }
     }
     l.setStyle(lo);
     if(l._kmlIsPolygon&&l._path)l._path.style.pointerEvents='all';
@@ -21545,6 +21619,7 @@ function _localKmlSaveAll(prune=true) {
       store[origName].fillCol      = k.fillCol || k.col;
       store[origName].fillPattern  = k.fillPattern || 'solid';
       store[origName].fillOpacity  = k.fillOpacity ?? 0.35;
+      store[origName].ptR          = k.ptR || 5;
       store[origName].tag          = k.tag || '';
       store[origName]._loadedAt    = k._loadedAt || store[origName]._loadedAt || 0;
     });
@@ -21595,7 +21670,7 @@ async function _localKmlRestore() {
           grp, col, dash: data.dash || '', weight: data.weight || 2,
           opacity: data.opacity ?? 0.9, vis: data.vis !== false,
           fill: data.fill || false, fillCol: data.fillCol || col,
-          fillPattern: data.fillPattern || 'solid', fillOpacity: data.fillOpacity ?? 0.35,
+          fillPattern: data.fillPattern || 'solid', fillOpacity: data.fillOpacity ?? 0.35, ptR: data.ptR || 5,
           onlyPolygon: data.onlyPolygon===true, tag: data.tag || '', _loadedAt: data._loadedAt || 0
         };
         layer.onlyPolygon=globalThis.GithubLayers?.defaultOnlyPolygon(layer)??layer.onlyPolygon;
@@ -33071,7 +33146,7 @@ async function _loadOneKml(bucketName, file, opts, extractOdjeli, cacheOnly=fals
     col: _fc, dash: finalOpts.dashArray || finalOpts.dash || '',
     weight: finalOpts.weight || 2, opacity: finalOpts.opacity ?? 0.9,
     vis: finalOpts.vis !== false,
-    fill: finalOpts.fill===true, fillCol: finalOpts.fillCol||_fc, fillPattern: finalOpts.fillPattern||'solid', fillOpacity: finalOpts.fillOpacity??0.35,
+    fill: finalOpts.fill===true, fillCol: finalOpts.fillCol||_fc, fillPattern: finalOpts.fillPattern||'solid', fillOpacity: finalOpts.fillOpacity??0.35, ptR: finalOpts.ptR||5,
     onlyPolygon: finalOpts.onlyPolygon===true, tag: finalOpts.tag||'', _loadedAt: Date.now(), _downloaded: true });
   applyKmlStyle(kmlLs.length-1);
   // Apply visibility
@@ -36933,6 +37008,18 @@ function _perfSnimak() {
   try { const fcp = performance.getEntriesByName('first-contentful-paint')[0]; if (fcp) o.fcp = Math.round(fcp.startTime); } catch (e) {}
   o.dom = document.getElementsByTagName('*').length;
   try { o.slojeva = (typeof map !== 'undefined' && map && map._layers) ? Object.keys(map._layers).length : 0; } catch (e) { o.slojeva = 0; }
+  // Raspodjela: šta stoji na karti (vrsta · pane) — da se vidi koji dio pravi višak slojeva.
+  try {
+    const po = {};
+    for (const id in map._layers) {
+      const l = map._layers[id];
+      const vrsta = l instanceof L.CircleMarker ? 'tačka' : l instanceof L.Polygon ? 'poligon' : l instanceof L.Polyline ? (l.options?.opacity <= 0.01 ? 'linija-klik' : 'linija')
+        : l instanceof L.Marker ? 'marker' : l instanceof L.GridLayer ? 'pločice' : l instanceof L.LayerGroup ? 'grupa' : 'ostalo';
+      const k = vrsta + ' · ' + (l.options?.pane || '-');
+      po[k] = (po[k] || 0) + 1;
+    }
+    o.slojeviPo = Object.entries(po).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, n]) => k + ': ' + n);
+  } catch (e) {}
   try { o.plocica = document.querySelectorAll('.leaflet-tile').length; } catch (e) { o.plocica = 0; }
   try { o.vlaka = (typeof vlake !== 'undefined' && vlake) ? vlake.length : 0; o.tacaka = (typeof vlake !== 'undefined' && vlake) ? vlake.reduce((a, v) => a + ((v.pts && v.pts.length) || 0), 0) : 0; } catch (e) {}
   try { if (performance.memory) { o.heapMB = Math.round(performance.memory.usedJSHeapSize / 1048576); o.heapLimMB = Math.round(performance.memory.jsHeapSizeLimit / 1048576); } } catch (e) {}
@@ -36944,7 +37031,7 @@ function _perfSnimak() {
   o.idb = Object.entries(window._PERF_IDB || {}).map(([k, v]) => ({ vrsta: k, n: v.n, ms: v.ms, max: v.max, kbMax: v.kb })).sort((a, b) => b.ms - a.ms);
   o.greske = (window._PERF_GRESKE || []).slice(-10);
   o.loaf = _PERF.loaf.slice(0, 8);
-  o.koraci = (window._PERF_KORACI || []).filter(k => k.sync >= 20).sort((a, b) => b.sync - a.sync).slice(0, 8);
+  o.koraci = (window._PERF_KORACI || []).filter(k => Math.max(k.sync, k.ukupno || 0) >= 20).sort((a, b) => Math.max(b.sync, b.ukupno || 0) - Math.max(a.sync, a.ukupno || 0)).slice(0, 8);
   o.najduzi = _PERF.lt.slice().sort((a, b) => b.ms - a.ms).slice(0, 8);
   try { const R = window.DendroRender; if (R && R.state) { o.nacin = R.state.lite ? 'lagani' : 'puni'; o.pomicanja = (R.state.hist || []).map(x => x.p50 + '/' + x.p95); } } catch (e) {}
   return o;
@@ -36982,6 +37069,7 @@ function _perfDiagRender(elId) {
   h += red('Uređaj', o.jezgri + ' jezgri · RAM ' + o.ram + ' GB · ' + (o.ua || '?'));
   h += red('Pokretanje', (o.domInteractive || '?') + ' ms interaktivno · ' + (o.dcl || '?') + ' ms DOM' + (o.fcp ? ' · prvi prikaz ' + o.fcp + ' ms' : ''));
   h += red('DOM / slojevi / pločice', o.dom + ' / ' + o.slojeva + ' / ' + o.plocica);
+  if (o.slojeviPo && o.slojeviPo.length) h += red('Slojevi po vrsti', o.slojeviPo.slice(0, 5).join(' · '));
   h += red('Vlake', o.vlaka + ' (' + o.tacaka + ' tačaka)');
   if (o.heapMB) h += red('JS memorija', o.heapMB + ' / ' + o.heapLimMB + ' MB');
   h += red('Kašnjenje glavne niti', 'medijan ' + o.lagP50 + ' · p95 ' + o.lagP95 + ' · max ' + o.lagMax + ' ms', o.lagP95 > 100 ? '#ef4444' : '#22c55e');
@@ -36991,7 +37079,7 @@ function _perfDiagRender(elId) {
   if (o.funkcije.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Vruće funkcije (ukupno vrijeme)</div>'; o.funkcije.slice(0, 8).forEach(t => { h += red(t.fn, t.n + '× · ' + t.ms + ' ms · ø ' + t.avg + ' · max ' + t.max); }); }
   if (o.loaf && o.loaf.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Šta je držalo nit (skripta · crtanje)</div>'; o.loaf.forEach(t => { h += red('+' + Math.round(t.at / 1000) + ' s · ' + t.tab + ' · ' + t.ms + ' ms (crtanje ' + t.crtanje + ')', (t.skripte.join('; ') || 'bez skripte — stil/raspored/slike')); }); }
   if (o.idb && o.idb.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Čitanja IndexedDB (vrsta zapisa)</div>'; o.idb.slice(0, 6).forEach(t => { h += red(t.vrsta, t.n + '× · ' + t.ms + ' ms · max ' + t.max + (t.kbMax ? ' · do ' + t.kbMax + ' KB' : '')); }); }
-  if (o.koraci && o.koraci.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Spori koraci pokretanja</div>'; o.koraci.forEach(k => { h += red(k.ime, k.sync + ' ms (sinhroni dio) · +' + k.at + ' ms'); }); }
+  if (o.koraci && o.koraci.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Spori koraci pokretanja</div>'; o.koraci.forEach(k => { h += red(k.ime, k.sync + ' ms sinhrono' + (k.ukupno != null ? ' · ' + k.ukupno + ' ms ukupno' : '') + ' · +' + k.at + ' ms'); }); }
   if (o.najduzi.length) { h += '<div style="margin-top:8px;font-size:11px;color:#94a3b8;">Najduži zastoji</div>'; o.najduzi.forEach(t => { h += red('+' + Math.round(t.at / 1000) + ' s · ' + t.tab, t.ms + ' ms'); }); }
   h += '<div style="display:flex;gap:8px;margin-top:10px;"><button onclick="_perfDiagRender(\'' + (typeof elId === 'string' ? elId : 'perf-diag-card') + '\')" style="flex:1;padding:9px;background:#0c4a6e;border:1px solid #38bdf8;border-radius:8px;color:#e0f2fe;font-size:12px;font-weight:700;">Osvježi</button>' +
     '<button onclick="_perfKopiraj()" style="flex:1;padding:9px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#bbf7d0;font-size:12px;font-weight:700;">Kopiraj izvještaj</button>' +

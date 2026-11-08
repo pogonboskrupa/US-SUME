@@ -32,17 +32,15 @@ PRATI — on je zaseban, čisto monotono rastući cijeli broj (Android to
 zahtijeva da bi update uopšte instalirao), raste +1 pri SVAKOJ izmjeni
 nezavisno od toga kako se `X.Y.Z` mijenja.
 
-## "Ažuriraj aplikaciju" — release SAMO na izričit zahtjev (od v3.0.0)
+## Release poslije svake izmjene (od 2026-11-07, v3.5.9)
 
-Korisnikov trajni zahtjev: verzija se podiže, a push na
-`claude/inline-js-split` (koji pokreće CI → GitHub Release) radi se
-SAMO kad korisnik kaže **"ažuriraj aplikaciju"** (ili jasno isto). Na ostale
-promptove: izmjene, testovi i commit LOKALNO, bez bump-a verzije i bez push-a.
-Push bez bump-a je također pogrešan — CI bi pod istim tagom prepisao APK
-postojećeg releasea, a telefon (isti versionCode) ne bi ponudio update.
-Kad stigne "ažuriraj aplikaciju": jedan bump (sva tri mjesta), commit, push.
-Lokalni commiti nestaju ako se kontejner ugasi — upozoriti korisnika ako se
-nakupi puno neobjavljenog rada.
+Korisnik je UKINUO raniji zahtjev "release samo na 'ažuriraj aplikaciju'"
+(v3.0.0 – v3.5.8). Sada: svaka gotova izmjena koda (testovi prošli) ide
+odmah kao release — jedan bump verzije (sva tri mjesta), commit, push na
+`claude/inline-js-split` (CI → GitHub Release). Push bez bump-a je i dalje
+pogrešan (CI bi pod istim tagom prepisao APK postojećeg releasea, a telefon
+sa istim versionCode ne bi ponudio update). Prije javljanja korisniku da je
+objavljeno, provjeriti da je release stvarno nastao (CI zelen, APK prilog).
 
 ## APK build — assets se NE povlače sami
 
@@ -5007,3 +5005,18 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 
 ### CI: runner pinovan na ubuntu-24.04 (v3.2.7)
 - Run 317 je pao za 3 s na `playwright install --with-deps chromium`: `ubuntu-latest` je prešao na **Ubuntu 26.04**, a Playwright 1.55 ne podržava taj OS ("does not support chromium on ubuntu26.04-x64"). Nije bio kod aplikacije. `codex-webview.yml` sad koristi `ubuntu-24.04` (job `apk`); `deploy.yml`/`build.yml` ne instaliraju Playwright pa su ostali na `latest`. Kad se Playwright ažurira na verziju koja podržava 26.04, pin se može vratiti. Pad na koraku "Pregled Menija…" za 3 s znači grešku okruženja, ne testa — čitati kraj loga, ne postgres šum.
+
+### Preglednik KML oznaka — kompaktan red (v3.6.3)
+- Dugme `#oznake-btn` je ispod zvijezde (`#map-fav-btn`) i istaknuto tirkiznom bojom (`map-library.css`, kraj fajla). Zaglavlje panela više NIJE `sticky` (skrola se sa listom) i nosi samo "Preglednik KML oznaka" + broj stavki; uklonjeni natpis "SADRŽAJ KARTE", naslov "Fajlovi i oznake" i fusnota.
+- Red (`row()` u `static/js/map-library.js`) je ~56 px umjesto ~170: značka vrste 32 px, naziv u jednom redu (dodir na naziv = Na karti), jedan red podataka, tri brze radnje desno — oko (`data-action=visibility`, `aria-label` Sakrij/Prikaži), meta (`zoom`), ⋯ (`edit` — otvara izvoz/brisanje + uređivač). "Dodijeli odjelu" je mala oker značka ispod podataka. Tabovi vrsta su jedan red sa horizontalnim skrolom.
+- Testovi traže `data-action` na dugmadima i dostupna imena "Sakrij"/"Prikaži" — ne mijenjati u čiste ikone bez `aria-label`.
+- **Zadani sort je "Najbliže sredini karte" (v3.6.4)**: sačuvani sort se poštuje samo uz `sortRucno` (korisnik ga je sam izabrao) — stari zapisi su nosili `department` samo jer je to bio zadani.
+
+### Ažuriranje APK-a — prekidi i HTTP 5xx (v3.6.4)
+- `preuzmiSaNastavkom`: prekid POSLIJE napretka (>256 KB) ne troši pokušaj (kapa 40 krugova); poruka nosi razlog (`kratkiRazlog`: "veza resetovana", "server ne odgovara", "GitHub server privremeno ne odgovara, HTTP 504"…), a 5xx čeka duže (5→30 s). Log `DendroUpdate`.
+- APK se uzima samo kad je asset `state == "uploaded"`: release je vidljiv prije kraja CI uploada, pa je preuzimanje u tom prozoru davalo HTTP 504/404. Tada poruka kaže da se verzija upravo objavljuje.
+
+### CI brži — browser testovi paralelno (v3.6.5)
+- Korak "Pregled Menija…" je 53 browser testa vrtio redom (~8 od ~15 min do Release-a). Sad ih pokreće `tests/browser/run-ci.sh`: nezavisni po 3 paralelno (`xargs -P 3`), a testovi koji MJERE vrijeme ili su teški (`kml-50000`, `kml-tacke-canvas`, `field-five-hours`, `field-offline-5400`, `slow-render-289`) sami na kraju. Pad ispisuje zadnjih 40 redova tog testa (`::group::PAO …`). Lokalno: 3 min 40 s (bilo ~8 min).
+- **Novi browser test se dodaje u `run-ci.sh`** (niz `PARALELNO`, ili `SAMI_LISTA` ako mjeri vrijeme), ne u workflow.
+- **APK se preuzima preko API-ja (v3.6.6)**: `github.com/.../releases/download/...` je 2026-11-08 sistematski vraćao HTTP 504 poslije ~11 s (i za starije verzije, izmjereno i iz sandboxa), dok `api.github.com/repos/.../releases/assets/{id}` uz `Accept: application/octet-stream` odmah preusmjeri na isti CDN fajl (SHA-256 provjeren). `preuzmiSaNastavkom` sad prima listu izvora (API pa `browser_download_url`) i prelazi na sljedeći poslije pokušaja bez napretka. Stariji APK-ovi (≤ v3.6.5) imaju samo stari put — dok GitHub ne popravi 504, njima ažuriranje ne prolazi.
