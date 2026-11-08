@@ -24,7 +24,7 @@ function mk(opts) {
     navigator: {}, window: {}, DOMParser: FakeDOMParser, Blob, localStorage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } },
     _withTimeout: p => p, _mrezaProbaj: () => true, _mrezaSila() {}, showToast: m => log.toasts.push(m),
     _kmlcSave: async (k) => { log.order.push('save:' + k); if (opts.saveFail) return false; log.saved.push(k); return true; }, _kmlcDelete: async () => {},
-    _localSetKriticno: (k, v) => { store[k] = v; return true; }, _shareKolege: () => [{ id: 'k1', ime: 'Kolega Jedan' }], _dlgActions: async () => 0,
+    _localSetKriticno: (k, v) => { store[k] = v; return true; }, isAdmin: () => false, _shareKolege: () => [{ id: 'k1', ime: 'Kolega Jedan' }], _dlgActions: async () => 0,
     _escHtml: x => x, _isNetworkErr: () => false, _sesijaPinom: async () => true,
   };
   env._dlgPrompt = async () => opts.sifraUnos ?? null; env._dlgActions = opts.akcije || (async () => 0); env.navigator = { clipboard: { writeText: async () => {} } };

@@ -17766,7 +17766,7 @@ async function _tragKmlMeni(id) {
     { label: ico('ic-posalji') + 'Podijeli (Viber, WhatsApp, e-mail…)', radi: () => _tragRegShare(id) },
     { label: ico('ic-uvezi') + 'Sačuvaj .kml na telefon', radi: () => _tragKmlSacuvaj(id) },
   ];
-  akcije.push({ label: ico('ic-korisnik') + 'Pošalji kolegu iz šumarije (ostaje samo kod njega)', radi: () => podaciPosalji('trag', _tragIme(t), _tragToKml(t)) });
+  akcije.push({ label: ico('ic-korisnik') + (isAdmin() ? 'Pošalji korisniku (bilo koja šumarija)' : 'Pošalji kolegu iz šumarije (ostaje samo kod njega)'), radi: () => podaciPosalji('trag', _tragIme(t), _tragToKml(t)) });
   const i = await _dlgActions('📄 ' + _tragIme(t) + ' — izvoz', akcije.map(a => ({ label: a.label })));
   if (i >= 0 && akcije[i]) akcije[i].radi();
 }
@@ -37239,11 +37239,17 @@ async function podaciPosalji(vrsta, naziv, kml) {
   if (!sbUser || !sbProfile) { showToast('Prijavi se da šalješ podatke'); return; }
   if (typeof kml !== 'string' || !kml) { showToast('Nema podataka za slanje'); return; }
   if (new Blob([kml]).size > _PRIM_MAX_BAJTA) { showToast('Podatak je prevelik za slanje (najviše ~2,8 MB)'); return; }
-  const kolege = _shareKolege();
-  const akcije = kolege.map(k => ({ label: _escHtml(k.ime) }));
-  akcije.push({ label: '🔑 Pošalji šifrom — više ljudi, drugi profil ili šumarija (važi 2 dana)' });
-  akcije.push({ label: 'Odustani' });
-  const i = await _dlgActions('📤 Pošalji: ' + naziv, akcije);
+  const admin = isAdmin();
+  const kolege = admin ? await _primaociSvi() : _shareKolege();
+  let i;
+  if (admin || kolege.length > 8) {
+    i = await _primaocBiraj(kolege, naziv, admin);
+  } else {
+    const akcije = kolege.map(k => ({ label: _escHtml(k.ime) }));
+    akcije.push({ label: '🔑 Pošalji šifrom — više ljudi, drugi profil ili šumarija (važi 2 dana)' });
+    akcije.push({ label: 'Odustani' });
+    i = await _dlgActions('📤 Pošalji: ' + naziv, akcije);
+  }
   if (i == null || i < 0 || i > kolege.length) return;
   if (typeof _mrezaSila === 'function') _mrezaSila(30000);
   if (sbUser._cachedStub && !(await _sesijaPinom(true))) { showToast('Slanje traži vezu sa serverom'); return; }
@@ -37266,6 +37272,53 @@ async function podaciPosalji(vrsta, naziv, kml) {
     if (r.error) throw r.error;
     showToast('✓ Poslano: ' + kolege[i].ime + ' će ga dobiti čim bude online. Na serveru ne ostaje.');
   } catch (e) { showToast(poruka(e)); }
+}
+// Admin šalje BILO KOM odobrenom korisniku (svaka šumarija) — lista dolazi iz admin RPC-a,
+// jer kolegeMap kod admina nosi samo njegovu šumariju. Pad RPC-a vraća na kolege iz šumarije.
+let _primaociKes = null;
+async function _primaociSvi() {
+  if (_primaociKes && Date.now() - _primaociKes.t < 300000) return _primaociKes.l;
+  try {
+    const r = await _withTimeout(sb.rpc('admin_get_all_users'), 10000);
+    if (r.error) throw r.error;
+    const l = (r.data || []).filter(k => k.id !== sbUser?.id)
+      .map(k => ({ id: k.id, ime: (k.ime + ' ' + k.prezime).trim(), sumarija: k.sumarija || '' }))
+      .sort((a, b) => a.ime.localeCompare(b.ime, 'bs'));
+    _primaociKes = { t: Date.now(), l };
+    return l;
+  } catch (e) { return _shareKolege(); }
+}
+// Birač primaoca sa pretragom (ime ili šumarija). Vraća indeks u listi, lista.length = šifra, null = odustao.
+function _primaocBiraj(lista, naziv, prikaziSumariju) {
+  return new Promise(res => {
+    const bg = document.createElement('div');
+    bg.id = 'prim-biraj';
+    bg.style.cssText = 'position:fixed;inset:0;z-index:999950;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:var(--bg2,#14201a);color:var(--text,#e8f0ea);width:100%;max-width:520px;max-height:85vh;display:flex;flex-direction:column;border-radius:16px 16px 0 0;padding:14px';
+    box.innerHTML = '<div style="font-weight:700;margin-bottom:8px">📤 Pošalji: ' + _escHtml(naziv) + '</div>' +
+      '<input id="prim-trazi" type="search" autocomplete="off" placeholder="Traži korisnika (ime ili šumarija)" style="font-size:16px;padding:10px;border-radius:10px;border:1px solid #476;background:rgba(255,255,255,.07);color:inherit;margin-bottom:8px">' +
+      '<div id="prim-lista" style="overflow-y:auto;flex:1;min-height:120px"></div>' +
+      '<button type="button" id="prim-sifra" style="margin-top:8px;padding:12px;border-radius:10px;border:1px solid #476;background:transparent;color:inherit">🔑 Pošalji šifrom (više ljudi, važi 2 dana)</button>' +
+      '<button type="button" id="prim-x" style="margin-top:6px;padding:12px;border-radius:10px;border:0;background:transparent;color:inherit;opacity:.7">Odustani</button>';
+    bg.appendChild(box); document.body.appendChild(bg);
+    const kraj = v => { bg.remove(); res(v); };
+    const crtaj = () => {
+      const q = box.querySelector('#prim-trazi').value.trim().toLowerCase();
+      const el = box.querySelector('#prim-lista');
+      const nadjeni = lista.map((k, idx) => ({ k, idx })).filter(({ k }) => !q || (k.ime + ' ' + (k.sumarija || '')).toLowerCase().includes(q));
+      el.innerHTML = nadjeni.length ? nadjeni.map(({ k, idx }) =>
+        '<button type="button" data-i="' + idx + '" style="display:block;width:100%;text-align:left;padding:12px;margin:2px 0;border-radius:10px;border:0;background:rgba(255,255,255,.06);color:inherit;min-height:44px">' +
+        _escHtml(k.ime) + (prikaziSumariju && k.sumarija ? ' <small style="opacity:.6">· ' + _escHtml(k.sumarija) + '</small>' : '') + '</button>').join('')
+        : '<div style="opacity:.6;padding:14px">Nema rezultata za „' + _escHtml(q) + '“</div>';
+    };
+    box.querySelector('#prim-trazi').addEventListener('input', crtaj);
+    box.querySelector('#prim-lista').addEventListener('click', e => { const b = e.target.closest('button[data-i]'); if (b) kraj(Number(b.dataset.i)); });
+    box.querySelector('#prim-sifra').addEventListener('click', () => kraj(lista.length));
+    box.querySelector('#prim-x').addEventListener('click', () => kraj(null));
+    bg.addEventListener('click', e => { if (e.target === bg) kraj(null); });
+    crtaj();
+  });
 }
 // Šifra za preuzimanje: velika, uz kopiranje i dijeljenje porukom.
 async function _sifraPrikazi(sifra, naziv) {
