@@ -32103,37 +32103,17 @@ function _updOtkazi() {
 
 function _updPonovo() { azurirajAplikaciju(); }
 
-// ─── Admin: preuzmi APK fajl (najnoviji GitHub Release) ────────────────────
-// Admin dijeli APK kolegama čiji telefon nema ovu app ili ima stariju verziju bez
-// "Ažuriraj aplikaciju" mosta. Isti /releases?per_page=1 kao _checkLatestVersion
-// (/releases/latest isključuje prerelease, a svaki release je prerelease).
-// U APK-u navigacija na vanjski URL ide kroz shouldOverrideUrlLoading → ACTION_VIEW,
-// pa preuzimanje radi Android preglednik/DownloadManager — bez nove Java izmjene.
-const _APK_RELEASES_API = 'https://api.github.com/repos/pogonboskrupa/US-SUME/releases?per_page=1';
-const _APK_RELEASES_STR = 'https://github.com/pogonboskrupa/US-SUME/releases';
+// ─── Meni → Preuzmi APK fajl ───────────────────────────────────────────────
+// Bez dijaloga i bez stranice sa verzijama (na zahtjev): u APK-u ide ISTI tok
+// kao "Ažuriraj aplikaciju" (preuzimanje + instalacija u app-u, rezerve za
+// server koji odbije provjeru); bez native mosta (webapp, vrlo stari APK)
+// preglednik odmah preuzima APK sa stalnog linka.
 // Stalni link: uvijek vodi na APK zadnje objave (CI je od v3.6.8 objavljuje kao
-// "latest"). Radi u svakom pregledniku bez prijave i bez API limita, pa ga može
-// koristiti svaki korisnik kad ažuriranje u app-u ne prođe, i može se poslati
-// kolegama (Viber, SMS) — link se ne mijenja sa verzijom.
+// "latest"); radi bez prijave i bez API limita.
 const _APK_STALNI = 'https://github.com/pogonboskrupa/US-SUME/releases/latest/download/app-debug.apk';
 
-async function _apkKopirajLink(url) {
-  try {
-    if (window.AndroidShare && typeof window.AndroidShare.shareText === 'function') {
-      window.AndroidShare.shareText('Dendro Map — najnovija verzija', url); return;
-    }
-  } catch (e) {}
-  try { await navigator.clipboard.writeText(url); showToast('📋 Link kopiran'); }
-  catch (e) { showToast(url); }
-}
-
-function _apkAssetIzReleasea(release) {
-  if (!release || release.draft) return null;
-  const a = (release.assets || []).find(x => /\.apk$/i.test(x?.name || '') && x.state === 'uploaded' && /^https:\/\//.test(x.browser_download_url || ''));
-  if (!a) return null;
-  return { ver: String(release.tag_name || '').replace(/^v/, ''), ime: a.name, url: a.browser_download_url, vel: Number(a.size) || 0 };
-}
-
+// U APK-u navigacija na vanjski URL ide kroz shouldOverrideUrlLoading → ACTION_VIEW,
+// pa preuzimanje radi Android preglednik/DownloadManager.
 function _apkOtvoriUrl(url) {
   if (location.hostname === 'appassets.androidplatform.net') { window.location.href = url; return; }
   const a = document.createElement('a');
@@ -32141,41 +32121,13 @@ function _apkOtvoriUrl(url) {
   document.body.appendChild(a); a.click(); a.remove();
 }
 
-// Dostupno SVIM korisnicima (bilo samo admin): kad ažuriranje u app-u ne prođe
-// (API limit na mobilnoj mreži, stariji APK), preglednik i stalni link uvijek rade.
-async function preuzmiApkAdmin() {
-  if (typeof _mrezaSila === 'function') _mrezaSila(60000);
-  showToast('🔄 Tražim najnoviji APK…');
-  let apk = null, greska = '';
-  try {
-    const r = await _fetchT(_APK_RELEASES_API, 10000, { cache: 'no-store' });
-    if (r.ok) apk = _apkAssetIzReleasea((await r.json())?.[0]);
-    else greska = 'Server je odgovorio ' + r.status + '.';
-  } catch (e) { greska = 'Nema veze sa serverom.'; }
-  if (!apk) {
-    // API zna odbiti (limit po IP-u) iako veza radi — stalni link ne ide kroz API.
-    const izbor = await _dlgActions('Preuzmi APK fajl', [
-      { label: '⬇ Preuzmi najnoviji APK' },
-      { label: '🔗 Podijeli / kopiraj link' },
-      { label: '🌐 Otvori stranicu sa verzijama' },
-      { label: 'Zatvori' },
-    ]);
-    if (izbor === 0) _apkOtvoriUrl(_APK_STALNI);
-    else if (izbor === 1) await _apkKopirajLink(_APK_STALNI);
-    else if (izbor === 2) _apkOtvoriUrl(_APK_RELEASES_STR);
-    if (greska) showToast('⚠ ' + greska);
+function preuzmiApkAdmin() {
+  if (window.AndroidUpdate && typeof window.AndroidUpdate.checkAndInstall === 'function') {
+    azurirajAplikaciju();
     return;
   }
-  const lokalna = APP_VER.replace(/^v/, '');
-  const vel = apk.vel ? ' · ' + _updMB(apk.vel) : '';
-  const izbor = await _dlg({
-    title: 'Preuzmi APK fajl', mode: 'actions',
-    msg: apk.ime + ' (v' + apk.ver + vel + ') — na ovom uređaju je v' + lokalna + '.',
-    actions: [{ label: '⬇ Preuzmi APK' }, { label: '🔗 Podijeli / kopiraj link' }, { label: 'Zatvori' }],
-  });
-  if (izbor === 0) _apkOtvoriUrl(apk.url);
-  // Dijeli se STALNI link: kolega koji ga otvori sutra dobija tada najnoviju verziju.
-  else if (izbor === 1) await _apkKopirajLink(_APK_STALNI);
+  showToast('⬇ Preuzimam najnoviji APK…');
+  _apkOtvoriUrl(_APK_STALNI);
 }
 
 function _updDugme(tip, ico, tekst, akcija) {

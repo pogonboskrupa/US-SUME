@@ -483,6 +483,8 @@ public class MainActivity extends Activity {
                 "https://github.com/pogonboskrupa/US-SUME/releases.atom";
         private static final String DOWNLOAD_BASE =
                 "https://github.com/pogonboskrupa/US-SUME/releases/download/";
+        private static final String STALNI_APK =
+                "https://github.com/pogonboskrupa/US-SUME/releases/latest/download/app-debug.apk";
         private int zadnjiApiStatus = 0;
         // Terenska veza zna pući usred preuzimanja (slab signal, prelaz Wi-Fi <->
         // mobilni, promjena ćelije) — to je bio uzrok "SocketException". Svaki
@@ -535,6 +537,10 @@ public class MainActivity extends Activity {
             if (rel == null) {
                 try { rel = dohvatiIzFeeda(); }
                 catch (IOException e) { android.util.Log.w("DendroUpdate", "feed provjera pala", e); }
+            }
+            if (rel == null) {
+                try { rel = dohvatiIzStalnogLinka(); }
+                catch (IOException e) { android.util.Log.w("DendroUpdate", "stalni link provjera pala", e); }
             }
             if (rel == null) {
                 String razlog;
@@ -779,6 +785,46 @@ public class MainActivity extends Activity {
          * kao API (tag_name + jedan asset), bez veličine i sažetka — provjera
          * cjelovitosti tada ide samo kroz Android instalaciju.
          */
+        /**
+         * Treća rezerva: stalni link .../releases/latest/download/app-debug.apk
+         * preusmjerava (302) na .../releases/download/vX.Y.Z/app-debug.apk —
+         * verzija se čita iz zaglavlja Location, bez API-ja i bez tijela odgovora.
+         */
+        private org.json.JSONObject dohvatiIzStalnogLinka() throws IOException, org.json.JSONException {
+            HttpURLConnection c = (HttpURLConnection) new URL(STALNI_APK).openConnection();
+            String loc;
+            try {
+                c.setInstanceFollowRedirects(false);
+                c.setRequestMethod("HEAD");
+                c.setConnectTimeout(15000);
+                c.setReadTimeout(15000);
+                c.setRequestProperty("User-Agent", "DendroMap-Android");
+                int st = c.getResponseCode();
+                if (st < 300 || st > 399) return null;
+                loc = c.getHeaderField("Location");
+            } finally {
+                c.disconnect();
+            }
+            if (loc == null) return null;
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("/releases/download/(v\\d+(?:\\.\\d+)+)/").matcher(loc);
+            if (!m.find()) return null;
+            return objavaBezApi(m.group(1));
+        }
+
+        private org.json.JSONObject objavaBezApi(String tag) throws org.json.JSONException {
+            org.json.JSONObject a = new org.json.JSONObject();
+            a.put("name", "app-debug.apk");
+            a.put("state", "uploaded");
+            a.put("browser_download_url", DOWNLOAD_BASE + tag + "/app-debug.apk");
+            org.json.JSONArray assets = new org.json.JSONArray();
+            assets.put(a);
+            org.json.JSONObject rel = new org.json.JSONObject();
+            rel.put("tag_name", tag);
+            rel.put("assets", assets);
+            return rel;
+        }
+
         private org.json.JSONObject dohvatiIzFeeda() throws IOException, org.json.JSONException {
             HttpURLConnection c = (HttpURLConnection) new URL(RELEASES_ATOM).openConnection();
             String xml;
@@ -801,17 +847,7 @@ public class MainActivity extends Activity {
             java.util.regex.Matcher m = java.util.regex.Pattern
                     .compile("/releases/tag/(v\\d+(?:\\.\\d+)+)").matcher(xml);
             if (!m.find()) return null;
-            String tag = m.group(1);
-            org.json.JSONObject a = new org.json.JSONObject();
-            a.put("name", "app-debug.apk");
-            a.put("state", "uploaded");
-            a.put("browser_download_url", DOWNLOAD_BASE + tag + "/app-debug.apk");
-            org.json.JSONArray assets = new org.json.JSONArray();
-            assets.put(a);
-            org.json.JSONObject rel = new org.json.JSONObject();
-            rel.put("tag_name", tag);
-            rel.put("assets", assets);
-            return rel;
+            return objavaBezApi(m.group(1));
         }
 
         private void instalirajApk(File apk, String ver) {
