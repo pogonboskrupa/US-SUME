@@ -28892,14 +28892,34 @@ class MiniSqlite {
         return[this._recCol(d,p,pL,this.colZ),this._recCol(d,p,pL,this.colX),this._recCol(d,p,pL,this.colY)];}
     }return null;
   }
+  // MBTiles orijentacija (TMS/XYZ): pamti se TEK kad je dokazana na mnogo pogodaka u jednom smjeru
+  // (8+, a drugi smjer najviše osmina toga). Init dijagnostika zove tile() sa STORED koordinatama i
+  // daje pokoji pogodak u pogrešnom smjeru, pa prag štiti od trovanja (bug v3.5.5). Poslije zaključavanja
+  // promašaj košta jedan upit umjesto dva - a promašaja ima mnogo (rijetko pokrivena karta, roditeljski fallback).
   async tile(z,x,y) {
+    if(this.fmt!=='mbtiles')return this._tile(z,x,y,null);
+    const tms=(1<<z)-1-y;
+    if(this._ori==='t')return this._tile(z,x,y,[tms]);
+    if(this._ori==='x')return this._tile(z,x,y,[y]);
+    let r=await this._tile(z,x,y,[tms]);
+    if(r){if(tms!==y)this._oriNote('t');return r;}
+    r=await this._tile(z,x,y,[y]);
+    if(r&&tms!==y)this._oriNote('x');
+    return r;
+  }
+  _oriNote(k){
+    const c=this._oc||(this._oc={t:0,x:0});c[k]++;
+    const d=c[k],m=c[k==='t'?'x':'t'];
+    if(d>=8&&m*8<=d)this._ori=k;
+  }
+  async _tile(z,x,y,cands) {
     const off=this._zOff||17;
     // MBTiles: UVIJEK probaj TMS (flip) prvo, pa XYZ (ne-flip) kao fallback. NE pamtimo
     // orijentaciju — init dijagnostika zove tile() sa STORED (TMS) koordinatama pa bi lock
     // zaključao pogrešan smjer i sve prave zahtjeve bi promašili (bug v3.5.5). TMS karte
     // pogode na prvom (bez troška); XYZ karte na drugom.
     const tyTms=(1<<z)-1-y;
-    const tyCands=this.fmt!=='mbtiles'?[y]:[tyTms,y];
+    const tyCands=cands||(this.fmt!=='mbtiles'?[y]:[tyTms,y]);
     const zCands=this.fmt!=='rmaps'?[z]:this._zm===2?[off-z]:this._zm===1?[z]:[z,off-z];
     if(this.noRowId){
       for(const ty of tyCands){
@@ -29077,11 +29097,18 @@ async function queryTile(name, z, x, y) {
       // MBTiles spec = TMS (tile_row obrnut). Neke su XYZ → UVIJEK probaj TMS flip pa XYZ.
       // Bez pamćenja orijentacije (lock bi se zatrovao init dijagnostikom — bug v3.5.5).
       const tyTms=(1<<z)-1-y;
-      for (const ty of [tyTms, y]) {
+      const redTy = inst.ori === 't' ? [tyTms] : inst.ori === 'x' ? [y] : [tyTms, y];
+      for (const ty of redTy) {
         if (inst.stmt) { td = _stmtQuery(inst.stmt, z, x, ty); }
         else if (engine==='sqljs') td = db.exec('SELECT tile_data FROM tiles WHERE zoom_level='+z+' AND tile_column='+x+' AND tile_row='+ty)[0]?.values?.[0]?.[0];
         else td = db.selectValue('SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?',[z,x,ty]);
-        if (td) break;
+        if (td) {
+          if (redTy.length === 2 && tyTms !== y) {
+            const k = ty === tyTms ? 't' : 'x', c = inst.oc || (inst.oc = { t: 0, x: 0 }), dr = ++c[k], mn = c[k === 't' ? 'x' : 't'];
+            if (dr >= 8 && mn * 8 <= dr) inst.ori = k;
+          }
+          break;
+        }
       }
     } else if (fmt==='alpinequest') {
       if (inst.stmt) { td = _stmtQuery(inst.stmt, x, y, z); }
@@ -37086,6 +37113,13 @@ function _perfSnimak() {
   if (nav) { o.domInteractive = Math.round(nav.domInteractive); o.dcl = Math.round(nav.domContentLoadedEventEnd); o.load = Math.round(nav.loadEventEnd); }
   try { const fcp = performance.getEntriesByName('first-contentful-paint')[0]; if (fcp) o.fcp = Math.round(fcp.startTime); } catch (e) {}
   o.dom = document.getElementsByTagName('*').length;
+  try { const m = navigator.userAgent.match(/\(([^)]*)\)/); o.uredjaj = m ? m[1].replace(/; wv/, '') : '?'; o.ekran = screen.width + 'x' + screen.height + '@' + (window.devicePixelRatio || 1); } catch (e) {}
+  // Offline karte: format i ukupno čitanje pločica (ms po pločici) - za poređenje MBTiles / SQLiteDB na istom uređaju.
+  try {
+    o.karte = (typeof _sqlLayers !== 'undefined' ? _sqlLayers : []).map(l => ({ ime: String(l.name).slice(0, 40), format: l.fmt, vidljiva: !!l.visible, zum: l.meta ? (l.meta.minzoom + '-' + l.meta.maxzoom) : '?' }));
+    const tp = typeof _tileProf !== 'undefined' ? _tileProf : null;
+    if (tp && tp.reads) o.karteCitanje = { citanja: tp.reads, prosjekMs: Math.round(tp.readSum / tp.reads * 10) / 10, maxMs: Math.round(tp.readMax), cekanjeProsjekMs: tp.qWaitN ? Math.round(tp.qWaitSum / tp.qWaitN * 10) / 10 : 0, prazne: tp.nullData, isteklo: tp.timeout, greske: tp.err };
+  } catch (e) {}
   try { o.slojeva = (typeof map !== 'undefined' && map && map._layers) ? Object.keys(map._layers).length : 0; } catch (e) { o.slojeva = 0; }
   // Raspodjela: šta stoji na karti (vrsta · pane) — da se vidi koji dio pravi višak slojeva.
   try {
@@ -37557,7 +37591,8 @@ async function _primljeniObrisi(id) {
 function _imeNorm() {
   return ((sbProfile?.ime || '') + ' ' + (sbProfile?.prezime || '')).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
-function _dijagDozvoljeno() { return !!sbProfile?.is_admin || _imeNorm() === 'azra cehic'; }
+// Dijagnostika je za SVE prijavljene korisnike: izvještaj se samo kopira, ništa se ne šalje samo od sebe.
+function _dijagDozvoljeno() { return !!sbProfile; }
 function _dijagMeniSync() {
   const el = document.getElementById('menu-dijag-item');
   if (el) el.style.display = _dijagDozvoljeno() && !sbProfile?.is_admin ? 'block' : 'none';   // admin je ima u Debug tabu
