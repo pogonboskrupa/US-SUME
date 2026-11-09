@@ -15969,7 +15969,20 @@ function onP(p) {
   // ona završi. Inače bi pomjerio _onPLastFixTs na "sada", pa bi dopuna ostatak
   // pozadinskog perioda preskočila kao "već viđen" i potvrdila (obrisala)
   // journal — a i ono što prođe ušlo bi IZA novije žive tačke (cik-cak).
-  if (_drainNativeGpsBuffer._busy) { _drainLiveQ.push({ fn: onP, arg: p }); return; }
+  if (_drainNativeGpsBuffer._busy) {
+    _drainLiveQ.push({ fn: onP, arg: p });
+    // Dopuna iz pozadine zna trajati sekundama (poslije otključavanja ekrana), a marker je
+    // do sada stajao dok se ne završi. Samo prikaz položaja ide odmah; snimanje i filteri
+    // ostaju u redu iza starijih tačaka (redoslijed tačaka se ne smije miješati).
+    try {
+      const c = p.coords;
+      if (posMk && c && isFinite(c.latitude) && isFinite(c.longitude)) {
+        posMk.setLatLng([c.latitude, c.longitude]);
+        if (posCr) posCr.setLatLng([c.latitude, c.longitude]).setRadius(c.accuracy || 0);
+      }
+    } catch (e) {}
+    return;
+  }
   const { latitude: la, longitude: lo, altitude: al, accuracy: ac,
           speed: gpsSpeed, heading: gpsHeading } = p.coords;
   // Zabilježi SIROVI fix ODMAH (prije filtriranja) — _drainNativeGpsBuffer po

@@ -1,0 +1,12 @@
+'use strict';
+const assert=require('node:assert/strict');
+const src=require('./_izvor').izvor();
+const f=src.slice(src.indexOf('function onP(p) {'),src.indexOf('const { latitude: la, longitude: lo, altitude: al, accuracy: ac,',src.indexOf('function onP(p) {')));
+const pos=[];
+const posMk={setLatLng:a=>pos.push(a)},posCr={setLatLng(a){pos.push(a);return this;},setRadius(){}};
+const q=[];
+const g=new Function('_drainNativeGpsBuffer','_drainLiveQ','posMk','posCr',f+' return; } return onP;')({_busy:true},q,posMk,posCr);
+g({coords:{latitude:44.9,longitude:16.1,accuracy:5}});
+assert.equal(q.length,1,'fiks ostaje u redu za obradu');
+assert.deepEqual(pos[0],[44.9,16.1],'marker se pomjera odmah dok traje dopuna');
+console.log('OK gps marker tokom dopune');
