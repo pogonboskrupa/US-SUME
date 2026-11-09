@@ -32215,11 +32215,9 @@ function _apkOtvoriUrl(url) {
   document.body.appendChild(a); a.click(); a.remove();
 }
 
+// Uvijek skida fajl sa stalnog linka (da se može poslati ili instalirati ručno), i kad je
+// aplikacija već ažurna — "Ažuriraj aplikaciju" u tom slučaju samo javi "najnovija verzija".
 function preuzmiApkAdmin() {
-  if (window.AndroidUpdate && typeof window.AndroidUpdate.checkAndInstall === 'function') {
-    azurirajAplikaciju();
-    return;
-  }
   showToast('⬇ Preuzimam najnoviji APK…');
   _apkOtvoriUrl(_APK_STALNI);
 }

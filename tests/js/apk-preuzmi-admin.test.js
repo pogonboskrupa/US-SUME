@@ -30,10 +30,10 @@ function okolina({ most = true, apk = true } = {}) {
 }
 const STALNI = 'https://github.com/pogonboskrupa/US-SUME/releases/latest/download/app-debug.apk';
 
-t('APK sa mostom: ide kroz Ažuriraj aplikaciju, bez dijaloga', () => {
+t('APK sa mostom: i dalje skida fajl sa stalnog linka, ne poziva Ažuriraj (koji kod ažurne verzije ne skida ništa)', () => {
   const { f, st } = okolina();
   f();
-  assert.strictEqual(st.azuriraj, 1); assert.strictEqual(st.dlg, 0); assert.strictEqual(st.href, null);
+  assert.strictEqual(st.azuriraj, 0); assert.strictEqual(st.dlg, 0); assert.strictEqual(st.href, STALNI);
 });
 t('APK bez mosta: preglednik odmah preuzima sa stalnog linka', () => {
   const { f, st } = okolina({ most: false });
