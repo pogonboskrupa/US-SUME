@@ -2618,6 +2618,7 @@ function _adminDebugRender() {
   // stanje od prošlog otvaranja panela, što je na terenu gore od ničega.
   try { _netDebugRender(); } catch(e) {}
   try { _perfDiagRender(); } catch(e) {}
+  try { _gpsLiveRender(); } catch(e) {}
   const el = document.getElementById('admin-debug-list');
   if (!el) return;
   if (!sbProfile?.is_admin) { el.innerHTML = ''; return; }
@@ -15964,6 +15965,46 @@ function _simplifyRecordedPts(pts, toleranceM) {
   } catch (e) { return pts; }
 }
 
+// ── GPS uživo (admin Debug): tačnost, razmak između fiksova i kašnjenje isporuke ──
+// Samo se bilježi u memoriju (zadnjih 40 fiksova); ništa se ne šalje niti pamti.
+const _GPS_TEL = [];
+function _gpsTelZabiljezi(p) {
+  const c = p.coords, sad = Date.now();
+  _GPS_TEL.push({ sad, ts: p.timestamp || sad, ac: c.accuracy, sp: c.speed });
+  if (_GPS_TEL.length > 40) _GPS_TEL.shift();
+}
+function _gpsStat(arr) {
+  const a = arr.filter(Number.isFinite).sort((x, y) => x - y);
+  if (!a.length) return null;
+  const q = f => a[Math.min(a.length - 1, Math.floor(a.length * f))];
+  return { med: q(0.5), p95: q(0.95), max: a[a.length - 1], n: a.length };
+}
+function _gpsLiveRender() {
+  const el = document.getElementById('gps-live-card');
+  if (!el || !el.offsetParent) return;
+  if (!sbProfile?.is_admin) { el.innerHTML = ''; return; }
+  const red = (k, v, c) => '<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid #1e293b;font-size:11.5px;"><span style="color:#94a3b8;">' + k + '</span><span style="color:' + (c || '#e2e8f0') + ';text-align:right;">' + v + '</span></div>';
+  const r = _GPS_TEL, zadnji = r[r.length - 1];
+  let h = '<div style="font-weight:700;color:#cbd5e1;font-size:13px;margin-bottom:8px;">📡 GPS uživo</div>';
+  if (!gpsOn) h += '<div style="font-size:11px;color:#fbbf24;">GPS je isključen — uključi lokaciju na karti pa se vrati ovdje.</div>';
+  else if (!zadnji) h += '<div style="font-size:11px;color:#fbbf24;">Čekam prvi fiks…</div>';
+  else {
+    const starost = (Date.now() - zadnji.sad) / 1000;
+    const ac = _gpsStat(r.map(x => x.ac)), razmak = _gpsStat(r.slice(1).map((x, i) => (x.ts - r[i].ts) / 1000));
+    const kasn = _gpsStat(r.map(x => (x.sad - x.ts) / 1000));
+    const boja = v => v <= 10 ? '#4ade80' : v <= 25 ? '#fbbf24' : '#f87171';
+    h += red('Zadnji fiks', 'prije ' + starost.toFixed(1) + ' s', starost > 5 ? '#f87171' : starost > 2.5 ? '#fbbf24' : '#4ade80');
+    h += red('Tačnost sada', '±' + Math.round(zadnji.ac) + ' m', boja(zadnji.ac));
+    if (ac) h += red('Tačnost (zadnjih ' + ac.n + ')', 'medijan ±' + Math.round(ac.med) + ' · p95 ±' + Math.round(ac.p95) + ' · najgora ±' + Math.round(ac.max) + ' m', boja(ac.med));
+    if (razmak) h += red('Razmak među fiksovima', 'medijan ' + razmak.med.toFixed(1) + ' s · najduži ' + razmak.max.toFixed(1) + ' s', razmak.med > 2.5 ? '#fbbf24' : '#e2e8f0');
+    if (kasn) h += red('Kašnjenje isporuke (fiks → app)', 'medijan ' + kasn.med.toFixed(1) + ' s · najgore ' + kasn.max.toFixed(1) + ' s', kasn.med > 2 ? '#f87171' : kasn.med > 1 ? '#fbbf24' : '#4ade80');
+    try { const f = (_perfSnimak().funkcije || []).find(x => x.fn === 'onP'); if (f) h += red('Obrada fiksa (onP)', 'prosjek ' + f.avg + ' ms · najduže ' + f.max + ' ms', f.max > 50 ? '#fbbf24' : '#e2e8f0'); } catch (e) {}
+    if (typeof _drainNativeGpsBuffer !== 'undefined' && _drainNativeGpsBuffer._busy) h += red('Dopuna iz pozadine', 'traje — fiksovi čekaju u redu', '#fbbf24');
+  }
+  el.innerHTML = h;
+}
+setInterval(() => { try { _gpsLiveRender(); } catch (e) {} }, 1000);
+
 function onP(p) {
   // Dok dopuna iz native bafera traje (ima predahe — await), živi fiks čeka da
   // ona završi. Inače bi pomjerio _onPLastFixTs na "sada", pa bi dopuna ostatak
@@ -15991,6 +16032,7 @@ function onP(p) {
   // vrijeme snimanja, i dok je app u prvom planu — bez ovoga bi se svaka
   // uživo obrađena tačka procesirala i drugi put pri povratku u app).
   _onPLastFixTs = p.timestamp || Date.now();
+  try { _gpsTelZabiljezi(p); } catch (e) {}
   const filtAl = _filteredAlt(al);
   lastP = { la, lo, al: filtAl ?? 0, ac };
   _lastGpsFixTime = Date.now();

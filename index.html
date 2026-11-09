@@ -5334,38 +5334,17 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         </button>
         <div style="flex:1;">
           <div style="font-weight:700;color:#f87171;font-size:15px;">🛠 DEBUG</div>
-          <div style="font-size:11px;color:#64748b;margin-top:2px;">Aktivni tehnički problemi — samo administrator</div>
+          <div style="font-size:11px;color:#64748b;margin-top:2px;">Brzina aplikacije i GPS uživo — samo administrator</div>
         </div>
-        <button onclick="_adminDebugObrisiSve()" title="Obriši sve zapise"
-          style="flex-shrink:0;background:#14532d;border:1px solid #22c55e;border-radius:9px;color:#bbf7d0;padding:7px 10px;font-size:11px;font-weight:700;cursor:pointer;">
-          Obriši sve
-        </button>
       </div>
       <div style="padding:14px 16px;">
         <!-- Terenski rad: izmjereno stanje veze + šta radi bez neta.
              Mjerenje je PASIVNO (iz saobraćaja koji app ionako pravi) — vidi
              komentar uz _netZabiljezi. Dugme ispod je JEDINI zahtjev koji ova
              sekcija sama napravi, i to tek na izričit klik. -->
-        <div id="net-debug-card" style="background:#080f1e;border:1px solid #334155;border-radius:10px;padding:12px;margin-bottom:12px;"></div>
+        <div id="gps-live-card" style="background:#080f1e;border:1px solid #166534;border-radius:10px;padding:12px;margin-bottom:12px;"></div>
         <div id="perf-diag-card" style="background:#080f1e;border:1px solid #0e7490;border-radius:10px;padding:12px;margin-bottom:12px;"></div>
 
-        <button onclick="_netTestSada()" id="btn-net-test"
-          style="width:100%;padding:10px;margin-bottom:14px;background:#14233c;border:1px solid #3b82f6;border-radius:9px;color:#93c5fd;font-size:12px;font-weight:700;cursor:pointer;">
-          📶 Testiraj vezu sada
-        </button>
-        <button onclick="_adminDebugKlikNow()"
-          style="width:100%;padding:10px;background:#1e3a5f;border:1px solid #3b82f6;border-radius:9px;color:#93c5fd;font-size:12px;font-weight:700;cursor:pointer;">
-          🖱 Provjeri klikabilnost sada
-        </button>
-        <div style="font-size:10px;color:#64748b;line-height:1.5;margin:6px 2px 12px;">Radi SAMO ako su 📁 Lista oznaka/KML ili ✏ Nacrtaj vlaku ručno trenutno na ekranu (Karta/Projekat tab) — u suprotnom otvori taj tab pa ponovi. Nezavisno od ovoga, svaki STVARAN promašen dodir na ta dva dugmeta se automatski zabilježi ovdje čim se desi, bez obzira gdje si u tom trenutku.</div>
-
-        <button onclick="_adminDebugMapStuckNow()"
-          style="width:100%;padding:10px;background:#1e3a5f;border:1px solid #3b82f6;border-radius:9px;color:#93c5fd;font-size:12px;font-weight:700;cursor:pointer;">
-          🗺 Provjeri "Učitavam kartu" sada
-        </button>
-        <div style="font-size:10px;color:#64748b;line-height:1.5;margin:6px 2px 12px;">Zapisuje da li je indikator BAŠ SADA prikazan, koliko dugo, i cijelu istoriju ovog učitavanja karte.</div>
-
-        <div id="admin-debug-list"></div>
       </div>
     </div>
 
@@ -6026,7 +6005,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.7.9';
+const APP_VER = 'v3.8.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
