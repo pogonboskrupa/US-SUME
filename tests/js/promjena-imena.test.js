@@ -1,0 +1,10 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('fs');
+const src=require('./_izvor').izvor();
+const sql=fs.readFileSync(__dirname+'/../../supabase/migrations/20261110_promjena_imena.sql','utf8');
+assert(/id <> auth\.uid\(\)/.test(sql)&&/lower\(k\.ime\)/.test(sql),'jedinstvenost imena provjerena na serveru, bez vlastitog reda');
+assert(!/login_email\s*=/.test(sql),'login_email se ne dira');
+const f=src.slice(src.indexOf('async function urediImePrezime'),src.indexOf('async function doLogout'));
+assert(/promijeni_svoje_ime/.test(f)&&/_OL\.save\(_OL\.PROFILE/.test(f)&&/_SAVED_USER_KEY/.test(f));
+assert(/urediImePrezime\(\)/.test(src.slice(src.indexOf('async function promijeniPin'),src.indexOf('async function urediImePrezime'))));
+console.log('OK promjena imena');

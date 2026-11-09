@@ -2242,6 +2242,9 @@ async function doRegister() {
 async function promijeniPin() {
   if (!sbUser) { showToast('Prvo se prijavite'); return; }
   if (!navigator.onLine) { showToast('⚠ Promjena PIN-a traži internet'); return; }
+  const izbor = await _dlgActions('🔑 Nalog', [{ label: 'Promijeni PIN' }, { label: 'Uredi ime i prezime' }, { label: 'Odustani' }]);
+  if (izbor == null || izbor < 0 || izbor > 1) return;
+  if (izbor === 1) { await urediImePrezime(); return; }
   const p1 = await _dlgPrompt('Novi PIN (4–6 cifara)', '', { title: '🔑 Promijeni PIN', inputType: 'password', inputMode: 'numeric', okLabel: 'Dalje' });
   if (p1 === null) return;
   const pin = String(p1).trim();
@@ -2255,6 +2258,34 @@ async function promijeniPin() {
   const saved = _loadSavedUser();
   if (saved) { saved.pin = pin; localStorage.setItem(_SAVED_USER_KEY, JSON.stringify(saved)); }
   showToast('✅ PIN promijenjen');
+}
+
+// Ime i prezime: login_email se ne mijenja pa PIN važi dalje. Offline prijava pamti staro ime
+// do prve online prijave pod novim imenom (hash ključa uključuje ime).
+async function urediImePrezime() {
+  if (!sbUser || !sbProfile) { showToast('Prvo se prijavite'); return; }
+  const ime = await _dlgPrompt('Ime', sbProfile.ime || '', { title: '✏ Ime i prezime', okLabel: 'Dalje' });
+  if (ime === null) return;
+  const prezime = await _dlgPrompt('Prezime', sbProfile.prezime || '', { title: '✏ Ime i prezime', okLabel: 'Sačuvaj' });
+  if (prezime === null) return;
+  const i = String(ime).trim(), p = String(prezime).trim();
+  if (i.length < 2) { showToast('Ime mora imati bar 2 znaka'); return; }
+  if (i === sbProfile.ime && p === (sbProfile.prezime || '')) { showToast('Nema promjene'); return; }
+  try {
+    const r = await _withTimeout(sb.rpc('promijeni_svoje_ime', { p_ime: i, p_prezime: p }), 15000);
+    if (r.error) throw r.error;
+  } catch (e) {
+    const m = String(e?.message || e);
+    showToast(/promijeni_svoje_ime|PGRST202|does not exist/i.test(m) ? '⚠ Server još nema ovu mogućnost — admin treba pokrenuti migraciju 20261110_promjena_imena.sql' : '⚠ ' + m);
+    return;
+  }
+  sbProfile.ime = i; sbProfile.prezime = p;
+  try { _OL.save(_OL.PROFILE, sbProfile); } catch (e) {}
+  const saved = _loadSavedUser();
+  if (saved) { saved.ime = i; saved.prezime = p; try { localStorage.setItem(_SAVED_USER_KEY, JSON.stringify(saved)); } catch (e) {} }
+  try { if (typeof _primijeniUlogeUI === 'function') _primijeniUlogeUI(sbProfile); } catch (e) {}
+  try { _menuIdentityRender(); } catch (e) {}
+  showToast('✅ Ime promijenjeno: ' + i + ' ' + p);
 }
 
 async function doLogout() {
