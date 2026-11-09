@@ -18,7 +18,7 @@
  // Izabran odsjek mora se jasno vidjeti: plava ispuna i debela linija, boje kakve nema ni u jednom
  // zadanom stilu fajla. `fill:true` je obavezan — veliki fajlovi granica imaju ispunu isključenu, pa
  // bi se bez njega promijenila samo linija (u boji sličnoj fajlu) i izbor se ne bi primijetio.
- const SELEKTOVAN={fill:true,color:'#1d4ed8',fillColor:'#3b82f6',fillOpacity:.5,opacity:1,weight:4,dashArray:null};
+ const SELEKTOVAN={fill:true,color:'#0f766e',fillColor:'#14b8a6',fillOpacity:.5,opacity:1,weight:4,dashArray:null};
  function oznaci(layer){layer.setStyle(SELEKTOVAN);try{layer.bringToFront();}catch(e){}}
  function getSources(){
   const result=[];for(const k of kmlLs){if(!k.grp)continue;const rows=[];const walk=g=>g.eachLayer(l=>{if(l._kmlIsPolygon)rows.push({layer:l});else if(l.eachLayer)walk(l);});walk(k.grp);if(rows.length)result.push({k,rows});}

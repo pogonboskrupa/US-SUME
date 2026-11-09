@@ -21163,7 +21163,7 @@ function _kmlHitTest(latlng, onlyPolygons) {
       }
 
       if (l._kmlIsPolygon) {
-        if (l._kmlSakriven && !onlyPolygons) continue;
+        if ((l._kmlSakriven || l._kmlKlikOff) && !onlyPolygons) continue;
         let inside = false;
         try { inside = !!(l._containsPoint && l._containsPoint(lp)); } catch(e) {}
         if (!inside && typeof turf!=='undefined' && l.getBounds?.().contains(latlng)) {
@@ -21272,6 +21272,45 @@ async function _kmlPopSave(uid) {
   finally{layer._saving=false;}
 }
 
+// Klik na poligone jednog KML fajla se može isključiti (npr. velika granica koja pokriva sve ispod sebe).
+// Uključuje se u Preglednik KML oznaka (⋯ → Klik na karti) ili dugim pritiskom na poligon tog fajla.
+function _kmlKlikPostavi(k, off) {
+  const i = kmlLs.indexOf(k);
+  if (i < 0) return;
+  k.klikOff = !!off;
+  try { applyKmlStyle(i); } catch (e) {}
+  try { saveKmlStyles(); } catch (e) {}
+  try { if (typeof _localKmlSaveAll === 'function') _localKmlSaveAll(false); } catch (e) {}
+  try { if (typeof _libraryRender === 'function') _libraryRender(); } catch (e) {}
+}
+function _kmlPopKlikOff(uid) {
+  const i = _kmlPopFindIdx(uid), k = kmlLs[i];
+  if (!k) return;
+  try { map.closePopup(); } catch (e) {}
+  _kmlKlikPostavi(k, true);
+  showToast('🔒 Klik na „' + (k.name || 'fajl') + '“ je isključen. Uključi: dugi pritisak na poligon ili Preglednik KML oznaka → ⋯');
+}
+function _kmlKlikUTacki(latlng) {
+  const nadjeni = [];
+  const obidji = (g, k) => g?.eachLayer?.(l => {
+    if (l._kmlIsPolygon) {
+      let u = false;
+      try { u = !!l.getBounds?.().contains(latlng) && turf.booleanPointInPolygon(turf.point([latlng.lng, latlng.lat]), l.toGeoJSON()); } catch (e) {}
+      if (u && nadjeni.indexOf(k) < 0) nadjeni.push(k);
+    } else if (l.eachLayer) obidji(l, k);
+  });
+  for (const k of kmlLs) if (k.klikOff === true && k.grp && k.vis !== false && map.hasLayer(k.grp)) obidji(k.grp, k);
+  return nadjeni;
+}
+map.on('contextmenu', e => {
+  try {
+    if (typeof _vsdOn !== 'undefined' && _vsdOn) return;
+    const lista = _kmlKlikUTacki(e.latlng);
+    if (!lista.length) return;
+    lista.forEach(k => _kmlKlikPostavi(k, false));
+    showToast('🔓 Klik uključen: ' + lista.map(k => k.name || 'fajl').join(', '));
+  } catch (e) {}
+});
 function _kmlPopZoom(uid) {
   const layer = _kmlPopFindLayer(uid);
   if (!layer) return;
@@ -21465,7 +21504,7 @@ function saveKmlStyles() {
     if (!k._key || k.grp===null || k._downloaded===false) return;
     userMap[k._key] = { col: k.col, dash: k.dash, weight: k.weight, opacity: k.opacity ?? 0.9, vis: k.vis,
       fill: k.fill || false, fillCol: k.fillCol || k.col, fillPattern: k.fillPattern || 'solid', fillOpacity: k.fillOpacity ?? 0.35,
-      tag: k.tag || '', onlyPolygon: k.onlyPolygon===true, ptR: k.ptR || 3, ptRRucno: k.ptRRucno===true, poligoniVidljivi: k.poligoniVidljivi===true };
+      tag: k.tag || '', onlyPolygon: k.onlyPolygon===true, ptR: k.ptR || 3, ptRRucno: k.ptRRucno===true, poligoniVidljivi: k.poligoniVidljivi===true, klikOff: k.klikOff===true };
   });
   localStorage.setItem(_KML_USER_STYLES_KEY, JSON.stringify(userMap));
   if(_localKmlSaveAll(false)===false)throw Error('Lokalni stil nije sačuvan');
@@ -21546,7 +21585,7 @@ function applyKmlStyle(i) {
       return;
     }
     if (l._kmlIsPolygon) {
-      l._kmlSakriven = false; l.options.interactive = true;
+      l._kmlSakriven = false; l._kmlKlikOff = k.klikOff === true; l.options.interactive = !l._kmlKlikOff;
       // Hit-test cijele površine ostaje (fill:true i kad je prozirno) — osim za veliki sloj: tamo je
       // prozirna ispuna samo trošak crtanja hiljada poligona, a klik unutar poligona i dalje hvata
       // _kmlHitTest u map.on('click').
@@ -21767,6 +21806,7 @@ function _localKmlSaveAll(prune=true) {
       store[origName].ptR          = k.ptR || 3;
       store[origName].ptRRucno     = k.ptRRucno===true;
       store[origName].poligoniVidljivi = k.poligoniVidljivi===true;
+      store[origName].klikOff = k.klikOff===true;
       store[origName].tag          = k.tag || '';
       store[origName]._loadedAt    = k._loadedAt || store[origName]._loadedAt || 0;
     });
@@ -21819,7 +21859,7 @@ async function _localKmlRestore() {
           fill: data.fill || false, fillCol: data.fillCol || col,
           fillPattern: data.fillPattern || 'solid', fillOpacity: data.fillOpacity ?? 0.35,
           // Spremljeno 5 px je bilo samo staro zadano — poštuje se jedino ako ga je korisnik sam izabrao.
-          ptR: data.ptRRucno ? (data.ptR || 3) : 3, ptRRucno: data.ptRRucno===true, poligoniVidljivi: data.poligoniVidljivi===true,
+          ptR: data.ptRRucno ? (data.ptR || 3) : 3, ptRRucno: data.ptRRucno===true, poligoniVidljivi: data.poligoniVidljivi===true, klikOff: data.klikOff===true,
           onlyPolygon: data.onlyPolygon===true, tag: data.tag || '', _loadedAt: data._loadedAt || 0
         };
         layer.onlyPolygon=globalThis.GithubLayers?.defaultOnlyPolygon(layer)??layer.onlyPolygon;

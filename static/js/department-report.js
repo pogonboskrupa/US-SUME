@@ -96,11 +96,11 @@
   // Raster i linije ne presreću dodire. Sam poligon izvještaja otvara pregled.
   if(!map.getPane('departmentReport'))map.createPane('departmentReport');Object.assign(map.getPane('departmentReport').style,{zIndex:'445',pointerEvents:'none'});
   if(!map.getPane('departmentReportHit'))map.createPane('departmentReportHit');Object.assign(map.getPane('departmentReportHit').style,{zIndex:'395',pointerEvents:'none'});
-  // Granica odjela je najvažnija stavka izvještaja: zasićena magenta linija sa bijelim oreolom se jasno
+  // Granica odjela je najvažnija stavka izvještaja: zasićena tirkizna linija sa bijelim oreolom se jasno
   // razlikuje od svih boja razreda nagiba (zelena, žuta, narandžasta, crvena, ljubičasta) i od podloge.
   const hitR=(hitRenderer||=L.svg({pane:'departmentReportHit'}));
   boundaryHalo=L.geoJSON(state.geometry,{pane:'departmentReportHit',renderer:hitR,interactive:false,style:{color:'#ffffff',weight:7,opacity:.9,fill:false}}).addTo(map);
-  boundary=L.geoJSON(state.geometry,{pane:'departmentReportHit',renderer:hitR,style:{color:'#d4118f',weight:3.5,opacity:1,fill:true,fillOpacity:0}}).addTo(map);
+  boundary=L.geoJSON(state.geometry,{pane:'departmentReportHit',renderer:hitR,style:{color:'#0fb5a6',weight:3.5,opacity:1,fill:true,fillOpacity:0}}).addTo(map);
   refreshSelection();
   if(!result||state.mode==='none')return;
   const r=result,values=state.mode==='aspect'?r.aspects:r.classes,colors=state.mode==='aspect'?ACOLORS:COLORS;
