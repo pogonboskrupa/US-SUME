@@ -2,7 +2,7 @@
 (function(root){
  'use strict';
  const node=id=>document.getElementById(id),SKEY='tvlake_department_report_v1_',MODEL=5,COLORS=['#36856b','#789a39','#c2a036','#cf7532','#b94c4f','#78456e'],ACOLORS=['#3588bd','#39926c','#d88438','#875caa'];
- let owner=null,state={},result=null,draft=null,draftLayer=null,boundary=null,terrain=null,edges=null,profileLayer=null,worker=null,cancelWorker=null,generation=0,busy=false,lastError='',loaded=null,legend=null,hitRenderer=null,autoTimer=null,autoOnline=null,autoAttempts=0;
+ let owner=null,state={},result=null,draft=null,draftLayer=null,boundary=null,boundaryHalo=null,terrain=null,edges=null,profileLayer=null,worker=null,cancelWorker=null,generation=0,busy=false,lastError='',loaded=null,legend=null,hitRenderer=null,autoTimer=null,autoOnline=null,autoAttempts=0;
  const uid=()=>typeof sbUser!=='undefined'?sbUser?.id:null,key=()=>SKEY+encodeURIComponent(owner||''),valid=()=>owner&&uid()===owner;
  const toast=s=>showToast(s),number=(n,d=1)=>Number.isFinite(n)?n.toLocaleString('bs',{maximumFractionDigits:d}):'—';
  function save(){if(!valid())return false;try{localStorage.setItem(key(),JSON.stringify(state));return true;}catch(e){toast('Izbor nije sačuvan — provjeri memoriju uređaja');return false;}}
@@ -23,7 +23,7 @@
  function hide(){node('department-report').hidden=true;}
  function close(){hide();cancelDraw(false);}
  function geometryBounds(g){return L.geoJSON(g).getBounds();}
- function clearLayers(){if(map.getContainer().querySelector('.dr-profile-popup'))map.closePopup();for(const l of [boundary,terrain,edges,profileLayer])if(l)map.removeLayer(l);boundary=terrain=edges=profileLayer=null;legend?.remove();legend=null;}
+ function clearLayers(){if(map.getContainer().querySelector('.dr-profile-popup'))map.closePopup();for(const l of [boundaryHalo,boundary,terrain,edges,profileLayer])if(l)map.removeLayer(l);boundaryHalo=boundary=terrain=edges=profileLayer=null;legend?.remove();legend=null;}
  const selecting=()=>!!draft||root.GithubLayers?.selecting();
  function refreshSelection(){
   const active=selecting();if(boundary?.getPane())boundary.getPane().style.pointerEvents=active?'none':'';
@@ -96,7 +96,11 @@
   // Raster i linije ne presreću dodire. Sam poligon izvještaja otvara pregled.
   if(!map.getPane('departmentReport'))map.createPane('departmentReport');Object.assign(map.getPane('departmentReport').style,{zIndex:'445',pointerEvents:'none'});
   if(!map.getPane('departmentReportHit'))map.createPane('departmentReportHit');Object.assign(map.getPane('departmentReportHit').style,{zIndex:'395',pointerEvents:'none'});
-  boundary=L.geoJSON(state.geometry,{pane:'departmentReportHit',renderer:(hitRenderer||=L.svg({pane:'departmentReportHit'})),style:{color:'#2563eb',weight:2.5,fill:true,fillOpacity:0}}).addTo(map);
+  // Granica odjela je najvažnija stavka izvještaja: zasićena magenta linija sa bijelim oreolom se jasno
+  // razlikuje od svih boja razreda nagiba (zelena, žuta, narandžasta, crvena, ljubičasta) i od podloge.
+  const hitR=(hitRenderer||=L.svg({pane:'departmentReportHit'}));
+  boundaryHalo=L.geoJSON(state.geometry,{pane:'departmentReportHit',renderer:hitR,interactive:false,style:{color:'#ffffff',weight:7,opacity:.9,fill:false}}).addTo(map);
+  boundary=L.geoJSON(state.geometry,{pane:'departmentReportHit',renderer:hitR,style:{color:'#d4118f',weight:3.5,opacity:1,fill:true,fillOpacity:0}}).addTo(map);
   refreshSelection();
   if(!result||state.mode==='none')return;
   const r=result,values=state.mode==='aspect'?r.aspects:r.classes,colors=state.mode==='aspect'?ACOLORS:COLORS;
