@@ -37250,7 +37250,9 @@ async function podaciPosalji(vrsta, naziv, kml) {
     akcije.push({ label: 'Odustani' });
     i = await _dlgActions('📤 Pošalji: ' + naziv, akcije);
   }
-  if (i == null || i < 0 || i > kolege.length) return;
+  const sifrom = i === kolege.length;
+  const izabrani = Array.isArray(i) ? i : (sifrom ? [] : [i]);
+  if (i == null || (!sifrom && !izabrani.length) || izabrani.some(x => !(x >= 0 && x < kolege.length))) return;
   if (typeof _mrezaSila === 'function') _mrezaSila(30000);
   if (sbUser._cachedStub && !(await _sesijaPinom(true))) { showToast('Slanje traži vezu sa serverom'); return; }
   const poruka = e => {
@@ -37259,7 +37261,7 @@ async function podaciPosalji(vrsta, naziv, kml) {
     if (typeof _isNetworkErr === 'function' && _isNetworkErr(e)) return '⚠ Nema veze — pošalji ponovo kad imaš signal';
     return '⚠ ' + m;
   };
-  if (i === kolege.length) {
+  if (sifrom) {
     try {
       const r = await _withTimeout(sb.rpc('posalji_podatke_sifrom', { p_vrsta: vrsta, p_naziv: String(naziv).slice(0, 120), p_sadrzaj: kml }), 25000);
       if (r.error) throw r.error;
@@ -37267,11 +37269,19 @@ async function podaciPosalji(vrsta, naziv, kml) {
     } catch (e) { showToast(poruka(e)); }
     return;
   }
-  try {
-    const r = await _withTimeout(sb.rpc('posalji_podatke', { p_to: kolege[i].id, p_vrsta: vrsta, p_naziv: String(naziv).slice(0, 120), p_sadrzaj: kml }), 25000);
-    if (r.error) throw r.error;
-    showToast('✓ Poslano: ' + kolege[i].ime + ' će ga dobiti čim bude online. Na serveru ne ostaje.');
-  } catch (e) { showToast(poruka(e)); }
+  const ok = [], neuspjeli = [];
+  let zadnjaGreska = null;
+  for (const idx of izabrani) {
+    try {
+      const r = await _withTimeout(sb.rpc('posalji_podatke', { p_to: kolege[idx].id, p_vrsta: vrsta, p_naziv: String(naziv).slice(0, 120), p_sadrzaj: kml }), 25000);
+      if (r.error) throw r.error;
+      ok.push(kolege[idx].ime);
+    } catch (e) { neuspjeli.push(kolege[idx].ime); zadnjaGreska = e; }
+  }
+  if (!neuspjeli.length) showToast(ok.length === 1
+    ? '✓ Poslano: ' + ok[0] + ' će ga dobiti čim bude online. Na serveru ne ostaje.'
+    : '✓ Poslano za ' + ok.length + ' korisnika. Na serveru ne ostaje.');
+  else showToast((ok.length ? 'Poslano ' + ok.length + ', ' : '') + 'nije poslano: ' + neuspjeli.slice(0, 3).join(', ') + (neuspjeli.length > 3 ? '…' : '') + ' — ' + poruka(zadnjaGreska));
 }
 // Admin šalje BILO KOM odobrenom korisniku (svaka šumarija) — lista dolazi iz admin RPC-a,
 // jer kolegeMap kod admina nosi samo njegovu šumariju. Pad RPC-a vraća na kolege iz šumarije.
@@ -37288,32 +37298,50 @@ async function _primaociSvi() {
     return l;
   } catch (e) { return _shareKolege(); }
 }
-// Birač primaoca sa pretragom (ime ili šumarija). Vraća indeks u listi, lista.length = šifra, null = odustao.
+// Birač primaoca: pretraga (ime ili šumarija), višestruki izbor, "Odaberi sve" / "Ukloni".
+// Vraća NIZ indeksa u listi, lista.length = šifra, null = odustao. "Odaberi sve" važi za
+// trenutno filtriran prikaz, pa se pretragom po šumariji bira cijela šumarija.
 function _primaocBiraj(lista, naziv, prikaziSumariju) {
   return new Promise(res => {
+    const izabrani = new Set();
     const bg = document.createElement('div');
     bg.id = 'prim-biraj';
     bg.style.cssText = 'position:fixed;inset:0;z-index:999950;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center';
     const box = document.createElement('div');
     box.style.cssText = 'background:var(--bg2,#14201a);color:var(--text,#e8f0ea);width:100%;max-width:520px;max-height:85vh;display:flex;flex-direction:column;border-radius:16px 16px 0 0;padding:14px';
+    const dugme = 'padding:10px 12px;border-radius:10px;border:1px solid #476;background:transparent;color:inherit;min-height:44px';
     box.innerHTML = '<div style="font-weight:700;margin-bottom:8px">📤 Pošalji: ' + _escHtml(naziv) + '</div>' +
       '<input id="prim-trazi" type="search" autocomplete="off" placeholder="Traži korisnika (ime ili šumarija)" style="font-size:16px;padding:10px;border-radius:10px;border:1px solid #476;background:rgba(255,255,255,.07);color:inherit;margin-bottom:8px">' +
+      '<div style="display:flex;gap:8px;margin-bottom:6px"><button type="button" id="prim-sve" style="flex:1;' + dugme + '">Odaberi sve</button><button type="button" id="prim-ukloni" style="flex:1;' + dugme + '">Ukloni</button></div>' +
       '<div id="prim-lista" style="overflow-y:auto;flex:1;min-height:120px"></div>' +
-      '<button type="button" id="prim-sifra" style="margin-top:8px;padding:12px;border-radius:10px;border:1px solid #476;background:transparent;color:inherit">🔑 Pošalji šifrom (više ljudi, važi 2 dana)</button>' +
-      '<button type="button" id="prim-x" style="margin-top:6px;padding:12px;border-radius:10px;border:0;background:transparent;color:inherit;opacity:.7">Odustani</button>';
+      '<button type="button" id="prim-salji" style="margin-top:8px;padding:12px;border-radius:10px;border:0;background:#2f7d4f;color:#fff;font-weight:700;min-height:46px"></button>' +
+      '<button type="button" id="prim-sifra" style="margin-top:6px;' + dugme + '">🔑 Pošalji šifrom (više ljudi, važi 2 dana)</button>' +
+      '<button type="button" id="prim-x" style="margin-top:4px;padding:10px;border:0;background:transparent;color:inherit;opacity:.7">Odustani</button>';
     bg.appendChild(box); document.body.appendChild(bg);
     const kraj = v => { bg.remove(); res(v); };
-    const crtaj = () => {
+    const vidljivi = () => {
       const q = box.querySelector('#prim-trazi').value.trim().toLowerCase();
-      const el = box.querySelector('#prim-lista');
-      const nadjeni = lista.map((k, idx) => ({ k, idx })).filter(({ k }) => !q || (k.ime + ' ' + (k.sumarija || '')).toLowerCase().includes(q));
-      el.innerHTML = nadjeni.length ? nadjeni.map(({ k, idx }) =>
-        '<button type="button" data-i="' + idx + '" style="display:block;width:100%;text-align:left;padding:12px;margin:2px 0;border-radius:10px;border:0;background:rgba(255,255,255,.06);color:inherit;min-height:44px">' +
-        _escHtml(k.ime) + (prikaziSumariju && k.sumarija ? ' <small style="opacity:.6">· ' + _escHtml(k.sumarija) + '</small>' : '') + '</button>').join('')
-        : '<div style="opacity:.6;padding:14px">Nema rezultata za „' + _escHtml(q) + '“</div>';
+      return lista.map((k, idx) => ({ k, idx })).filter(({ k }) => !q || (k.ime + ' ' + (k.sumarija || '')).toLowerCase().includes(q));
+    };
+    const crtaj = () => {
+      const nadjeni = vidljivi();
+      box.querySelector('#prim-lista').innerHTML = nadjeni.length ? nadjeni.map(({ k, idx }) => {
+        const on = izabrani.has(idx);
+        return '<button type="button" data-i="' + idx + '" aria-pressed="' + on + '" style="display:block;width:100%;text-align:left;padding:12px;margin:2px 0;border-radius:10px;border:0;background:' + (on ? 'rgba(47,125,79,.45)' : 'rgba(255,255,255,.06)') + ';color:inherit;min-height:44px">' +
+          (on ? '☑ ' : '☐ ') + _escHtml(k.ime) + (prikaziSumariju && k.sumarija ? ' <small style="opacity:.6">· ' + _escHtml(k.sumarija) + '</small>' : '') + '</button>';
+      }).join('') : '<div style="opacity:.6;padding:14px">Nema rezultata</div>';
+      const sl = box.querySelector('#prim-salji');
+      sl.textContent = izabrani.size ? '📤 Pošalji (' + izabrani.size + ')' : 'Izaberi korisnike';
+      sl.disabled = !izabrani.size; sl.style.opacity = izabrani.size ? '1' : '.5';
     };
     box.querySelector('#prim-trazi').addEventListener('input', crtaj);
-    box.querySelector('#prim-lista').addEventListener('click', e => { const b = e.target.closest('button[data-i]'); if (b) kraj(Number(b.dataset.i)); });
+    box.querySelector('#prim-sve').addEventListener('click', () => { vidljivi().forEach(({ idx }) => izabrani.add(idx)); crtaj(); });
+    box.querySelector('#prim-ukloni').addEventListener('click', () => { izabrani.clear(); crtaj(); });
+    box.querySelector('#prim-lista').addEventListener('click', e => {
+      const b = e.target.closest('button[data-i]'); if (!b) return;
+      const n = Number(b.dataset.i); izabrani.has(n) ? izabrani.delete(n) : izabrani.add(n); crtaj();
+    });
+    box.querySelector('#prim-salji').addEventListener('click', () => { if (izabrani.size) kraj([...izabrani].sort((a, b) => a - b)); });
     box.querySelector('#prim-sifra').addEventListener('click', () => kraj(lista.length));
     box.querySelector('#prim-x').addEventListener('click', () => kraj(null));
     bg.addEventListener('click', e => { if (e.target === bg) kraj(null); });

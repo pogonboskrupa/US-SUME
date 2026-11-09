@@ -10,6 +10,12 @@ assert(/isAdmin\(\)/.test(f)&&/_primaociSvi\(\)/.test(f)&&/_primaocBiraj\(/.test
 assert(/admin_get_all_users/.test(src.slice(src.indexOf('async function _primaociSvi'))));
 assert(/prim-trazi/.test(src)&&/prim-sifra/.test(src),'birač ima pretragu i šifru kao sekundarnu opciju');
 // Birač: filtriranje po imenu/šumariji ponovo mapira originalni indeks
-const m=src.match(/const nadjeni = lista\.map\(\(k, idx\) => \(\{ k, idx \}\)\)/);
+const m=src.match(/lista\.map\(\(k, idx\) => \(\{ k, idx \}\)\)/);
 assert(m,'indeks u listi ostaje originalni, ne pozicija u filtriranom prikazu');
 console.log('OK admin salje svima');
+// v3.7.4: višestruki izbor, "Odaberi sve" / "Ukloni", i akcija Pošalji u pregledniku oznaka
+assert(/prim-sve/.test(src)&&/prim-ukloni/.test(src)&&/prim-salji/.test(src));
+assert(/for \(const idx of izabrani\)/.test(src),'šalje svakom izabranom korisniku');
+const lib=fs.readFileSync(__dirname+'/../../static/js/map-library.js','utf8');
+assert(/actionName==='send'/.test(lib)&&/btn\('send'/.test(lib),'preglednik oznaka ima Pošalji');
+console.log('OK multi + preglednik');
