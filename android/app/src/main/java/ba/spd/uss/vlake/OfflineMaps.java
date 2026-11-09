@@ -40,11 +40,23 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
         synchronized byte[] tile(int z,int x,int y) {
             if(db==null)return null;
             int[] zs=fmt.equals("rmaps")&&offset!=0?new int[]{offset-z,z}:new int[]{z};
-            int[] ys=fmt.equals("mbtiles")?new int[]{(1<<z)-1-y,y}:new int[]{y};
+            boolean mb=fmt.equals("mbtiles");
+            int tms=(1<<z)-1-y;
+            // MBTiles: orijentacija se zaključa tek poslije 8+ pogodaka u jednom smjeru (i najviše osmine u drugom),
+            // pa promašaj košta jedan upit umjesto dva. Isto pravilo kao u JS radniku.
+            int[] ys=!mb?new int[]{y}:ori==1?new int[]{tms}:ori==2?new int[]{y}:new int[]{tms,y};
             for(int zv:zs)for(int ty:ys)try(Cursor c=db.rawQuery(query,new String[]{""+zv,""+x,""+ty})){
-                if(c.moveToFirst()&&!c.isNull(0))return c.getBlob(0);
+                if(c.moveToFirst()&&!c.isNull(0)){
+                    if(mb&&ys.length==2&&tms!=y)noteOri(ty==tms);
+                    return c.getBlob(0);
+                }
             }
             return null;
+        }
+        int ori=0,oriT=0,oriX=0;
+        void noteOri(boolean tmsHit){
+            if(tmsHit)oriT++;else oriX++;
+            if(oriT>=8&&oriX*8<=oriT)ori=1;else if(oriX>=8&&oriT*8<=oriX)ori=2;
         }
         synchronized byte[] read(long offset,int length) throws Exception {
             if(fd==null||offset<0||length<1||length>65536||offset>size)throw new java.io.IOException("Nevažeće čitanje karte");
