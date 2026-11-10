@@ -97,10 +97,13 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
     private JSONObject document(String id) throws Exception {String s=refs.getString(id,null);if(s==null)throw new java.io.IOException("Ponovo odaberi fajl karte");return new JSONObject(s);}
     private void progress(WebView view,long request,long bytes,long total){JSONObject p=new JSONObject();try{p.put("progress",bytes).put("total",total);}catch(Exception ignored){}reply(view,request,p);}
     private static long tune(SQLiteDatabase db){
-        long mm=-1;
-        try(Cursor c=db.rawQuery("PRAGMA mmap_size=268435456",null)){if(c.moveToFirst())mm=c.getLong(0);}catch(Exception ignored){}
+        // mmap (256 MB) je od v3.9.7 ISKLJUČEN: na Honor Magic 8 se aplikacija zamrzavala čim se učita
+        // MBTiles sa servera (SQLiteDB radi uredno). Preslikavanje velikog fajla u memoriju pod pritiskom
+        // memorije pretvara svako čitanje pločice u page fault koji može stati na disku; dobit na
+        // sporijem uređaju je bila mala (izmjereno ~25-40 % na jednom telefonu), cijena je zamrzavanje.
+        try(Cursor c=db.rawQuery("PRAGMA mmap_size=0",null)){c.moveToFirst();}catch(Exception ignored){}
         try(Cursor c=db.rawQuery("PRAGMA cache_size=-8192",null)){c.moveToFirst();}catch(Exception ignored){}
-        return mm;
+        return 0;
     }
     private Entry load(String id,WebView view,long request) throws Exception {
         final int openingGeneration;
