@@ -225,7 +225,7 @@ t('kad se slot oslobodi, prvo se čita pločica najbliža centru', async () => {
   const env = new Function('_sqlWCall', '_tileUzmiSljedeci',
     'let _wTileActive = 0; const _wTileStack = []; const _W_TILE_MAX_INFLIGHT = 1;' +
     'const _now = () => 0; const _tileProf = {qWaitN:0,qWaitSum:0,qWaitMax:0,reads:0,readSum:0,readMax:0};\n' +
-    extractFn('_wTileScheduleCall') + '\nreturn { _wTileScheduleCall, red: _wTileStack };')(
+    'const _sqlTileNeg = new Set(); const _SQL_TILE_NEG_MAX = 40000;\n' + extractFn('_sqlTileNegKljuc') + extractFn('_wTileScheduleCall') + '\nreturn { _wTileScheduleCall, red: _wTileStack };')(
     msg => { pozvani.push(msg.x); return new Promise(r => cekaju.push(r)); }, uzmi);
   const rez = [];
   const pr = { 0: 0, 5: 2.5, 6: 0.5, 7: 1.5, 8: null };
@@ -247,3 +247,24 @@ Promise.all(cekaj).then(() => {
   console.log(`\n${pass} prošlo, ${fail} palo`);
   process.exit(fail ? 1 : 0);
 });
+
+// Negativni keš: nepostojeća pločica se čita samo jednom
+(async () => {
+  let poziva = 0;
+  const mk = (odg) => new Function('_sqlWCall', '_tileUzmiSljedeci',
+    'let _wTileActive = 0; const _wTileStack = []; const _W_TILE_MAX_INFLIGHT = 4;' +
+    'const _now = () => 0; const _tileProf = {qWaitN:0,qWaitSum:0,qWaitMax:0,reads:0,readSum:0,readMax:0};\n' +
+    'const _sqlTileNeg = new Set(); const _SQL_TILE_NEG_MAX = 40000;\n' + extractFn('_sqlTileNegKljuc') + extractFn('_sqlTileNegOcisti') + extractFn('_wTileScheduleCall') +
+    '\nreturn { f: _wTileScheduleCall, ocisti: _sqlTileNegOcisti };')(m => { poziva++; return Promise.resolve(odg(m)); }, () => null);
+  const e = mk(m => (m.x === 1 ? { ok: true, data: new Uint8Array([1]) } : { ok: true, data: null }));
+  await e.f({ type: 'tile', name: 'K', z: 12, x: 5, y: 5 }); await e.f({ type: 'tile', name: 'K', z: 12, x: 5, y: 5 });
+  assert.strictEqual(poziva, 1, 'nepostojeća pločica se traži samo jednom');
+  await e.f({ type: 'tile', name: 'K', z: 12, x: 1, y: 5 }); await e.f({ type: 'tile', name: 'K', z: 12, x: 1, y: 5 });
+  assert.strictEqual(poziva, 3, 'postojeća pločica se ne pamti kao prazna');
+  e.ocisti('K'); await e.f({ type: 'tile', name: 'K', z: 12, x: 5, y: 5 });
+  assert.strictEqual(poziva, 4, 'poslije čišćenja (nova karta) ponovo čita');
+  const g = mk(() => ({ ok: false, error: 'timeout' })); poziva = 0;
+  await g.f({ type: 'tile', name: 'K', z: 12, x: 9, y: 9 }); await g.f({ type: 'tile', name: 'K', z: 12, x: 9, y: 9 });
+  assert.strictEqual(poziva, 2, 'greška/istek se ne pamti kao nepostojeća pločica');
+  console.log('  ✔ negativni keš pločica');
+})().catch(e => { console.error('  ✘ negativni keš', e.message); process.exit(1); });

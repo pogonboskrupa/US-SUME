@@ -30506,8 +30506,20 @@ const _tileProf = {
 };
 const _now = () => (typeof performance!=='undefined'?performance.now():Date.now());
 
+// Negativni keš: pločica za koju je potvrđeno da je NEMA u karti se ne traži ponovo. Na rijetko
+// pokrivenoj karti (izvještaj uređaja: 988 od 1860 čitanja prazno) isti nepostojeći roditelji
+// su se čitali iznova pri svakom pomicanju, a svako čitanje čeka u redu iza ostalih.
+const _sqlTileNeg = new Set();
+const _SQL_TILE_NEG_MAX = 40000;
+function _sqlTileNegKljuc(m) { return m.name + '/' + m.z + '/' + m.x + '/' + m.y; }
+function _sqlTileNegOcisti(name) {
+  const pre = name + '/';
+  for (const k of _sqlTileNeg) if (k.startsWith(pre)) _sqlTileNeg.delete(k);
+}
 function _wTileScheduleCall(msg, pri) {
   const enq = _now();
+  const negK = msg.type === 'tile' ? _sqlTileNegKljuc(msg) : null;
+  if (negK && _sqlTileNeg.has(negK)) return Promise.resolve({ ok: true, data: null });
   return new Promise(resolve => {
     const run = () => {
       if (msg.type === 'tile') { const qw = _now()-enq; _tileProf.qWaitN++; _tileProf.qWaitSum += qw; if (qw>_tileProf.qWaitMax) _tileProf.qWaitMax = qw; }
@@ -30515,6 +30527,10 @@ function _wTileScheduleCall(msg, pri) {
       const rt0 = _now();
       _sqlWCall(msg).then(r => {
         if (msg.type === 'tile') { const dt = _now()-rt0; _tileProf.reads++; _tileProf.readSum += dt; if (dt>_tileProf.readMax) _tileProf.readMax = dt; }
+        if (negK && r && !r.data && !r.error && r.ok !== false) {
+          if (_sqlTileNeg.size >= _SQL_TILE_NEG_MAX) _sqlTileNeg.clear();
+          _sqlTileNeg.add(negK);
+        }
         resolve(r);
       }, () => resolve(null)).finally(() => {
         _wTileActive--;
@@ -31234,6 +31250,7 @@ function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
 
 function _sqlmapCreateLayerW(name, fmt, meta) {
   const { minNative, maxNative } = _zoomBounds(meta);
+  _sqlTileNegOcisti(name);   // nova/zamijenjena karta pod istim imenom: stari "nema pločice" ne važi
   const WTileLayer = L.GridLayer.extend(Object.assign({}, _sqlGridObruc, {
     createTile(coords, done) {
       // D2-7: <img> pločice — browser ih kompozitira NATIVNO (kao Leaflet default/online
