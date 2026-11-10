@@ -11604,7 +11604,7 @@ function _aspColor(deg, mag) {
   const b = lerp(lo[1][2], hi[1][2], t);
   return [r, g, b, Math.min(210, Math.round(85 + mag * 30))];
 }
-async function _getTerrariumTile(z, x, y) {
+async function _getTerrariumTile(z, x, y, opts) {
   const url = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
   let cache=null,resp=null;
   try { if ('caches' in window) {cache=await caches.open(_TERR_CACHE);resp=await cache.match(url);} } catch(e) {}
@@ -11623,6 +11623,7 @@ async function _getTerrariumTile(z, x, y) {
   if(resp){try{const img=await decode(resp);if(img)return img;}catch(e){}
     try{await cache?.delete(url);}catch(e){}
   }
+  if(opts&&opts.samoKes)return null;   // samo sačuvane pločice (izvještaj odjela, prva faza)
   if(typeof _mrezaProbaj==='function'&&!_mrezaProbaj())return null;
   try{
     resp=await _fetchT(url,10000,{mode:'cors'});const saved=cache?resp.clone():null;
