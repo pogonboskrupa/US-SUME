@@ -217,9 +217,9 @@
   }
   function pendingGroups() {
     const uid=currentUid(),groups=new Map(),q=_OL.loadQueue().filter(o=>(!o._uid||o._uid===uid)&&!_SERVER_SAMO_LOKALNO.has(o.type));
-    const add=(op,text,nm)=>{const d=destination(op);if(!groups.has(d.key))groups.set(d.key,{...d,items:[]});groups.get(d.key).items.push({text,nm:nm||null});};
+    const add=(op,text,nm,uRedu)=>{const d=destination(op);if(!groups.has(d.key))groups.set(d.key,{...d,items:[],redN:0});const g=groups.get(d.key);g.items.push({text,nm:nm||null});if(uRedu)g.redN++;};
     const labels={upsert_vlaka:'Vlaka',delete_vlaka:'Brisanje vlake',insert_projekt:'Novi projekat',upsert_odjel:'Podaci odjela',insert_doz_project:'Novi odjel doznake',insert_doz_marking:'Nacrtana zona / oznaka doznake',delete_doz_marking:'Brisanje zone doznake',upsert_doz_status:'Status doznake',insert_pozari_arhiva:'Arhiva požara'};
-    for(const op of q){const r=op.payload||{};add(op,(labels[op.type]||op.type)+(r.nm?' · '+r.nm:'')+(op.type==='upsert_vlaka'?' · '+metres(length(r.pts)):'')+(op._blocked?' · odbijeno, ponovni pokušaj':''),op.type==='upsert_vlaka'&&length(r.pts)!=null?r.nm:null);}
+    for(const op of q){const r=op.payload||{};add(op,(labels[op.type]||op.type)+(r.nm?' · '+r.nm:'')+(op.type==='upsert_vlaka'?' · '+metres(length(r.pts)):'')+(op._blocked?' · odbijeno, ponovni pokušaj':''),op.type==='upsert_vlaka'&&length(r.pts)!=null?r.nm:null,true);}
     (vlake||[]).forEach((v,i)=>{if(v._deleted||!v.projektId||v.sbId&&!(typeof _vlakaSaveTimers!=='undefined'&&_vlakaSaveTimers[i]))return;
       if(!q.some(o=>o.type==='upsert_vlaka'&&o.payload?.nm===v.nm&&o.payload?.projekt_id===v.projektId))add({payload:{projekt_id:v.projektId,korisnik_id:uid}},'Vlaka · '+v.nm+' · '+metres(length(v.pts)),length(v.pts)!=null?v.nm:null);});
     let points=[];
@@ -234,7 +234,7 @@
     const loading=typeof FieldStore!=='undefined'&&!FieldStore.ready;
     const total=groups.reduce((n,g)=>n+g.items.length,0);
     const item=(g,s)=>s.nm&&g.key.startsWith('project:')?'<li><button type="button" class="sp-item-map" data-project="'+esc(g.key.slice(8))+'" data-nm="'+esc(s.nm)+'" onclick="_serverPendingMap(this.dataset.project,this.dataset.nm)">'+esc(s.text)+' ↗</button></li>':'<li>'+esc(s.text)+'</li>';
-    el.innerHTML='<h3 class="sp-section-heading">Šta će biti poslano'+(total?' <span class="sp-count">'+stavke(total)+'</span>':'')+'</h3>'+(loading?'<p class="sp-note">Učitavanje lokalnog GPS dnevnika…</p>':'')+(groups.length?groups.map(g=>'<details class="sp-send-group"'+(groups.length===1?' open':'')+'><summary><b>'+esc(g.label)+'</b> · '+stavke(g.items.length)+'</summary><span>Šalje: '+esc(name(g.uid))+'</span><ul>'+g.items.slice(0,40).map(s=>item(g,s)).join('')+'</ul>'+(g.items.length>40?'<span>Još '+stavke(g.items.length-40)+' — pregledaj Za slanje.</span>':'')+'</details>').join(''):loading?'':'<div class="sp-empty sp-all-sent"><i aria-hidden="true">✓</i><b>Sve je poslano</b><span>Na telefonu nema izmjena koje čekaju server.</span></div>')+'<p class="sp-note">Fotografije, obični tragovi, dnevnik i tekstualne oznake ostaju na telefonu.</p>';
+    el.innerHTML='<h3 class="sp-section-heading">Šta će biti poslano'+(total?' <span class="sp-count">'+stavke(total)+'</span>':'')+'</h3>'+(loading?'<p class="sp-note">Učitavanje lokalnog GPS dnevnika…</p>':'')+(groups.length?groups.map(g=>'<details class="sp-send-group"'+(groups.length===1?' open':'')+'><summary><b>'+esc(g.label)+'</b> · '+stavke(g.items.length)+'</summary><span>Šalje: '+esc(name(g.uid))+'</span><ul>'+g.items.slice(0,40).map(s=>item(g,s)).join('')+'</ul>'+(g.redN?'<button type="button" class="sp-odbaci" data-key="'+esc(g.key)+'" onclick="_serverOdbaci(this.dataset.key)">Odbaci ('+g.redN+')</button>':'')+(g.items.length>40?'<span>Još '+stavke(g.items.length-40)+' — pregledaj Za slanje.</span>':'')+'</details>').join(''):loading?'':'<div class="sp-empty sp-all-sent"><i aria-hidden="true">✓</i><b>Sve je poslano</b><span>Na telefonu nema izmjena koje čekaju server.</span></div>')+'<p class="sp-note">Fotografije, obični tragovi, dnevnik i tekstualne oznake ostaju na telefonu.</p>';
   }
   let exchange=null;
   function errorHint(error){
@@ -333,8 +333,20 @@
     const breakdown='<h2>Pregled po projektantima</h2>'+m.authors.map(a=>'<p><b>'+esc(a.ime)+'</b>: '+a.count+' vlaka · '+metres(a.total)+(a.incomplete?' · bez potpune dužine: '+a.incomplete:'')+'</p>').join('');
     _openOrDownloadReport(html.replace('</html>',breakdown+'</html>'),'Vlake_'+m.project.odjel);
   }
+  // Odbaci: izbacuje iz REDA stavke jedne grupe (npr. projekat tuđeg naloga koji server trajno odbija).
+  // Lokalni podaci (vlake, tragovi, GPS pojas) se NE brišu; samo se odustaje od slanja ove grupe.
+  async function odbaci(key){
+    const uid=currentUid();if(!uid)return;
+    const mojaGrupa=op=>(!op._uid||op._uid===uid)&&!_SERVER_SAMO_LOKALNO.has(op.type)&&destination(op).key===key;
+    const n=_OL.loadQueue().filter(mojaGrupa).length;if(!n)return;
+    if(!await _dlgConfirm('Odbaciti '+n+' stavki iz reda za slanje? Podaci ostaju na telefonu, samo se više neće slati na server.',{title:'Odbaci',okLabel:'Odbaci',danger:true}))return;
+    _redUkloni(mojaGrupa);
+    try{_updSyncBadge();}catch(e){}
+    renderPending();try{if(typeof _serverSazetakRender==='function')_serverSazetakRender();}catch(e){}
+    showToast('Odbačeno: '+n+' stavki');
+  }
   Object.assign(window,{
-    _serverRazmjena:exchangeData,_serverRazmjenaStatus:renderExchange,
+    _serverOdbaci:odbaci,_serverRazmjena:exchangeData,_serverRazmjenaStatus:renderExchange,
     _serverPanelSazetak(n,st){renderPending();renderExchange();return '<div class="sp-transfer"><span><b>'+n.stavki+'</b> za slanje'+(n.blok?' · '+n.blok+' odbijeno':'')+(_serverSaljem?' · Šaljem…':serverPosalji._priprema?' · Pripremam…':'')+'</span><span>'+esc(st==='nema'?'Bez veze':st==='slaba'?'Slab signal':'Veza: '+(st==='dobra'?'u redu':'nije izmjerena'))+'</span></div>';},
     _serverTransferConfirmed:confirmed,_serverPendingGroups:pendingGroups,_serverTransfers:transfers,_serverDozReceived:dozReceived,
     _serverTransferGroups:grouped,_serverTransferCount:direction=>grouped(direction).reduce((n,g)=>n+g.rows.length,0),_serverTransferMap:transferMap,_serverPendingMap:pendingMap,

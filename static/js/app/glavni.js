@@ -37431,6 +37431,7 @@ async function podaciPosalji(vrsta, naziv, kml) {
     try {
       const r = await _withTimeout(sb.rpc('posalji_podatke_sifrom', { p_vrsta: vrsta, p_naziv: String(naziv).slice(0, 120), p_sadrzaj: kml }), 25000);
       if (r.error) throw r.error;
+      try { _poslaniDodaj(vrsta, naziv, '🔑 šifra ' + String(r.data)); } catch (e) {}
       _sifraPrikazi(String(r.data), naziv);
     } catch (e) { showToast(poruka(e)); }
     return;
@@ -37444,6 +37445,7 @@ async function podaciPosalji(vrsta, naziv, kml) {
       ok.push(kolege[idx].ime);
     } catch (e) { neuspjeli.push(kolege[idx].ime); zadnjaGreska = e; }
   }
+  if (ok.length) { try { _poslaniDodaj(vrsta, naziv, ok.join(', ')); } catch (e) {} }
   if (!neuspjeli.length) showToast(ok.length === 1
     ? '✓ Poslano: ' + ok[0] + ' će ga dobiti čim bude online. Na serveru ne ostaje.'
     : '✓ Poslano za ' + ok.length + ' korisnika. Na serveru ne ostaje.');
@@ -37592,6 +37594,29 @@ function primljeniOtvori() {
   _primljeniSync(true);
 }
 function _primljeniZatvori() { const el = document.getElementById('primljeni-panel'); if (el) el.remove(); }
+// Spisak POSLANIH fajlova (samo evidencija na ovom telefonu: šta, kome, kad). Brisanje spiska ne dira ništa drugo.
+function _poslaniKljuc() { return 'tvlake_poslani_v1:' + (sbUser?.id || ''); }
+function _poslaniUcitaj() { try { const a = JSON.parse(localStorage.getItem(_poslaniKljuc()) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+function _poslaniDodaj(vrsta, naziv, kome) {
+  const a = _poslaniUcitaj();
+  a.unshift({ t: Date.now(), vrsta, naziv: String(naziv).slice(0, 120), kome: String(kome).slice(0, 200) });
+  try { localStorage.setItem(_poslaniKljuc(), JSON.stringify(a.slice(0, 100))); } catch (e) {}
+}
+async function _poslaniObrisiSpisak() {
+  if (!_poslaniUcitaj().length) return;
+  if (!await _dlgConfirm('Obrisati spisak poslanih fajlova? Briše se samo spisak, ne i fajlovi.', { title: 'Obriši spisak', okLabel: 'Obriši spisak', danger: true })) return;
+  try { localStorage.removeItem(_poslaniKljuc()); } catch (e) {}
+  _primljeniRender();
+}
+// Spisak primljenog: uklanja stavke iz spiska i sačuvane kopije sadržaja; slojevi koje si već stavio na kartu ostaju.
+async function _primljeniObrisiSpisak() {
+  const lista = _primljeniUcitaj();
+  if (!lista.length) return;
+  if (!await _dlgConfirm('Obrisati spisak primljenih fajlova (' + lista.length + ')? Slojevi koje si već stavio na kartu ostaju.', { title: 'Obriši spisak', okLabel: 'Obriši spisak', danger: true })) return;
+  for (const x of lista) { try { await _kmlcDelete('primljeno:' + x.id); } catch (e) {} }
+  _primljeniSpremi([]);
+  _primljeniBadge(); _primljeniRender();
+}
 function _primljeniRender(oznaciVidjeno) {
   const el = document.getElementById('primljeni-panel');
   if (!el) return;
@@ -37606,6 +37631,14 @@ function _primljeniRender(oznaciVidjeno) {
       '<button type="button" onclick="_primljeniDalje(\'' + _jsAttr(x.id) + '\')">Pošalji dalje</button>' +
       '<button type="button" class="opa" onclick="_primljeniObrisi(\'' + _jsAttr(x.id) + '\')">Obriši</button></div></div>';
   });
+  if (lista.length) h += '<button type="button" class="prm-spisak" onclick="_primljeniObrisiSpisak()">Obriši spisak primljenih</button>';
+  const poslani = _poslaniUcitaj();
+  h += '<div class="prm-naslov">📤 Poslani fajlovi' + (poslani.length ? ' (' + poslani.length + ')' : '') + '</div>';
+  if (!poslani.length) h += '<p class="prm-prazno">Još ništa nije poslano sa ovog telefona.</p>';
+  poslani.slice(0, 50).forEach(x => {
+    h += '<div class="prm-red"><div class="prm-info"><b>' + (_PRIM_IKONA[x.vrsta] || '🗺') + ' ' + _escHtml(x.naziv) + '</b><small>za ' + _escHtml(x.kome) + ' · ' + _dozStarost(sad - x.t) + '</small></div></div>';
+  });
+  if (poslani.length) h += '<button type="button" class="prm-spisak" onclick="_poslaniObrisiSpisak()">Obriši spisak poslanih</button>';
   h += '</div>';
   el.innerHTML = h;
   if (oznaciVidjeno && lista.some(x => !x.vidjeno)) { lista.forEach(x => { x.vidjeno = true; }); _primljeniSpremi(lista); _primljeniBadge(); }

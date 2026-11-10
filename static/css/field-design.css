@@ -1406,3 +1406,8 @@ body.ima-azuriranje #menu-btn{position:relative}
 body.ima-azuriranje #menu-btn::after{content:"";position:absolute;top:5px;right:calc(50% - 16px);width:9px;height:9px;border-radius:50%;background:#fbbf24;box-shadow:0 0 0 2px #0f172a}
 html[data-field-theme=day] body.ima-azuriranje #menu-btn::after{background:#d97706;box-shadow:0 0 0 2px #fff}
 @media (prefers-reduced-motion:reduce){.mdrop-azur-nova{animation:none}}
+#primljeni-panel .prm-naslov{margin:18px 0 8px;font:700 13px system-ui;color:var(--field-ink,#e2e8f0)}
+#primljeni-panel .prm-spisak{display:block;width:100%;min-height:44px;margin:10px 0;border-radius:10px;border:1px solid #7f1d1d;background:transparent;color:#fca5a5;font:700 12px system-ui}
+html[data-field-theme=day] #primljeni-panel .prm-spisak{color:#991b1b;border-color:#b91c1c}
+.sp-send-group .sp-odbaci{display:inline-block;min-height:40px;margin:8px 0 2px;padding:0 14px;border-radius:9px;border:1px solid #7f1d1d;background:transparent;color:#fca5a5;font:700 12px system-ui}
+html[data-field-theme=day] .sp-send-group .sp-odbaci{color:#991b1b;border-color:#b91c1c}
