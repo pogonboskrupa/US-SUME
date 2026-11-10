@@ -17,4 +17,10 @@ assert(/_poslaniDodaj\(vrsta, naziv, ok\.join/.test(pp)&&/_poslaniDodaj\(vrsta, 
 const ob=src.slice(src.indexOf('async function _poslaniObrisiSpisak'),src.indexOf('async function _primljeniObrisiSpisak'));
 assert(!/_kmlcDelete|kmlLs/.test(ob),'brisanje spiska poslanog ne dira fajlove');
 assert(/Obriši spisak primljenih/.test(src)&&/Obriši spisak poslanih/.test(src));
+// podtab: poslano je zaseban prikaz, a otvaranje panela uvijek počinje na primljenom
+const r=src.slice(src.indexOf("var _primTab"),src.indexOf('async function _primljeniNaKarti')>0?src.indexOf("function _primljeniRender")+3000:undefined);
+assert(/_primTabPostavi/.test(src)&&/prm-tabovi/.test(src)&&/Poslano \(/.test(src));
+assert(/if \(!poslano\) \{[\s\S]*?Preuzmi šifrom[\s\S]*?\} else \{[\s\S]*?_poslaniObrisiSpisak/.test(r),'sadržaj je razdvojen po podtabu');
+assert(/oznaciVidjeno && !poslano/.test(r),'novo se ne označava viđenim dok je otvoreno Poslano');
+assert(/_primTab = 'p';\s*_primljeniRender\(true\)/.test(src),'otvaranje panela počinje na Primljeno');
 console.log('OK odbaci + poslani spisak');

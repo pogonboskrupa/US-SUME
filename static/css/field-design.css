@@ -1411,3 +1411,7 @@ html[data-field-theme=day] body.ima-azuriranje #menu-btn::after{background:#d977
 html[data-field-theme=day] #primljeni-panel .prm-spisak{color:#991b1b;border-color:#b91c1c}
 .sp-send-group .sp-odbaci{display:inline-block;min-height:40px;margin:8px 0 2px;padding:0 14px;border-radius:9px;border:1px solid #7f1d1d;background:transparent;color:#fca5a5;font:700 12px system-ui}
 html[data-field-theme=day] .sp-send-group .sp-odbaci{color:#991b1b;border-color:#b91c1c}
+#primljeni-panel .prm-tabovi{display:flex;gap:8px;padding:8px 14px 0}
+#primljeni-panel .prm-tabovi button{flex:1;min-height:44px;border-radius:10px;border:1px solid var(--field-border,#334155);background:transparent;color:var(--field-ink,#e2e8f0);font:700 13px system-ui}
+#primljeni-panel .prm-tabovi button[aria-selected=true]{background:#1d4ed8;border-color:#60a5fa;color:#fff}
+html[data-field-theme=day] #primljeni-panel .prm-tabovi button[aria-selected=true]{background:#1e40af;color:#fff}

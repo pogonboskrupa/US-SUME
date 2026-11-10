@@ -37590,6 +37590,7 @@ function primljeniOtvori() {
   try { if (typeof closeOznakePanel === 'function' && document.getElementById('oznake-panel')) closeOznakePanel(); } catch (e) {}
   let el = document.getElementById('primljeni-panel');
   if (!el) { el = document.createElement('div'); el.id = 'primljeni-panel'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); document.body.appendChild(el); }
+  _primTab = 'p';
   _primljeniRender(true);
   _primljeniSync(true);
 }
@@ -37617,31 +37618,38 @@ async function _primljeniObrisiSpisak() {
   _primljeniSpremi([]);
   _primljeniBadge(); _primljeniRender();
 }
+var _primTab = 'p';   // 'p' = primljeno, 's' = poslano
+function _primTabPostavi(t) { _primTab = t === 's' ? 's' : 'p'; _primljeniRender(_primTab === 'p'); }
 function _primljeniRender(oznaciVidjeno) {
   const el = document.getElementById('primljeni-panel');
   if (!el) return;
-  const lista = _primljeniUcitaj(), sad = Date.now();
-  let h = '<div class="prm-head"><button type="button" class="prm-x" onclick="_primljeniZatvori()" aria-label="Zatvori">‹</button><div><b>📥 Primljeni podaci</b><small>Čuvaju se samo na ovom telefonu</small></div></div><div class="prm-body"><button type="button" class="prm-sifra" onclick="primljeniPreuzmiSifrom()">🔑 Preuzmi šifrom</button>';
-  if (!lista.length) h += '<p class="prm-prazno">Još ništa nije primljeno. Kad ti kolega pošalje trag, poligon ili KML, stiže ovdje i dobiješ obavijest. Kolegama šalješ iz kartice traga, mjerenja ili Dodaj fajl na kartu → Pošalji.</p>';
-  lista.forEach(x => {
-    h += '<div class="prm-red' + (!x.vidjeno ? ' novo' : '') + '"><div class="prm-info"><b>' + (_PRIM_IKONA[x.vrsta] || '🗺') + ' ' + _escHtml(x.naziv) + (!x.vidjeno ? ' <i>NOVO</i>' : '') + '</b>' +
-      '<small>od ' + _escHtml(x.odIme) + ' · ' + _dozStarost(sad - x.t) + ' · ' + x.kb + ' KB</small></div><div class="prm-akcije">' +
-      '<button type="button" class="pri" onclick="_primljeniNaKarti(\'' + _jsAttr(x.id) + '\')">Na karti</button>' +
-      '<button type="button" onclick="_primljeniPreimenuj(\'' + _jsAttr(x.id) + '\')">Preimenuj</button>' +
-      '<button type="button" onclick="_primljeniDalje(\'' + _jsAttr(x.id) + '\')">Pošalji dalje</button>' +
-      '<button type="button" class="opa" onclick="_primljeniObrisi(\'' + _jsAttr(x.id) + '\')">Obriši</button></div></div>';
-  });
-  if (lista.length) h += '<button type="button" class="prm-spisak" onclick="_primljeniObrisiSpisak()">Obriši spisak primljenih</button>';
-  const poslani = _poslaniUcitaj();
-  h += '<div class="prm-naslov">📤 Poslani fajlovi' + (poslani.length ? ' (' + poslani.length + ')' : '') + '</div>';
-  if (!poslani.length) h += '<p class="prm-prazno">Još ništa nije poslano sa ovog telefona.</p>';
-  poslani.slice(0, 50).forEach(x => {
-    h += '<div class="prm-red"><div class="prm-info"><b>' + (_PRIM_IKONA[x.vrsta] || '🗺') + ' ' + _escHtml(x.naziv) + '</b><small>za ' + _escHtml(x.kome) + ' · ' + _dozStarost(sad - x.t) + '</small></div></div>';
-  });
-  if (poslani.length) h += '<button type="button" class="prm-spisak" onclick="_poslaniObrisiSpisak()">Obriši spisak poslanih</button>';
+  const lista = _primljeniUcitaj(), poslani = _poslaniUcitaj(), sad = Date.now(), poslano = _primTab === 's';
+  let h = '<div class="prm-head"><button type="button" class="prm-x" onclick="_primljeniZatvori()" aria-label="Zatvori">‹</button><div><b>' + (poslano ? '📤 Poslani fajlovi' : '📥 Primljeni podaci') + '</b><small>Čuvaju se samo na ovom telefonu</small></div></div>' +
+    '<div class="prm-tabovi" role="tablist">' +
+    '<button type="button" role="tab" aria-selected="' + !poslano + '" onclick="_primTabPostavi(\'p\')">📥 Primljeno (' + lista.length + ')</button>' +
+    '<button type="button" role="tab" aria-selected="' + poslano + '" onclick="_primTabPostavi(\'s\')">📤 Poslano (' + poslani.length + ')</button></div><div class="prm-body">';
+  if (!poslano) {
+    h += '<button type="button" class="prm-sifra" onclick="primljeniPreuzmiSifrom()">🔑 Preuzmi šifrom</button>';
+    if (!lista.length) h += '<p class="prm-prazno">Još ništa nije primljeno. Kad ti kolega pošalje trag, poligon ili KML, stiže ovdje i dobiješ obavijest. Kolegama šalješ iz kartice traga, mjerenja ili Dodaj fajl na kartu → Pošalji.</p>';
+    lista.forEach(x => {
+      h += '<div class="prm-red' + (!x.vidjeno ? ' novo' : '') + '"><div class="prm-info"><b>' + (_PRIM_IKONA[x.vrsta] || '🗺') + ' ' + _escHtml(x.naziv) + (!x.vidjeno ? ' <i>NOVO</i>' : '') + '</b>' +
+        '<small>od ' + _escHtml(x.odIme) + ' · ' + _dozStarost(sad - x.t) + ' · ' + x.kb + ' KB</small></div><div class="prm-akcije">' +
+        '<button type="button" class="pri" onclick="_primljeniNaKarti(\'' + _jsAttr(x.id) + '\')">Na karti</button>' +
+        '<button type="button" onclick="_primljeniPreimenuj(\'' + _jsAttr(x.id) + '\')">Preimenuj</button>' +
+        '<button type="button" onclick="_primljeniDalje(\'' + _jsAttr(x.id) + '\')">Pošalji dalje</button>' +
+        '<button type="button" class="opa" onclick="_primljeniObrisi(\'' + _jsAttr(x.id) + '\')">Obriši</button></div></div>';
+    });
+    if (lista.length) h += '<button type="button" class="prm-spisak" onclick="_primljeniObrisiSpisak()">Obriši spisak primljenih</button>';
+  } else {
+    if (!poslani.length) h += '<p class="prm-prazno">Još ništa nije poslano sa ovog telefona. Šalješ iz kartice traga, mjerenja, Preglednika KML oznaka ili Dodaj fajl na kartu → Pošalji.</p>';
+    poslani.slice(0, 100).forEach(x => {
+      h += '<div class="prm-red"><div class="prm-info"><b>' + (_PRIM_IKONA[x.vrsta] || '🗺') + ' ' + _escHtml(x.naziv) + '</b><small>za ' + _escHtml(x.kome) + ' · ' + _dozStarost(sad - x.t) + '</small></div></div>';
+    });
+    if (poslani.length) h += '<button type="button" class="prm-spisak" onclick="_poslaniObrisiSpisak()">Obriši spisak poslanih</button>';
+  }
   h += '</div>';
   el.innerHTML = h;
-  if (oznaciVidjeno && lista.some(x => !x.vidjeno)) { lista.forEach(x => { x.vidjeno = true; }); _primljeniSpremi(lista); _primljeniBadge(); }
+  if (oznaciVidjeno && !poslano && lista.some(x => !x.vidjeno)) { lista.forEach(x => { x.vidjeno = true; }); _primljeniSpremi(lista); _primljeniBadge(); }
 }
 async function _primljeniNaKarti(id) {
   const lista = _primljeniUcitaj(), x = lista.find(a => a.id === id);
