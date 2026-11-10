@@ -43,8 +43,8 @@
       const sl=local().find(sl=>sl.name===fav.sqliteId),saved=!!sl||deferred().some(row=>row.name===fav.sqliteId);
       return {active:!!sl?.visible&&map.hasLayer(sl.layer),available:saved,subtitle:'Lokalni fajl · '+(sl?'spremno bez interneta':saved?'sačuvana na telefonu':'fajl nije dostupan'),label:saved?'Offline karta':'Nedostaje fajl'};
     }
-    const available=!!TL[fav.tlKey]||['_granice','_nagib'].includes(fav.tlKey);
-    return {active:fav.tlKey===_activeLayerKey(),available,subtitle:['_granice','_nagib'].includes(fav.tlKey)?'Topo + '+(fav.tlKey==='_nagib'?'nagib terena':'granice odjela'):'Online podloga · offline samo sačuvani dijelovi',label:available?'Online / keš':'Sloj nedostupan'};
+    const available=!!TL[fav.tlKey]||['_granice','_nagib','_ekspo'].includes(fav.tlKey);
+    return {active:fav.tlKey===_activeLayerKey(),available,subtitle:['_granice','_nagib','_ekspo'].includes(fav.tlKey)?'Topo + '+(fav.tlKey==='_nagib'?'nagib terena':fav.tlKey==='_ekspo'?'ekspozicija':'granice odjela'):'Online podloga · offline samo sačuvani dijelovi',label:available?'Online / keš':'Sloj nedostupan'};
   }
   function renderFavorites(){
     const el=document.getElementById('mapfav-grid');if(!el)return;

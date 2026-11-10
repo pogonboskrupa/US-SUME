@@ -780,6 +780,12 @@ html.render-lite :is(.vrow,.treg-row,.doz-odjel-card,.tv-card) {
 html.render-lite * {-webkit-backdrop-filter:none!important;backdrop-filter:none!important;}
 html.render-lite .auth-bg-glow,html.render-lite .auth-logo-box::before {filter:none!important;animation:none!important;}
 html.render-lite .auth-bg-grid {animation:none!important;}
+/* Moja lokacija: pulsirajući prsten oko tačke dok je GPS uključen */
+.loc-puls{transform-box:fill-box;transform-origin:center;opacity:0;pointer-events:none;animation:locPuls 2s ease-out infinite;}
+.loc-puls2{animation-delay:1s;}
+@keyframes locPuls{0%{transform:scale(1);opacity:.55;}100%{transform:scale(3.4);opacity:0;}}
+@media (prefers-reduced-motion:reduce){.loc-puls{animation:none;}}
+html.render-lite .loc-puls2{display:none;}
 html.render-lite .leaflet-zoom-animated {will-change:auto;}
 /* Beskonačni ukrasni pulsevi indikatora snimanja/GPS-a rade satima tokom
    terenskog rada; box-shadow varijante (abPuls*, trnPuls) iscrtavaju na glavnoj
@@ -6012,7 +6018,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.9.1';
+const APP_VER = 'v3.9.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima

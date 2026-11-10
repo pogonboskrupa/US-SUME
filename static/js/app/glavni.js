@@ -12070,6 +12070,8 @@ function _activeLayerKey() {
   if (si >= 0) return '_sqlite_' + si;
   // Topo + Nagib
   if (map.hasLayer(TL['⛰ Topo']) && _OVL.slope && map.hasLayer(_OVL.slope)) return '_nagib';
+  // Topo + Ekspozicija
+  if (map.hasLayer(TL['⛰ Topo']) && _OVL.ekspo && map.hasLayer(_OVL.ekspo)) return '_ekspo';
   // Topo + Granice
   const gl = (typeof _geojsonLayer !== 'undefined') ? _geojsonLayer : null;
   if (map.hasLayer(TL['⛰ Topo']) && gl && map.hasLayer(gl)) return '_granice';
@@ -12360,6 +12362,7 @@ function setLayer(key) {
   if (key === '_nagib') {
     if(typeof ProjectTerrain!=='undefined')ProjectTerrain.toggle('slope',false);
     TL['⛰ Topo'].addTo(map);
+    if (_OVL.ekspo && map.hasLayer(_OVL.ekspo) && !_ovlState.ekspo) map.removeLayer(_OVL.ekspo);
     if (!map.hasLayer(_OVL.slope)) _OVL.slope.addTo(map);
     const btn = document.getElementById('layer-switch-btn');
     if (btn) btn.innerHTML = '<svg class="ic"><use href="#ic-uglomjer"/></svg>';
@@ -12368,6 +12371,20 @@ function setLayer(key) {
     _lsRenderSqlite();
     return;
   }
+  if (key === '_ekspo') {
+    TL['⛰ Topo'].addTo(map);
+    if (_OVL.slope && map.hasLayer(_OVL.slope) && !_ovlState.slope) map.removeLayer(_OVL.slope);
+    if (!map.hasLayer(_OVL.ekspo)) _OVL.ekspo.addTo(map);
+    const btn = document.getElementById('layer-switch-btn');
+    if (btn) btn.innerHTML = '<svg class="ic"><use href="#ic-uglomjer"/></svg>';
+    _saveLastMap('tl', '⛰ Topo');
+    try { _demLegendUpdate(); } catch (e) {}
+    closeLayerSheet();
+    _lsRenderSqlite();
+    return;
+  }
+  // Ekspozicija koja je došla preko omiljene (bez trajne oznake) odlazi sa promjenom podloge
+  if (_OVL.ekspo && map.hasLayer(_OVL.ekspo) && !_ovlState.ekspo) { map.removeLayer(_OVL.ekspo); try { _demLegendUpdate(); } catch (e) {} }
   // Remove slope overlay if switching away from _nagib
   if (_OVL.slope && map.hasLayer(_OVL.slope) && !_ovlState.slope) map.removeLayer(_OVL.slope);
 
@@ -12514,8 +12531,8 @@ async function mapFavAddCurrent() {
     const name = await _dlgPrompt('Naziv ove offline karte:', sqlActive.name, { title: 'Dodaj u omiljene' });
     if (!name) return;
     fav = { id: 'fav_'+Date.now(), name: name.trim(), type: 'sqlite', sqliteId: sqlActive.name };
-  } else if (['_granice','_nagib'].includes(activeKey)) {
-    const name = await _dlgPrompt('Naziv:', activeKey==='_nagib'?'Topo + Nagib terena':'Topo + Granice odjela', { title: 'Dodaj u omiljene' });
+  } else if (['_granice','_nagib','_ekspo'].includes(activeKey)) {
+    const name = await _dlgPrompt('Naziv:', activeKey==='_nagib'?'Topo + Nagib terena':activeKey==='_ekspo'?'Topo + Ekspozicija':'Topo + Granice odjela', { title: 'Dodaj u omiljene' });
     if (!name) return;
     fav = { id: 'fav_'+Date.now(), name: name.trim(), type: 'tl', tlKey: activeKey, tileUrl: '', arcgis: false };
   } else if (activeKey && TL[activeKey]) {
@@ -12539,7 +12556,7 @@ function mapFavSwitch(i) {
   const fav = _mapFavs[i];
   if (!fav) return;
   if (fav.type === 'tl') {
-    if (fav.tlKey === '_granice' || TL[fav.tlKey]) {
+    if (fav.tlKey === '_granice' || fav.tlKey === '_ekspo' || TL[fav.tlKey]) {
       setLayer(fav.tlKey);
     } else {
       showToast('Sloj nije dostupan: ' + fav.tlKey); return;
@@ -12570,7 +12587,25 @@ function mapFavDel(i) {
   _mapFavRender();
 }
 
+// Automatski omiljeni: Google satelit, nagib i ekspozicija (jednom; obrisani se ne vraćaju).
+function _mapFavDodajAuto(fav) {
+  const kljuc = f => f.type + '|' + (f.tlKey || f.sqliteId || '');
+  if (_mapFavs.some(f => kljuc(f) === kljuc(fav))) return false;
+  _mapFavs.push(Object.assign({ id: 'fav_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6) }, fav));
+  _mapFavSave();
+  return true;
+}
+function _mapFavPodrazumijevani() {
+  let done = null;
+  try { done = localStorage.getItem('tvlake_mapfav_auto_v1'); } catch (e) {}
+  if (done) return;
+  _mapFavDodajAuto({ name: 'Google satelit', type: 'tl', tlKey: '📡 Google', tileUrl: 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', arcgis: false });
+  _mapFavDodajAuto({ name: 'Topo + Nagib terena', type: 'tl', tlKey: '_nagib', tileUrl: '', arcgis: false });
+  _mapFavDodajAuto({ name: 'Topo + Ekspozicija', type: 'tl', tlKey: '_ekspo', tileUrl: '', arcgis: false });
+  try { localStorage.setItem('tvlake_mapfav_auto_v1', '1'); } catch (e) {}
+}
 _mapFavLoad();
+try { _mapFavPodrazumijevani(); } catch (e) {}
 _loadPutevi();
 
 // Prevent overlay and banner from passing events to Leaflet map
@@ -16085,6 +16120,8 @@ function onP(p) {
         </defs>
         <path id="loc-cone" d="M0,0 L-76,-90 A118,118 0 0,1 76,-90 Z" fill="url(#loc-cone-grad)" opacity="0" style="transition:opacity 0.3s;"/>
         <polygon id="loc-arrow" points="0,-18 -6,-6 6,-6" fill="#3b82f6" opacity="0" style="transition:opacity 0.3s;"/>
+        <circle class="loc-puls" cx="0" cy="0" r="9" fill="#3b82f6"/>
+        <circle class="loc-puls loc-puls2" cx="0" cy="0" r="9" fill="#3b82f6"/>
         <circle cx="0" cy="0" r="8" fill="#3b82f6" stroke="#fff" stroke-width="2.5" style="filter:drop-shadow(0 0 5px #3b82f6);"/>
         <circle cx="0" cy="0" r="3" fill="#fff"/>
       </svg>`});
