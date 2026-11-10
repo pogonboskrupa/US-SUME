@@ -6,7 +6,7 @@ spec=importlib.util.spec_from_file_location('shared',Path(__file__).with_name('s
 s=importlib.util.module_from_spec(spec);spec.loader.exec_module(s);b=s.b
 start=b.SOURCE.index('// Boje i stil prikaza po projektu')
 code=b.SOURCE[start:b.SOURCE.index('function buildC()',start)]
-code+='\n'.join(b.function(n) for n in ['_patchKolegaVlaka','togSnimVlaku','_openLayerSheet','closeLayerSheet','_lsTab','showHelp','closeHelp','helpTab','toggleHelpSec'])
+code+='\n'.join(b.function(n) for n in ['_patchKolegaVlaka','togSnimVlaku','_openLayerSheet','closeLayerSheet','_lsTab','_helpUloga','showHelp','closeHelp','helpTab','toggleHelpSec'])
 APP_VERSION=re.search(r"const APP_VER = 'v([^']+)'",b.SOURCE).group(1)
 code+="\nconst APP_VER='v"+APP_VERSION+"';"
 code+='''
@@ -61,7 +61,7 @@ async def main():
     await page.screenshot(path=str(b.OUT/f'project-colors-{theme}-{w}-{h}.png'))
     await page.locator('#fixture-project').evaluate('(e)=>e.scrollTop=e.scrollHeight')
     await page.screenshot(path=str(b.OUT/f'project-vlake-{theme}-{w}-{h}.png'))
-    await page.evaluate('showHelp()');await page.locator('#help-pane-gen .help-sec-hdr').first.click()
+    await page.evaluate('showHelp()');await page.locator('#help-pane-gen .help-sec-hdr:visible').first.click()
     await b.bounds(page,'#help-modal',w,h)
     await page.screenshot(path=str(b.OUT/f'help-{theme}-{w}-{h}.png'))
     if w==320:

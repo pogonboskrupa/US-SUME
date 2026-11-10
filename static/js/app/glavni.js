@@ -37238,16 +37238,31 @@ async function dozBackToList() {
 }
 
 // ─── HELP MODAL ───────────────────────────────────────────────────────────────
+// Uloga za upute: terenski | admin | vodeci | projektant
+function _helpUloga() {
+  try {
+    if (typeof isAdmin === 'function' && isAdmin()) return 'admin';
+    if (typeof isSpdField === 'function' && isSpdField()) return 'teren';
+    if (typeof isVodeci === 'function' && isVodeci()) return 'vodeci';
+  } catch (e) {}
+  return 'projektant';
+}
 function showHelp() {
   const v=document.getElementById('help-app-version');if(v)v.textContent='DENDRO MAP · '+APP_VER;
-  // Slanje fajlova: otvoren je dio za svoj profil, tuđi je sklonjen (terenski ≠ projektant).
-  const terenac = typeof isSpdField === 'function' && isSpdField();
-  document.querySelectorAll('#help-pane-fajlovi .help-sec[data-profil]').forEach(sec => {
-    const moj = sec.dataset.profil === (terenac ? 'teren' : 'proj');
-    sec.style.display = moj ? '' : 'none';
-    const h = sec.querySelector('.help-sec-hdr'), b = sec.querySelector('.help-sec-body');
-    if (moj && h && b && !b.classList.contains('open')) toggleHelpSec(h);
+  // Upute po ulozi: sve što nosi data-uloge i ne važi za tvoju ulogu je sklonjeno
+  // (terenski ne vidi Vlake/Doznaku/vodećeg projektanta, projektant ne vidi admin dio itd.).
+  const uloga = _helpUloga();
+  document.querySelectorAll('#help-modal [data-uloge]').forEach(el => {
+    el.hidden = !el.dataset.uloge.split(/\s+/).includes(uloga);
   });
+  // Dio za slanje fajlova koji se tiče tebe je otvoren
+  document.querySelectorAll('#help-pane-fajlovi .help-sec[data-uloge]').forEach(sec => {
+    const h = sec.querySelector('.help-sec-hdr'), b = sec.querySelector('.help-sec-body');
+    if (!sec.hidden && h && b && !b.classList.contains('open')) toggleHelpSec(h);
+  });
+  // Aktivan tab koji ti ne pripada (npr. Vlake za terenski profil) → Prvi koraci
+  const aktivan = document.querySelector('#help-tabs .help-tab.active');
+  if (aktivan && aktivan.hidden) { const prvi = document.querySelector('#help-tabs .help-tab:not([hidden])'); if (prvi) { const m = /helpTab\('(\w+)'/.exec(prvi.getAttribute('onclick')); if (m) helpTab(m[1], prvi); } }
   document.getElementById('help-modal').classList.add('open');
 }
 function closeHelp() {

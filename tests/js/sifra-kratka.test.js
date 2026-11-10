@@ -17,7 +17,7 @@ const u=src.slice(src.indexOf('async function primljeniPreuzmiSifrom'),src.index
 assert(/sifra\.length !== 5 && sifra\.length !== 8/.test(u)&&/5 cifara/.test(u));
 // Upute po profilima
 assert(/helpTab\('fajlovi'/.test(html)&&/id="help-pane-fajlovi"/.test(html));
-assert(/data-profil="teren"/.test(html)&&/data-profil="proj"/.test(html));
+assert(/data-uloge="teren"/.test(html)&&/data-uloge="projektant vodeci admin"/.test(html));
 assert(/'fajlovi'/.test(src.slice(src.indexOf('function helpTab'),src.indexOf('function helpTab')+500)),'helpTab zna novi pane');
-assert(/data-profil/.test(src.slice(src.indexOf('function showHelp'),src.indexOf('function closeHelp'))),'showHelp bira dio za profil');
+assert(/data-uloge/.test(src.slice(src.indexOf('function showHelp'),src.indexOf('function closeHelp'))),'showHelp bira dio za ulogu');
 console.log('OK sifra kratka + upute');

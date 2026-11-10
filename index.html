@@ -2423,6 +2423,7 @@ body.stampa-on { --vl-fs:13px; }
 #lbl-edit-bar { position:fixed; left:8px; right:8px; top:calc(env(safe-area-inset-top,0px) + 52px); z-index:3100; max-width:460px; margin:0 auto;
   background:rgba(15,23,42,0.96); color:#e2e8f0; border:1px solid #475569; border-radius:10px; padding:8px 10px; box-shadow:0 4px 16px rgba(0,0,0,0.5); font:13px/1.3 Arial,sans-serif; }
 #lbl-edit-bar[hidden] { display:none; }
+#help-modal [hidden] { display:none !important; }
 #lbl-edit-bar .lb-row { display:flex; align-items:center; gap:8px; }
 #lbl-edit-bar .lb-row + .lb-row { margin-top:6px; }
 #lbl-edit-bar .lb-ime { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fbbf24; font-weight:bold; }
@@ -6028,7 +6029,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.0.0';
+const APP_VER = 'v4.0.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6528,22 +6529,33 @@ function _loadLocalVlake() {
   </div>
   <div id="help-tabs">
     <button class="help-tab active" onclick="helpTab('gen',this)">Prvi koraci</button>
-    <button class="help-tab" onclick="helpTab('vlake',this)">Vlake</button>
-    <button class="help-tab" onclick="helpTab('doznaka',this)">Doznaka</button>
+    <button class="help-tab" data-uloge="projektant vodeci admin" onclick="helpTab('vlake',this)">Vlake</button>
+    <button class="help-tab" data-uloge="projektant vodeci" onclick="helpTab('doznaka',this)">Doznaka</button>
     <button class="help-tab" onclick="helpTab('fajlovi',this)">Slanje fajlova</button>
     <button class="help-tab" onclick="helpTab('simboli',this)">Simboli</button>
   </div>
   <div id="help-body">
 
     <div id="help-pane-gen">
-<section class="help-start"><span class="help-eyebrow">Kratke upute</span><h3>Pripremi se za teren</h3><p>Izaberi šta radiš: Vlake za trase privlačenja, Doznaka za rad po pojasevima.</p><ol class="help-steps">
+<section class="help-start" data-uloge="teren"><span class="help-eyebrow">Terenski profil</span><h3>Pripremi se za teren</h3><p>Ti radiš sa kartom, tragovima, tačkama i mjerenjima; sve radi bez interneta.</p><ol class="help-steps">
+<li data-n="1.">U <b>Meni → Učitaj kartu</b> otvori kartu za svoje područje i provjeri da je vidiš kad isključiš mrežu.</li>
+<li data-n="2.">Uključi lokaciju telefona, odobri GPS dozvole i pritisni <b>Lokacija</b> na karti. Dug dodir na <b>Centriraj</b> uključuje „Prati me“.</li>
+<li data-n="3.">Za snimanje kretanja otvori <b>Teren</b> ili pritisni <b>Snimi trag</b> u popupu Moja lokacija; <b>Pauza</b> i <b>Završi</b> su u traci snimanja.</li>
+<li data-n="4.">Tačke, mjerenja i fotografije se čuvaju na telefonu. Fajl, trag ili mjerenje drugome šalješ <b>šifrom od 5 cifara</b> (tab <b>Slanje fajlova</b>).</li>
+</ol></section>
+<section class="help-start" data-uloge="projektant vodeci admin"><span class="help-eyebrow">Kratke upute</span><h3>Pripremi se za teren</h3><p>Izaberi šta radiš: Vlake za trase privlačenja, Doznaka za rad po pojasevima.</p><ol class="help-steps">
 <li data-n="1.">Prijavi se. U <b>Projekat</b> odaberi aktivni projekat za vlake; za doznaku otvori odgovarajući odjel u tabu <b>Doznaka</b>.</li>
 <li data-n="2.">Dok imaš internet, otvori <b>Meni → Pošalji na server → Pošalji i primi</b> i preuzmi rad kolega.</li>
 <li data-n="3.">U <b>Meni → Učitaj kartu</b> otvori kartu za rad bez interneta. Provjeri vidiš li cijeli odjel kada isključiš mrežu.</li>
 <li data-n="4.">Uključi lokaciju telefona i odobri GPS dozvole. U <b>Meni → Učitaj kartu</b> otvori kartu koju ćeš koristiti na terenu.</li>
 <li data-n="5.">Otvori upute <b>Vlake</b> ili <b>Doznaka</b> iznad i prati korake za snimanje.</li>
 </ol></section>
-<section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Vodeći projektant</button><div class="help-sec-body"><div class="help-row"><div class="help-txt"><b>Radi kao ostali projektanti</b><span>U tabovima <b>Projekat, Vlake i Doznaka</b> radi svoje projekte i projekte u koje te kolega dodao. Možeš snimati i crtati te slati svoj rad kroz Server.</span></div></div><div class="help-row"><div class="help-txt"><b>Pregled cijele šumarije</b><span>U <b>Meni → Izvještaj šumarije</b> pregledaj projekte vlaka i doznake svih projektanata svoje šumarije. Dugme <b>Projektanti · sedmični i mjesečni učinak</b> otvara izvještaj rada. Pregled ne mijenja tvoj aktivni projekat i ne dodaje te u tuđe projekte.</span></div></div></div></section>
+<section class="help-sec" data-uloge="vodeci"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Vodeći projektant</button><div class="help-sec-body"><div class="help-row"><div class="help-txt"><b>Radi kao ostali projektanti</b><span>U tabovima <b>Projekat, Vlake i Doznaka</b> radi svoje projekte i projekte u koje te kolega dodao. Možeš snimati i crtati te slati svoj rad kroz Server.</span></div></div><div class="help-row"><div class="help-txt"><b>Pregled cijele šumarije</b><span>U <b>Meni → Izvještaj šumarije</b> pregledaj projekte vlaka i doznake svih projektanata svoje šumarije. Dugme <b>Projektanti · sedmični i mjesečni učinak</b> otvara izvještaj rada. Pregled ne mijenja tvoj aktivni projekat i ne dodaje te u tuđe projekte.</span></div></div></div></section>
+<section class="help-sec" data-uloge="admin"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Administrator: korisnici i nadzor</button><div class="help-sec-body">
+<div class="help-row"><div class="help-txt"><b>Korisnici</b><span>Tab <b>Korisnici</b>: odobri ili opozovi pristup, promijeni šumariju, postavi <b>vodećeg projektanta</b>, resetuj PIN. Registracije koje čekaju su na vrhu i brišu se same za 7 dana.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Slanje fajlova</b><span>Možeš poslati KML, trag ili mjerenje <b>bilo kojem korisniku</b> (pretraga + više primalaca) ili šifrom. Vidi tab <b>Slanje fajlova</b>.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Dijagnostika</b><span>Meni → Dijagnostika pokazuje brzinu aplikacije i GPS uživo; kopiraj izvještaj kad nešto ne radi kako treba.</span></div></div>
+</div></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Karta za rad bez interneta</button><div class="help-sec-body">
 <div class="help-row"><div class="help-txt"><b>Učitaj kartu</b><span>U Meniju izaberi lokalni fajl <b>.sqlitedb, .db, .mbtiles ili .gpkg</b>. U <b>Dostupnim kartama</b> pritisni <b>Skini kartu</b> uz željenu kartu iz kataloga. Aplikacija je preuzima i automatski dodaje među <b>Moje karte</b>, spremnu za rad bez interneta. Nakon otvaranja provjeri područje i približi kartu da vidiš detalje.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Zadrži originalni fajl</b><span>Android može čitati kartu direktno iz izabranog fajla. Nemoj ga brisati ili premještati dok ga koristiš u aplikaciji. Neki izvori traže kopiranje; tada prati prikazani napredak.</span></div></div>
@@ -6551,7 +6563,7 @@ function _loadLocalVlake() {
 <div class="help-row"><div class="help-txt"><b>Online podloga</b><span>Bez mreže mogu biti dostupni samo ranije sačuvani dijelovi. Za cijeli odjel unaprijed pripremi lokalnu kartu; teren za nagib i ekspoziciju preuzmi dok imaš vezu.</span></div></div>
 
 </div></section>
-<section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Projekat: odjel, vlake, boje i strelice</button><div class="help-sec-body">
+<section class="help-sec" data-uloge="projektant vodeci admin"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Projekat: odjel, vlake, boje i strelice</button><div class="help-sec-body">
 <div class="help-row"><div class="help-txt"><b>Provjeri aktivni projekat</b><span>Naziv GJ (gospodarske jedinice) i odjel trebaju odgovarati mjestu gdje radiš. Projekat vlaka i odjel u Doznaci imaju zasebne izbore.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Projekat koji je dodao kolega</b><span>Otvori projekat u tabu <b>Projekat</b> ili odjel u <b>Doznaci</b> i na dnu pritisni <b>Ukloni sa mog spiska</b>. Potreban je internet. Prvo završi snimanje i pošalji neposlane podatke. Uklanja se samo tvoje članstvo; vlake, pojasevi i podaci ostaju cijelom timu. Za povratak te vlasnik ponovo dodaje.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Vlake aktivnog projekta</b><span>Zajednički spisak prikazuje tvoje i kolegine vlake po broju, s dužinom i projektantom. Dodirni stavku za pregled na karti.</span></div></div>
@@ -6559,7 +6571,7 @@ function _loadLocalVlake() {
 <div class="help-row"><div class="help-txt"><b>Stil i boja vlaka</b><span>Otvori <b>Meni → Stil i boja vlaka</b>. Izaberi zajednički izgled za sve svoje projekte ili poseban odjel/projekat. Tu podesi boje glavne vlake i kraka, debljinu, crtice/tačke i obrub. Početni izgled je 2 px, crtice i obrub; strelice su 25 px s potezom 2 px. Veličinu simbola lagera i njegovog teksta podešavaj odvojeno. U sklopivom pregledu lagera izaberi <b>Pomjeri lager</b> i dodirni njegovo novo mjesto na karti. <b>Smjer izvlačenja DS</b> uređuje strelice na vlaci ili pored nje. Poseban projekat možeš vratiti na zajednički stil; postavke se pamte.</span></div></div>
 
 </div></section>
-<section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Pošalji svoj rad i primi rad kolega</button><div class="help-sec-body">
+<section class="help-sec" data-uloge="projektant vodeci admin"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Pošalji svoj rad i primi rad kolega</button><div class="help-sec-body">
 <ol class="help-steps">
 <li data-n="1.">Uključi internet i otvori <b>Meni → Pošalji na server</b>.</li>
 <li data-n="2.">U <b>Za slanje</b> provjeri projekte i stavke. Dugme šalje izmjene iz svih projekata na telefonu, ne samo aktivnog.</li>
@@ -6750,7 +6762,7 @@ function _loadLocalVlake() {
     <!-- ── SLANJE FAJLOVA (po profilima) ───────── -->
     <div id="help-pane-fajlovi" style="display:none;">
 <section class="help-start"><span class="help-eyebrow">Po profilima</span><h3>Slanje i primanje fajlova</h3><p>Vidi samo dio za svoj profil: <b>terenski</b> radnik šalje isključivo šifrom od 5 cifara, <b>projektant</b> šalje i izabranim kolegama.</p></section>
-<section class="help-sec" data-profil="teren"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Terenski profil — slanje i primanje fajlova</button><div class="help-sec-body">
+<section class="help-sec" data-uloge="teren"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Terenski profil — slanje i primanje fajlova</button><div class="help-sec-body">
 <div class="help-row"><div class="help-txt"><b>Šta se može slati</b><span>KML fajl, trag, izmjerena linija ili poligon. Otvori <b>Preglednik KML oznaka</b> (dugme 📁 na karti) i uz fajl pritisni <b>Pošalji</b>, ili u popupu fajla na karti pritisni <b>Pošalji</b>. Trag i mjerenje šalješ iz njihovog popupa/kartice.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Slanje: samo šifrom</b><span>Terenski profil ne vidi spisak drugih korisnika. Poslije <b>Pošalji</b> dobiješ <b>šifru od 5 cifara</b> (npr. 48213). Pritisni <b>Kopiraj šifru</b> ili <b>Podijeli porukom</b> (Viber, WhatsApp, SMS) i pošalji je kolegi — ili mu je samo reci.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Koliko šifra važi</b><span>Šifra važi <b>2 dana</b> i može je preuzeti <b>više ljudi</b> (cijela ekipa istom šifrom). Poslije isteka nestaje sa servera. Za slanje treba internet.</span></div></div>
@@ -6758,7 +6770,7 @@ function _loadLocalVlake() {
 <div class="help-row"><div class="help-txt"><b>Gdje je primljeno</b><span>U <b>Meni → Primljeni podaci</b>: tab <b>Primljeno</b> (ono što si preuzeo — dodirni za prikaz na karti) i tab <b>Poslano</b> (šta si i kome slao; uz šifru piše koju si dobio). <b>Obriši spisak</b> briše samo spisak, ne i same fajlove.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Pogrešna šifra</b><span>Previše pogrešnih pokušaja (10 u 10 minuta) privremeno blokira unos. Provjeri cifre i pokušaj za par minuta.</span></div></div>
 </div></section>
-<section class="help-sec" data-profil="proj"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Projektant / admin — slanje i primanje fajlova</button><div class="help-sec-body">
+<section class="help-sec" data-uloge="projektant vodeci admin"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Projektant / admin — slanje i primanje fajlova</button><div class="help-sec-body">
 <div class="help-row"><div class="help-txt"><b>Šta se može slati</b><span>KML fajl, trag, linija ili poligon — iz <b>Preglednika KML oznaka</b> (dugme <b>Pošalji</b> uz fajl), iz popupa fajla na karti ili iz kartice traga/mjerenja.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Slanje kolegi</b><span><b>Pošalji</b> otvara spisak kolega iz tvoje šumarije (admin vidi sve korisnike). Ukucaj ime u <b>Traži</b>, označi jednog ili više, ili pritisni <b>Odaberi sve</b> / <b>Ukloni</b>, pa <b>Pošalji</b>. Kolega ga dobije čim bude online; na serveru ne ostaje.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Slanje šifrom</b><span>Za terenski profil, drugu šumariju ili veliku ekipu izaberi <b>Pošalji šifrom</b>: dobiješ šifru od 5 cifara koja važi 2 dana i može je preuzeti više ljudi. Podijeli je porukom.</span></div></div>
