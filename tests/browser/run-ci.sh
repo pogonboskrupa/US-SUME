@@ -68,6 +68,12 @@ pokreni() { # $1 = test; izlaz u LOG, kod u .rc
   local ime; ime=$(basename "$1" .py)
   local t0=$SECONDS
   timeout 300s python "$1" >"$LOG/$ime.out" 2>&1; local rc=$?
+  # Chromium zna pasti pod opterećenjem runnera ("Target page, context or browser has been closed").
+  # To je greška okruženja, ne testa: ponovi JEDNOM, i to samo za taj potpis. Pad asercije se ne ponavlja.
+  if [ $rc -ne 0 ] && grep -q "Target page, context or browser has been closed" "$LOG/$ime.out"; then
+    echo "[ponovo] $1 — Chromium se srušio, pokušavam još jednom"
+    timeout 300s python "$1" >"$LOG/$ime.out" 2>&1; rc=$?
+  fi
   echo "$rc" >"$LOG/$ime.rc"
   echo "[$((SECONDS-t0))s] $( [ $rc -eq 0 ] && echo OK || echo "PAO($rc)") $1"
 }
