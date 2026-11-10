@@ -12587,22 +12587,47 @@ function mapFavDel(i) {
   _mapFavRender();
 }
 
-// Automatski omiljeni: Google satelit, nagib i ekspozicija (jednom; obrisani se ne vraćaju).
+// Automatski omiljeni. Redoslijed: karta sa servera (1.), Google satelit (2.), pa kombinacije
+// server karta + nagib / ekspozicija. Obrisani se ne vraćaju (zastavice po koraku).
+function _mapFavKljuc(f) { return f.type + '|' + (f.tlKey || f.sqliteId || '') + '|' + (f.ovl || ''); }
 function _mapFavDodajAuto(fav) {
-  const kljuc = f => f.type + '|' + (f.tlKey || f.sqliteId || '');
-  if (_mapFavs.some(f => kljuc(f) === kljuc(fav))) return false;
+  if (_mapFavs.some(f => _mapFavKljuc(f) === _mapFavKljuc(fav))) return false;
   _mapFavs.push(Object.assign({ id: 'fav_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6) }, fav));
-  _mapFavSave();
   return true;
+}
+// Stabilno uredi: server karta, Google satelit, ostalo (korisnikov redoslijed ostaje).
+function _mapFavUredi() {
+  const rang = f => (f.auto === 'srv' && !f.ovl) ? 0 : (f.type === 'tl' && f.tlKey === '📡 Google') ? 1 : 2;
+  const sa = _mapFavs.map((f, i) => ({ f, i, r: rang(f) }));
+  sa.sort((x, y) => x.r - y.r || x.i - y.i);
+  _mapFavs.splice(0, _mapFavs.length, ...sa.map(x => x.f));
+}
+function _mapFavServerKarta(ime) {
+  let nov = _mapFavDodajAuto({ name: ime, type: 'sqlite', sqliteId: ime, auto: 'srv' });
+  nov = _mapFavDodajAuto({ name: ime + ' + Nagib', type: 'sqlite', sqliteId: ime, ovl: 'slope', auto: 'srv' }) || nov;
+  nov = _mapFavDodajAuto({ name: ime + ' + Ekspozicija', type: 'sqlite', sqliteId: ime, ovl: 'ekspo', auto: 'srv' }) || nov;
+  _mapFavUredi(); _mapFavSave();
+  return nov;
+}
+// Privremeni DEM sloj uz offline kartu iz omiljenih (bez trajne oznake); ovl=null ga skida.
+function _mapFavPrimijeniOvl(ovl) {
+  ['slope', 'ekspo'].forEach(id => {
+    if (_OVL[id] && map.hasLayer(_OVL[id]) && !_ovlState[id] && id !== ovl) map.removeLayer(_OVL[id]);
+  });
+  if (ovl && _OVL[ovl] && !map.hasLayer(_OVL[ovl])) _OVL[ovl].addTo(map);
+  try { _demLegendUpdate(); } catch (e) {}
 }
 function _mapFavPodrazumijevani() {
   let done = null;
-  try { done = localStorage.getItem('tvlake_mapfav_auto_v1'); } catch (e) {}
+  try { done = localStorage.getItem('tvlake_mapfav_auto_v2'); } catch (e) {}
   if (done) return;
+  // v3.9.2 je dodala Topo + nagib/ekspozicija; zamjenjuju ih kombinacije sa server kartom.
+  const prije = _mapFavs.length;
+  _mapFavs = _mapFavs.filter(f => !(f.type === 'tl' && (f.tlKey === '_ekspo' || (f.tlKey === '_nagib' && f.name === 'Topo + Nagib terena'))));
   _mapFavDodajAuto({ name: 'Google satelit', type: 'tl', tlKey: '📡 Google', tileUrl: 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', arcgis: false });
-  _mapFavDodajAuto({ name: 'Topo + Nagib terena', type: 'tl', tlKey: '_nagib', tileUrl: '', arcgis: false });
-  _mapFavDodajAuto({ name: 'Topo + Ekspozicija', type: 'tl', tlKey: '_ekspo', tileUrl: '', arcgis: false });
-  try { localStorage.setItem('tvlake_mapfav_auto_v1', '1'); } catch (e) {}
+  _mapFavUredi();
+  _mapFavSave();
+  try { localStorage.setItem('tvlake_mapfav_auto_v2', '1'); } catch (e) {}
 }
 _mapFavLoad();
 try { _mapFavPodrazumijevani(); } catch (e) {}

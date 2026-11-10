@@ -121,7 +121,7 @@
         const r=await request({type:'installed',sourceId:s.id,nativeId:status.file.nativeId});if(!r.ok)throw Error(r.error);
         // Karta skinuta sa servera ide automatski u Omiljene.
         try{const l2=await _sqlWCall({type:'list'}),row=(l2.rows||[]).find(m=>m.meta?._nativeId===status.file.nativeId);
-          if(row&&typeof _mapFavDodajAuto==='function'&&_mapFavDodajAuto({name:row.name,type:'sqlite',sqliteId:row.name})&&typeof _mapFavRender==='function')_mapFavRender();}catch(e){}
+          if(row&&typeof _mapFavServerKarta==='function'&&_mapFavServerKarta(row.name)&&typeof _mapFavRender==='function')_mapFavRender();}catch(e){}
         return r;
       }catch(e){return {state:'failed',error:'Karta nije dodana: '+e.message};}
     });
