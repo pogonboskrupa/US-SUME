@@ -37198,7 +37198,7 @@ function _perfSnimak() {
   try { const m = navigator.userAgent.match(/\(([^)]*)\)/); o.uredjaj = m ? m[1].replace(/; wv/, '') : '?'; o.ekran = screen.width + 'x' + screen.height + '@' + (window.devicePixelRatio || 1); } catch (e) {}
   // Offline karte: format i ukupno čitanje pločica (ms po pločici) - za poređenje MBTiles / SQLiteDB na istom uređaju.
   try {
-    o.karte = (typeof _sqlLayers !== 'undefined' ? _sqlLayers : []).map(l => ({ ime: String(l.name).slice(0, 40), format: l.fmt, pristup: l.meta && l.meta._nativeMode || (l.opfs ? 'opfs' : 'radnik'), vidljiva: !!l.visible, zum: l.meta ? (l.meta.minzoom + '-' + l.meta.maxzoom) : '?' }));
+    o.karte = (typeof _sqlLayers !== 'undefined' ? _sqlLayers : []).map(l => ({ ime: String(l.name).slice(0, 40), format: l.fmt, pristup: l.meta && l.meta._nativeMode || (l.opfs ? 'opfs' : 'radnik'), mmapMB: l.meta && l.meta._nativeMmapMB, vidljiva: !!l.visible, zum: l.meta ? (l.meta.minzoom + '-' + l.meta.maxzoom) : '?' }));
     const tp = typeof _tileProf !== 'undefined' ? _tileProf : null;
     if (tp && tp.reads) o.karteCitanje = { citanja: tp.reads, prosjekMs: Math.round(tp.readSum / tp.reads * 10) / 10, maxMs: Math.round(tp.readMax), cekanjeProsjekMs: tp.qWaitN ? Math.round(tp.qWaitSum / tp.qWaitN * 10) / 10 : 0, prazne: tp.nullData, isteklo: tp.timeout, greske: tp.err };
   } catch (e) {}

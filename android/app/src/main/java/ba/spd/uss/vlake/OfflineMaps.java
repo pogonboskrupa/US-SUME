@@ -96,6 +96,12 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
     private static Map<String,String> columns(SQLiteDatabase db,String table){Map<String,String> out=new HashMap<>();try(Cursor c=db.rawQuery("PRAGMA table_info("+quote(table)+")",null)){while(c.moveToNext())out.put(c.getString(1).toLowerCase(java.util.Locale.ROOT),c.getString(1));}return out;}
     private JSONObject document(String id) throws Exception {String s=refs.getString(id,null);if(s==null)throw new java.io.IOException("Ponovo odaberi fajl karte");return new JSONObject(s);}
     private void progress(WebView view,long request,long bytes,long total){JSONObject p=new JSONObject();try{p.put("progress",bytes).put("total",total);}catch(Exception ignored){}reply(view,request,p);}
+    private static long tune(SQLiteDatabase db){
+        long mm=-1;
+        try(Cursor c=db.rawQuery("PRAGMA mmap_size=268435456",null)){if(c.moveToFirst())mm=c.getLong(0);}catch(Exception ignored){}
+        try(Cursor c=db.rawQuery("PRAGMA cache_size=-8192",null)){c.moveToFirst();}catch(Exception ignored){}
+        return mm;
+    }
     private Entry load(String id,WebView view,long request) throws Exception {
         final int openingGeneration;
         synchronized(open){if(open.containsKey(id))return open.get(id);openingGeneration=generation;}
@@ -133,9 +139,12 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
                     entry.db=SQLiteDatabase.openDatabase(owned.getPath(),null,SQLiteDatabase.OPEN_READONLY|SQLiteDatabase.NO_LOCALIZED_COLLATORS);
                 }
             }
+            // Čitanje pločica je slučajan pristup velikom fajlu: mmap izbjegava poziv sistema po stranici (na nekim
+            // uređajima memorija aplikacije ide kroz FUSE i svaki pread je skup), a veći keš čuva susjedne stranice.
+            long mmap=entry.db!=null?tune(entry.db):-1;
             if(entry.pages){entry.fmt="native-pages";entry.meta=new JSONObject().put("_nativePages",true).put("_nativeSize",entry.size);}
             else inspect(entry);
-            entry.meta.put("_nativeId",id).put("_nativeCopy",owned.isFile()).put("_nativeMode",doc.optBoolean("download")?"preuzeta":entry.pages?"stranice":owned.isFile()?"kopija":"direktno");
+            entry.meta.put("_nativeId",id).put("_nativeCopy",owned.isFile()).put("_nativeMmapMB",mmap>0?mmap/1048576:0).put("_nativeMode",doc.optBoolean("download")?"preuzeta":entry.pages?"stranice":owned.isFile()?"kopija":"direktno");
             synchronized(open){if(generation!=openingGeneration)throw new java.io.IOException("Učitavanje je prekinuto");open.put(id,entry);}return entry;
         }catch(Exception e){entry.close();throw e;}
     }
