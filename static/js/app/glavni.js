@@ -29714,11 +29714,24 @@ const _MiniSqliteMain = (function() {
 })();
 
 // ── Worker management ─────────────────────────────────────────────────────────
+// Mikro-mjerenje pokretanja: sinhroni razmak između dvije tačke duži od 40 ms se bilježi sa nazivom,
+// pa izvještaj Dijagnostike kaže KOJI dio koraka je držao nit (ne samo ime koraka).
+var _perfMikroT = 0;
+function _perfTacka(naziv) {
+  try {
+    if (naziv == null) { _perfMikroT = 0; return; }   // reset (poslije asinhronog čekanja razmak ne znači ništa)
+    const t = performance.now();
+    if (_perfMikroT && t - _perfMikroT >= 40) (window._PERF_MIKRO = window._PERF_MIKRO || []).push({ do: naziv, ms: Math.round(t - _perfMikroT), at: Math.round(t) });
+    _perfMikroT = t;
+  } catch (e) {}
+}
 function _sqlWorkerEnsure() {
   if (_sqlW) return;
+  _perfTacka('prije radnika');
   const url = URL.createObjectURL(new Blob([_SQL_WORKER_SRC], {type:'application/javascript'}));
   _sqlW = new Worker(url);
   URL.revokeObjectURL(url);
+  _perfTacka('pravljenje radnika (Blob + Worker)');
   _sqlW.onmessage = ({data:d}) => {
     // Nezatražena poruka iz workera (nema id, pa nema ni callbacka): velika
     // OPFS karta je u pozadini dobila sync handle i od sad čita punom
@@ -30580,6 +30593,21 @@ function _sqlTileNegOcisti(name) {
   const pre = name + '/';
   for (const k of _sqlTileNeg) if (k.startsWith(pre)) _sqlTileNeg.delete(k);
 }
+// Slot u istom redu čitanja, ali bez poziva radniku: pozivalac sam učita pločicu (npr. <img src>)
+// i javi kraj. Vraća funkciju za oslobađanje slota, ili null kad je pločica u međuvremenu napuštena.
+function _wTileSlot(pri) {
+  const enq = _now();
+  return new Promise(resolve => {
+    const run = () => {
+      const qw = _now() - enq; _tileProf.qWaitN++; _tileProf.qWaitSum += qw; if (qw > _tileProf.qWaitMax) _tileProf.qWaitMax = qw;
+      _wTileActive++;
+      let pusteno = false;
+      resolve(() => { if (pusteno) return; pusteno = true; _wTileActive--; const next = _tileUzmiSljedeci(_wTileStack); if (next) next(); });
+    };
+    run._pri = pri; run._odustani = () => resolve(null);
+    if (_wTileActive < _W_TILE_MAX_INFLIGHT) run(); else _wTileStack.push(run);
+  });
+}
 function _wTileScheduleCall(msg, pri) {
   const enq = _now();
   const negK = msg.type === 'tile' ? _sqlTileNegKljuc(msg) : null;
@@ -30718,6 +30746,8 @@ async function sqlmapRestoreAll() {
   const _tBrk = [];
   let shownAny = false;
   _mapLoadDiagStep('sqlmapRestoreAll pokrenut', 'startup je ušao u restore funkciju');
+  const _pt = typeof _perfTacka === 'function' ? _perfTacka : () => {};
+  _pt(null); _pt('restore: ulaz');
   try {
   if (await _sqlCrashCheck()) { _mapLoadDiagStep('crash zaštita', 'automatsko učitavanje je preskočeno'); return; }
   _sqlRestoreFailed = [];
@@ -30766,9 +30796,12 @@ async function sqlmapRestoreAll() {
     }
   }
 
+  _pt('restore: do popisa karata');
   try {
     const _tListT0 = performance.now();
-    const r = await _sqlWCall({type:'list'}, [], 30000);
+    const _lp = _sqlWCall({type:'list'}, [], 30000);
+    _pt('restore: slanje popisa radniku'); _pt(null);
+    const r = await _lp;
     const _tListMs = Math.round(performance.now() - _tListT0);
     _tBrk.push('list ' + _tListMs + 'ms');
     _mapLoadDiagStep('IndexedDB popis', _tListMs + 'ms · ' + (r.ok ? ((r.rows?.length || 0) + ' karata') : ('NEUSPJEH: ' + (r.error || 'worker'))));
@@ -31354,6 +31387,28 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
           }).catch(() => _doneP());
         }).catch(() => { if (tries < 3) _tryRead(tries + 1); else { _tileProf.err++; _doneP(); } });
       };
+      // Native karta (Java čita fajl): pločica ide DIREKTNO u <img src> — bez fetch → arrayBuffer →
+      // Blob → objectURL na glavnoj niti (izvještaj uređaja: "Response.arrayBuffer.then 154 ms").
+      // Red i prioritet ostaju isti (_wTileSlot). Greška učitavanja (nema pločice / čitanje palo)
+      // ide starim putem, koji potvrdi "nema" (negativni keš) i nacrta uvećanog roditelja.
+      const nUrl = (window.NativeOfflineMaps && NativeOfflineMaps.tileUrl) ? NativeOfflineMaps.tileUrl(name) : null;
+      if (nUrl && !_sqlTileNeg.has(name + '/' + z + '/' + x + '/' + y)) {
+        _wTileSlot(_pri).then(pusti => {
+          if (!pusti) { _doneP(); return; }
+          const rt0 = _now();
+          let gotovo = false;
+          const kraj = () => { if (gotovo) return false; gotovo = true; clearTimeout(tm); pusti(); return true; };
+          const tm = setTimeout(() => { if (kraj()) { img.onload = img.onerror = null; img.removeAttribute('src'); _tileProf.timeout++; _doneP(); } }, 20000);
+          img.onload = () => {
+            if (!kraj()) return;
+            const dt = _now() - rt0; _tileProf.reads++; _tileProf.readSum += dt; if (dt > _tileProf.readMax) _tileProf.readMax = dt;
+            _doneP();
+          };
+          img.onerror = () => { if (!kraj()) return; img.onerror = null; img.removeAttribute('src'); _tryRead(0); };
+          img.src = nUrl + '/' + z + '/' + x + '/' + y;
+        });
+        return img;
+      }
       _tryRead(0);
       return img;
     }
@@ -37433,6 +37488,7 @@ function _perfSnimak() {
   o.idb = Object.entries(window._PERF_IDB || {}).map(([k, v]) => ({ vrsta: k, n: v.n, ms: v.ms, max: v.max, kbMax: v.kb })).sort((a, b) => b.ms - a.ms);
   o.greske = (window._PERF_GRESKE || []).slice(-10);
   o.loaf = _PERF.loaf.slice(0, 8);
+  if (window._PERF_MIKRO && window._PERF_MIKRO.length) o.mikro = window._PERF_MIKRO.slice(0, 12);
   o.koraci = (window._PERF_KORACI || []).filter(k => Math.max(k.sync, k.ukupno || 0) >= 20).sort((a, b) => Math.max(b.sync, b.ukupno || 0) - Math.max(a.sync, a.ukupno || 0)).slice(0, 8);
   o.najduzi = _PERF.lt.slice().sort((a, b) => b.ms - a.ms).slice(0, 8);
   try { const R = window.DendroRender; if (R && R.state) { o.nacin = R.state.lite ? 'lagani' : 'puni'; o.pomicanja = (R.state.hist || []).map(x => x.p50 + '/' + x.p95); } } catch (e) {}
