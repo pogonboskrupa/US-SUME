@@ -2430,8 +2430,8 @@ body.stampa-on #lbl-edit-bar { display:none !important; }
 #dem-legend {
   position:absolute; bottom:70px; left:8px; z-index:850;
   background:rgba(10,17,35,0.88); border:1px solid rgba(255,255,255,0.12);
-  border-radius:8px; padding:8px 10px; pointer-events:none;
-  backdrop-filter:blur(4px); min-width:110px;
+  border-radius:8px; padding:8px 10px; pointer-events:auto;
+  backdrop-filter:blur(4px); min-width:128px; max-height:calc(100% - 150px); overflow-y:auto;
   font-size:10px; color:#94a3b8;
 }
 #dem-legend .leg-title {
@@ -2439,6 +2439,13 @@ body.stampa-on #lbl-edit-bar { display:none !important; }
   text-transform:uppercase; color:#64748b; margin-bottom:5px;
 }
 #dem-legend .leg-sep { border-top:1px solid #1e293b; margin:7px 0 5px; }
+#dem-legend .leg-head { display:flex; align-items:center; gap:4px; margin-bottom:3px; }
+#dem-legend .leg-head .leg-title { flex:1; margin:0; }
+#dem-legend .leg-b { width:32px; height:32px; border:0; border-radius:8px; background:rgba(255,255,255,.08); color:#cbd5e1; font-size:14px; line-height:1; }
+#dem-legend label.leg-dir { display:flex; align-items:center; gap:6px; min-height:30px; color:#e2e8f0; }
+#dem-legend label.leg-dir input { width:18px; height:18px; margin:0; }
+#dem-legend .leg-sve { display:flex; gap:6px; margin-top:4px; }
+#dem-legend .leg-sve button { flex:1; min-height:30px; border:1px solid rgba(255,255,255,.18); border-radius:8px; background:transparent; color:#cbd5e1; font-size:11px; }
 /* ── Stabilizacija GPS signala prije snimanja ── */
 @keyframes gstabspin { to { transform: rotate(360deg); } }
 .gstab-m { display:flex; flex-direction:column; gap:2px; flex:1; background:#0b1220; border:1px solid #1e293b; border-radius:8px; padding:7px 4px; }
@@ -4826,7 +4833,6 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
 </script>
 
 <div id="wrapper" style="display:none;">
-  <div id="field-status" role="status" style="display:none;"></div>
 
   <div id="tab-bar">
     <button class="tab-btn" id="menu-btn" aria-expanded="false" aria-controls="menu-dropdown" ontouchstart="toggleMenuDropdown(event)" onclick="toggleMenuDropdown(event)"><svg class="tbi" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-menu"/></svg> Meni</button>
@@ -5335,38 +5341,17 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         </button>
         <div style="flex:1;">
           <div style="font-weight:700;color:#f87171;font-size:15px;">🛠 DEBUG</div>
-          <div style="font-size:11px;color:#64748b;margin-top:2px;">Aktivni tehnički problemi — samo administrator</div>
+          <div style="font-size:11px;color:#64748b;margin-top:2px;">Brzina aplikacije i GPS uživo — samo administrator</div>
         </div>
-        <button onclick="_adminDebugObrisiSve()" title="Obriši sve zapise"
-          style="flex-shrink:0;background:#14532d;border:1px solid #22c55e;border-radius:9px;color:#bbf7d0;padding:7px 10px;font-size:11px;font-weight:700;cursor:pointer;">
-          Obriši sve
-        </button>
       </div>
       <div style="padding:14px 16px;">
         <!-- Terenski rad: izmjereno stanje veze + šta radi bez neta.
              Mjerenje je PASIVNO (iz saobraćaja koji app ionako pravi) — vidi
              komentar uz _netZabiljezi. Dugme ispod je JEDINI zahtjev koji ova
              sekcija sama napravi, i to tek na izričit klik. -->
-        <div id="net-debug-card" style="background:#080f1e;border:1px solid #334155;border-radius:10px;padding:12px;margin-bottom:12px;"></div>
+        <div id="gps-live-card" style="background:#080f1e;border:1px solid #166534;border-radius:10px;padding:12px;margin-bottom:12px;"></div>
         <div id="perf-diag-card" style="background:#080f1e;border:1px solid #0e7490;border-radius:10px;padding:12px;margin-bottom:12px;"></div>
 
-        <button onclick="_netTestSada()" id="btn-net-test"
-          style="width:100%;padding:10px;margin-bottom:14px;background:#14233c;border:1px solid #3b82f6;border-radius:9px;color:#93c5fd;font-size:12px;font-weight:700;cursor:pointer;">
-          📶 Testiraj vezu sada
-        </button>
-        <button onclick="_adminDebugKlikNow()"
-          style="width:100%;padding:10px;background:#1e3a5f;border:1px solid #3b82f6;border-radius:9px;color:#93c5fd;font-size:12px;font-weight:700;cursor:pointer;">
-          🖱 Provjeri klikabilnost sada
-        </button>
-        <div style="font-size:10px;color:#64748b;line-height:1.5;margin:6px 2px 12px;">Radi SAMO ako su 📁 Lista oznaka/KML ili ✏ Nacrtaj vlaku ručno trenutno na ekranu (Karta/Projekat tab) — u suprotnom otvori taj tab pa ponovi. Nezavisno od ovoga, svaki STVARAN promašen dodir na ta dva dugmeta se automatski zabilježi ovdje čim se desi, bez obzira gdje si u tom trenutku.</div>
-
-        <button onclick="_adminDebugMapStuckNow()"
-          style="width:100%;padding:10px;background:#1e3a5f;border:1px solid #3b82f6;border-radius:9px;color:#93c5fd;font-size:12px;font-weight:700;cursor:pointer;">
-          🗺 Provjeri "Učitavam kartu" sada
-        </button>
-        <div style="font-size:10px;color:#64748b;line-height:1.5;margin:6px 2px 12px;">Zapisuje da li je indikator BAŠ SADA prikazan, koliko dugo, i cijelu istoriju ovog učitavanja karte.</div>
-
-        <div id="admin-debug-list"></div>
       </div>
     </div>
 
@@ -6027,7 +6012,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.6.6';
+const APP_VER = 'v3.9.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6275,6 +6260,7 @@ function _loadLocalVlake() {
   <button type="button" class="mdrop-item" id="menu-field-work" onclick="TerenWorkspace.open()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg></span><span>RAD NA TERENU<small>Pozicija, Explorer, tragovi i bilješke</small></span><span class="mdrop-arrow" aria-hidden="true">›</span></button>
   <button class="mdrop-item" id="field-theme-toggle" type="button" onclick="toggleFieldTheme()" aria-pressed="false"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-sun"/></svg></span>Dnevni mod</button>
   <button type="button" class="mdrop-item" id="menu-share-kretanje" onclick="closeMenuDropdown();shareSheetOpen()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg></span>Dijeljenje kretanja</button>
+  <button type="button" class="mdrop-item" id="menu-explorer-mod" onclick="closeMenuDropdown();TerenWorkspace.explorerMeni()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-guide"/></svg></span><span>Explorer mod<small>Pregled ispred tebe, karta prati smjer</small></span></button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-camera"/></svg></span>Uslikaj lokaciju</button>
   <button type="button" class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-guide"/></svg></span>Vodi me do odjela/lokacije</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-measure"/></svg></span>Mjerenja i tragovi</button>
@@ -6293,7 +6279,7 @@ function _loadLocalVlake() {
   <button type="button" id="menu-azuriraj" class="mdrop-item mdrop-azur" onclick="closeMenuDropdown();azurirajAplikaciju()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-update"/></svg></span>Ažuriraj aplikaciju<span class="mdrop-azur-nova" hidden></span></button>
   <button type="button" class="mdrop-item" id="menu-prebaci-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();racuniPrebaci()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-users"/></svg></span><span id="menu-prebaci-txt">Prebaci na profil administratora</span></button>
   <button type="button" class="mdrop-item" id="menu-dijag-item" style="display:none;color:#38bdf8;" onclick="closeMenuDropdown();dijagOtvori()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-debug"/></svg></span>Dijagnostika</button>
-  <button type="button" class="mdrop-item" id="menu-apk-download" hidden style="color:#38bdf8;" onclick="closeMenuDropdown();preuzmiApkAdmin()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-load"/></svg></span><span>Preuzmi APK fajl<small>Samo admin · najnovija verzija</small></span></button>
+  <button type="button" class="mdrop-item" id="menu-apk-download" style="color:#38bdf8;" onclick="closeMenuDropdown();preuzmiApkAdmin()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-load"/></svg></span><span>Preuzmi APK fajl<small>Najnovija verzija · odmah preuzima</small></span></button>
   <button type="button" class="mdrop-item" id="menu-device-settings" onclick="closeMenuDropdown();showDeviceSettings()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-battery"/></svg></span>Baterija i automatsko pokretanje</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showHelp()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-help"/></svg></span>Upute za korištenje</button>
   <button type="button" class="mdrop-item" style="color:#f87171;" onclick="closeMenuDropdown();doLogout()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-logout"/></svg></span>Odjava</button>
@@ -6528,6 +6514,7 @@ function _loadLocalVlake() {
     <button class="help-tab active" onclick="helpTab('gen',this)">Prvi koraci</button>
     <button class="help-tab" onclick="helpTab('vlake',this)">Vlake</button>
     <button class="help-tab" onclick="helpTab('doznaka',this)">Doznaka</button>
+    <button class="help-tab" onclick="helpTab('fajlovi',this)">Slanje fajlova</button>
     <button class="help-tab" onclick="helpTab('simboli',this)">Simboli</button>
   </div>
   <div id="help-body">
@@ -6571,7 +6558,7 @@ function _loadLocalVlake() {
 <div class="help-row"><div class="help-txt"><b>Preglednik oznaka</b><span>Otvori <b>Listu oznaka/KML</b>. Izaberi Sve, Učitani fajlovi, Fotografije, Tragovi ili Server fajlovi. Pretraži po nazivu, odjelu ili opisu.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Prikaži / Sakrij</b><span>Sakrivanje uklanja sadržaj s karte, ali ga ne briše. Koristi pojedinačne kontrole ili <b>Prikaži rezultate / Sakrij rezultate</b> za grupu. U Tragovima upravljaš cijelim grupama fotografija, tragova i tačaka.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Sortiranje i uređivanje</b><span>Sortiraj po odjelu, datumu, nazivu ili blizini sredine prikaza karte. Opcijom <b>Uredi</b> promijeni naziv, opis ili stil sloja.</span></div></div>
-<div class="help-row"><div class="help-txt"><b>Preuzmi granice odjela i kamionske puteve</b><span>Na karti otvori <b>Podloge i slojevi → Granice</b>. Pritisni <b>Osvježi</b>, pa <b>Preuzmi i dodaj</b> uz željeni GitHub fajl. U <b>Prikaz slojeva</b> uključi ili sakrij preuzete granice i puteve; klizačem podesi prozirnost granica. Za pojedinačni fajl koristi Preglednik oznaka. Vidljivost i stilovi ostaju sačuvani pri ponovnom ulasku.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Preuzmi granice odjela i kamionske puteve</b><span>Na karti otvori <b>Podloge i slojevi → Granice</b>. Pritisni <b>Osvježi</b>, pa <b>Preuzmi i dodaj</b> uz željeni fajl sa servera. U <b>Prikaz slojeva</b> uključi ili sakrij preuzete granice i puteve; klizačem podesi prozirnost granica. Za pojedinačni fajl koristi Preglednik oznaka. Vidljivost i stilovi ostaju sačuvani pri ponovnom ulasku.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Dodaj KML fajl / SHP</b><span>Za SHP zajedno izaberi odgovarajuće .shp, .dbf i .prj fajlove; priloži .shx/.cpg ako ih imaš. Nakon uvoza provjeri položaj na karti.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Uslikaj lokaciju</b><span>Opcija u Meniju otvara kameru. Fotografiju poslije pronađi u Oznakama, dodaj opis ili podijeli. Server fajl prvo preuzmi za offline korištenje.</span></div></div>
 
@@ -6741,6 +6728,27 @@ function _loadLocalVlake() {
 <div class="help-row"><div class="help-txt"><b>Stil poligona</b><span>Podesi boju, ispunu, obrub i crtkano u sekciji Stil poligona, da podloga i pojasevi ostanu čitljivi.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Brisanje</b><span>Obriši odjel koristi samo vlasnik uz potvrdu. Za privremeno uklanjanje s karte koristi sakrivanje sloja; brisanje uklanja podatke.</span></div></div>
 
+</div></section>
+</div>
+
+    <!-- ── SLANJE FAJLOVA (po profilima) ───────── -->
+    <div id="help-pane-fajlovi" style="display:none;">
+<section class="help-start"><span class="help-eyebrow">Po profilima</span><h3>Slanje i primanje fajlova</h3><p>Vidi samo dio za svoj profil: <b>terenski</b> radnik šalje isključivo šifrom od 5 cifara, <b>projektant</b> šalje i izabranim kolegama.</p></section>
+<section class="help-sec" data-profil="teren"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Terenski profil — slanje i primanje fajlova</button><div class="help-sec-body">
+<div class="help-row"><div class="help-txt"><b>Šta se može slati</b><span>KML fajl, trag, izmjerena linija ili poligon. Otvori <b>Preglednik KML oznaka</b> (dugme 📁 na karti) i uz fajl pritisni <b>Pošalji</b>, ili u popupu fajla na karti pritisni <b>Pošalji</b>. Trag i mjerenje šalješ iz njihovog popupa/kartice.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Slanje: samo šifrom</b><span>Terenski profil ne vidi spisak drugih korisnika. Poslije <b>Pošalji</b> dobiješ <b>šifru od 5 cifara</b> (npr. 48213). Pritisni <b>Kopiraj šifru</b> ili <b>Podijeli porukom</b> (Viber, WhatsApp, SMS) i pošalji je kolegi — ili mu je samo reci.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Koliko šifra važi</b><span>Šifra važi <b>2 dana</b> i može je preuzeti <b>više ljudi</b> (cijela ekipa istom šifrom). Poslije isteka nestaje sa servera. Za slanje treba internet.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Primanje fajla</b><span>Dobio si šifru? <b>Meni → Primljeni podaci → Preuzmi šifrom</b>, ukucaj 5 cifara i pritisni <b>Preuzmi</b>. Fajl se sprema na telefon i poslije toga radi bez interneta. Preuzimanje traži internet.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Gdje je primljeno</b><span>U <b>Meni → Primljeni podaci</b>: tab <b>Primljeno</b> (ono što si preuzeo — dodirni za prikaz na karti) i tab <b>Poslano</b> (šta si i kome slao; uz šifru piše koju si dobio). <b>Obriši spisak</b> briše samo spisak, ne i same fajlove.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Pogrešna šifra</b><span>Previše pogrešnih pokušaja (10 u 10 minuta) privremeno blokira unos. Provjeri cifre i pokušaj za par minuta.</span></div></div>
+</div></section>
+<section class="help-sec" data-profil="proj"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Projektant / admin — slanje i primanje fajlova</button><div class="help-sec-body">
+<div class="help-row"><div class="help-txt"><b>Šta se može slati</b><span>KML fajl, trag, linija ili poligon — iz <b>Preglednika KML oznaka</b> (dugme <b>Pošalji</b> uz fajl), iz popupa fajla na karti ili iz kartice traga/mjerenja.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Slanje kolegi</b><span><b>Pošalji</b> otvara spisak kolega iz tvoje šumarije (admin vidi sve korisnike). Ukucaj ime u <b>Traži</b>, označi jednog ili više, ili pritisni <b>Odaberi sve</b> / <b>Ukloni</b>, pa <b>Pošalji</b>. Kolega ga dobije čim bude online; na serveru ne ostaje.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Slanje šifrom</b><span>Za terenski profil, drugu šumariju ili veliku ekipu izaberi <b>Pošalji šifrom</b>: dobiješ šifru od 5 cifara koja važi 2 dana i može je preuzeti više ljudi. Podijeli je porukom.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Primanje</b><span>Fajlove poslane tebi dobijaš automatski kad si online: <b>Meni → Primljeni podaci → Primljeno</b>. Šifru koju ti je neko dao ukucaš u <b>Preuzmi šifrom</b> (5 cifara; starije šifre od 8 znakova i dalje važe).</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Poslano i spisak</b><span>Tab <b>Poslano</b> pokazuje šta si poslao i kome (ili koju šifru). <b>Obriši spisak</b> briše samo spisak, ne i fajlove kod primalaca.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Ako slanje ne prođe</b><span>Bez veze dobiješ poruku da pošalješ ponovo kad imaš signal. Fajl veći od ~2,8 MB se ne šalje — podijeli ga na manje dijelove.</span></div></div>
 </div></section>
 </div>
 
@@ -8176,10 +8184,6 @@ function _loadLocalVlake() {
 </div>
 
 <style>
-#field-status {position:absolute;left:6px;right:6px;top:54px;z-index:1700;padding:6px 9px;border-radius:7px;background:#10251f;color:#bbf7d0;font-size:11px;line-height:1.5;pointer-events:none;border:1px solid #4ade8055;}
-#field-status.warn {background:#451a03;color:#fde68a;border-color:#f59e0b;}
-.field-recording #panel,.field-recording #proj-panel,.field-recording #doznaka-panel,.field-recording #teren-panel,.field-recording #tragovi-panel {padding-top:var(--field-status-height,44px);}
-.field-recording #map-ctrl-bar {top:calc(32px + var(--field-status-height,44px));}
 </style>
 <script src="static/js/field-tools.js"></script>
 <script src="static/js/terrain-workspace.js"></script>

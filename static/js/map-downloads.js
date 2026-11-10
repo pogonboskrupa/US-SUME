@@ -30,7 +30,7 @@
   }
   async function adminSakrij(id){const s=source(id);if(!s)return;
     const sad=!!ovrOf(s)?.sakriveno;
-    if(!sad&&!(await _dlgConfirm('Sakriti kartu "'+(ovrOf(s)?.naziv||defTitle(s))+'" iz popisa za sve korisnike? Fajl ostaje na GitHub-u, a ti je možeš vratiti.',{title:'Sakrij kartu',okLabel:'Sakrij'})))return;
+    if(!sad&&!(await _dlgConfirm('Sakriti kartu "'+(ovrOf(s)?.naziv||defTitle(s))+'" iz popisa za sve korisnike? Fajl ostaje na serveru, a ti je možeš vratiti.',{title:'Sakrij kartu',okLabel:'Sakrij'})))return;
     await saveOvr(s,{sakriveno:!sad});}
   async function adminUredi(id){const s=source(id);if(!s)return;const o=ovrOf(s)||{};
     const naziv=await _dlgPrompt('Prikazni naziv (prazno = '+defTitle(s)+')',o.naziv||'',{title:'Uredi kartu',okLabel:'Dalje'});if(naziv===null||naziv===undefined)return;

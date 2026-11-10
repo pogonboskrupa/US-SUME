@@ -19,7 +19,7 @@ assert(/Linija i obrub/.test(m) && /Veličina tačke/.test(m), 'mješovito: oboj
 assert(!/_layerPreview\(i\)\+/.test(fn(le, '_layerStyleControls')), 'bez pregleda geometrije');
 // ptR se validira i primjenjuje kao radius tačke
 assert(/prop==='ptR'\)value=Math\.max\(2,Math\.min\(14/.test(le));
-assert(/if \(l\._kmlIsPoint\) \{ lo\.radius = k\.ptR \|\| 5;/.test(src) && /ptR: data\.ptR \|\| 5/.test(src) && /store\[origName\]\.ptR/.test(src), 'ptR primjena + čuvanje');
+assert(/if \(l\._kmlIsPoint\) \{ lo\.radius = k\.ptR \|\| 3;/.test(src) && /ptR: data\.ptRRucno \? \(data\.ptR \|\| 3\) : 3/.test(src) && /store\[origName\]\.ptR/.test(src), 'ptR primjena + čuvanje');
 console.log('kml-stil-po-vrsti: ok');
 // KML linije bez dodatnog nevidljivog sloja za klik (klik hvata _kmlHitTest u map.on('click'))
 {

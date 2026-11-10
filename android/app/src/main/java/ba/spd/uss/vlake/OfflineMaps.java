@@ -40,11 +40,23 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
         synchronized byte[] tile(int z,int x,int y) {
             if(db==null)return null;
             int[] zs=fmt.equals("rmaps")&&offset!=0?new int[]{offset-z,z}:new int[]{z};
-            int[] ys=fmt.equals("mbtiles")?new int[]{(1<<z)-1-y,y}:new int[]{y};
+            boolean mb=fmt.equals("mbtiles");
+            int tms=(1<<z)-1-y;
+            // MBTiles: orijentacija se zaključa tek poslije 8+ pogodaka u jednom smjeru (i najviše osmine u drugom),
+            // pa promašaj košta jedan upit umjesto dva. Isto pravilo kao u JS radniku.
+            int[] ys=!mb?new int[]{y}:ori==1?new int[]{tms}:ori==2?new int[]{y}:new int[]{tms,y};
             for(int zv:zs)for(int ty:ys)try(Cursor c=db.rawQuery(query,new String[]{""+zv,""+x,""+ty})){
-                if(c.moveToFirst()&&!c.isNull(0))return c.getBlob(0);
+                if(c.moveToFirst()&&!c.isNull(0)){
+                    if(mb&&ys.length==2&&tms!=y)noteOri(ty==tms);
+                    return c.getBlob(0);
+                }
             }
             return null;
+        }
+        int ori=0,oriT=0,oriX=0;
+        void noteOri(boolean tmsHit){
+            if(tmsHit)oriT++;else oriX++;
+            if(oriT>=8&&oriX*8<=oriT)ori=1;else if(oriX>=8&&oriT*8<=oriX)ori=2;
         }
         synchronized byte[] read(long offset,int length) throws Exception {
             if(fd==null||offset<0||length<1||length>65536||offset>size)throw new java.io.IOException("Nevažeće čitanje karte");
@@ -84,6 +96,12 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
     private static Map<String,String> columns(SQLiteDatabase db,String table){Map<String,String> out=new HashMap<>();try(Cursor c=db.rawQuery("PRAGMA table_info("+quote(table)+")",null)){while(c.moveToNext())out.put(c.getString(1).toLowerCase(java.util.Locale.ROOT),c.getString(1));}return out;}
     private JSONObject document(String id) throws Exception {String s=refs.getString(id,null);if(s==null)throw new java.io.IOException("Ponovo odaberi fajl karte");return new JSONObject(s);}
     private void progress(WebView view,long request,long bytes,long total){JSONObject p=new JSONObject();try{p.put("progress",bytes).put("total",total);}catch(Exception ignored){}reply(view,request,p);}
+    private static long tune(SQLiteDatabase db){
+        long mm=-1;
+        try(Cursor c=db.rawQuery("PRAGMA mmap_size=268435456",null)){if(c.moveToFirst())mm=c.getLong(0);}catch(Exception ignored){}
+        try(Cursor c=db.rawQuery("PRAGMA cache_size=-8192",null)){c.moveToFirst();}catch(Exception ignored){}
+        return mm;
+    }
     private Entry load(String id,WebView view,long request) throws Exception {
         final int openingGeneration;
         synchronized(open){if(open.containsKey(id))return open.get(id);openingGeneration=generation;}
@@ -121,9 +139,12 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
                     entry.db=SQLiteDatabase.openDatabase(owned.getPath(),null,SQLiteDatabase.OPEN_READONLY|SQLiteDatabase.NO_LOCALIZED_COLLATORS);
                 }
             }
+            // Čitanje pločica je slučajan pristup velikom fajlu: mmap izbjegava poziv sistema po stranici (na nekim
+            // uređajima memorija aplikacije ide kroz FUSE i svaki pread je skup), a veći keš čuva susjedne stranice.
+            long mmap=entry.db!=null?tune(entry.db):-1;
             if(entry.pages){entry.fmt="native-pages";entry.meta=new JSONObject().put("_nativePages",true).put("_nativeSize",entry.size);}
             else inspect(entry);
-            entry.meta.put("_nativeId",id).put("_nativeCopy",owned.isFile());
+            entry.meta.put("_nativeId",id).put("_nativeCopy",owned.isFile()).put("_nativeMmapMB",mmap>0?mmap/1048576:0).put("_nativeMode",doc.optBoolean("download")?"preuzeta":entry.pages?"stranice":owned.isFile()?"kopija":"direktno");
             synchronized(open){if(generation!=openingGeneration)throw new java.io.IOException("Učitavanje je prekinuto");open.put(id,entry);}return entry;
         }catch(Exception e){entry.close();throw e;}
     }

@@ -58,7 +58,7 @@ t('brisanje neposlanog projekta čita red STRIKTNO', () => {
   assert.match(html, /const sviRed = _OL\.loadQueue\(true\);/);
 });
 t('živi fiks tokom dopune čeka njen kraj (ne pomjera prag i ne ulazi prije starijih tačaka)', () => {
-  assert.match(fn('onP'), /^function onP\(p\) \{\s*\/\/[\s\S]*?if \(_drainNativeGpsBuffer\._busy\) \{ _drainLiveQ\.push\(\{ fn: onP, arg: p \}\); return; \}/);
+  assert.match(fn('onP'), /^function onP\(p\) \{\s*\/\/[\s\S]*?if \(_drainNativeGpsBuffer\._busy\) \{\s*_drainLiveQ\.push\(\{ fn: onP, arg: p \}\);[\s\S]*?\n    return;\n  \}/);
   const d = fn('_drainNativeGpsBuffer');
   assert.match(d, /finally \{\s*_drainNativeGpsBuffer\._busy = false;[\s\S]*_drainLiveQ\.splice\(0\)/);
   assert.equal((html.match(/_drainLiveQ\.push\(\{ fn: dozLive, arg: pos \}\)/g) || []).length, 2, 'oba doznaka watch-a');

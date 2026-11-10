@@ -476,6 +476,16 @@ public class MainActivity extends Activity {
     class UpdateBridge {
         private static final String RELEASES_URL =
                 "https://api.github.com/repos/pogonboskrupa/US-SUME/releases?per_page=1";
+        // Rezerva kad API odbije: github.com web feed nije pod API limitom
+        // (60 zahtjeva/h po IP-u bez prijave — na mobilnoj mreži IP dijeli mnogo
+        // korisnika, pa API zna vratiti 403 iako veza radi). Uključuje i prerelease.
+        private static final String RELEASES_ATOM =
+                "https://github.com/pogonboskrupa/US-SUME/releases.atom";
+        private static final String DOWNLOAD_BASE =
+                "https://github.com/pogonboskrupa/US-SUME/releases/download/";
+        private static final String STALNI_APK =
+                "https://github.com/pogonboskrupa/US-SUME/releases/latest/download/app-debug.apk";
+        private int zadnjiApiStatus = 0;
         // Terenska veza zna pući usred preuzimanja (slab signal, prelaz Wi-Fi <->
         // mobilni, promjena ćelije) — to je bio uzrok "SocketException". Svaki
         // sljedeći pokušaj NASTAVLJA od već preuzetog bajta (HTTP Range), ne od nule.
@@ -517,9 +527,32 @@ public class MainActivity extends Activity {
 
         private void tok() throws IOException, org.json.JSONException {
             napredak("provjera", 0, 0, null, "Provjeravam novu verziju…");
-            org.json.JSONObject rel = dohvatiJson(RELEASES_URL);
+            org.json.JSONObject rel = null;
+            IOException apiGreska = null;
+            for (int i = 0; i < 2 && rel == null; i++) {
+                try { rel = dohvatiJson(RELEASES_URL); }
+                catch (IOException e) { apiGreska = e; android.util.Log.w("DendroUpdate", "API provjera pala", e); }
+                if (rel == null && zadnjiApiStatus != 0) break; // server je odgovorio — ponavljanje ne pomaže
+            }
             if (rel == null) {
-                napredak("greska", 0, 0, null, "Ne mogu provjeriti novu verziju — nema interneta ili GitHub ne odgovara.");
+                try { rel = dohvatiIzFeeda(); }
+                catch (IOException e) { android.util.Log.w("DendroUpdate", "feed provjera pala", e); }
+            }
+            if (rel == null) {
+                try { rel = dohvatiIzStalnogLinka(); }
+                catch (IOException e) { android.util.Log.w("DendroUpdate", "stalni link provjera pala", e); }
+            }
+            if (rel == null) {
+                String razlog;
+                if (zadnjiApiStatus == 403 || zadnjiApiStatus == 429)
+                    razlog = "server je privremeno ograničio broj provjera (HTTP " + zadnjiApiStatus + "). Pokušaj ponovo za 15–60 minuta ili na drugoj mreži (Wi-Fi).";
+                else if (zadnjiApiStatus != 0)
+                    razlog = "server je odgovorio HTTP " + zadnjiApiStatus + ". Pokušaj ponovo za par minuta.";
+                else if (apiGreska != null)
+                    razlog = kratkiRazlog(apiGreska) + ". Provjeri vezu pa pokušaj ponovo.";
+                else
+                    razlog = "server ne odgovara. Pokušaj ponovo za par minuta.";
+                napredak("greska", 0, 0, null, "Ne mogu provjeriti novu verziju — " + razlog);
                 return;
             }
             String tag = rel.optString("tag_name", "");
@@ -731,6 +764,7 @@ public class MainActivity extends Activity {
                 c.setRequestProperty("Accept", "application/vnd.github+json");
                 c.setRequestProperty("User-Agent", "DendroMap-Android");
                 int status = c.getResponseCode();
+                zadnjiApiStatus = status == 200 ? 0 : status;
                 if (status != 200) return null;
                 ByteArrayOutputStream bos = new ByteArrayOutputStream();
                 try (InputStream is = c.getInputStream()) {
@@ -744,6 +778,76 @@ public class MainActivity extends Activity {
             } finally {
                 c.disconnect();
             }
+        }
+
+        /**
+         * Najnovija objava iz web feeda (bez API limita). Vraća objekat istog oblika
+         * kao API (tag_name + jedan asset), bez veličine i sažetka — provjera
+         * cjelovitosti tada ide samo kroz Android instalaciju.
+         */
+        /**
+         * Treća rezerva: stalni link .../releases/latest/download/app-debug.apk
+         * preusmjerava (302) na .../releases/download/vX.Y.Z/app-debug.apk —
+         * verzija se čita iz zaglavlja Location, bez API-ja i bez tijela odgovora.
+         */
+        private org.json.JSONObject dohvatiIzStalnogLinka() throws IOException, org.json.JSONException {
+            HttpURLConnection c = (HttpURLConnection) new URL(STALNI_APK).openConnection();
+            String loc;
+            try {
+                c.setInstanceFollowRedirects(false);
+                c.setRequestMethod("HEAD");
+                c.setConnectTimeout(15000);
+                c.setReadTimeout(15000);
+                c.setRequestProperty("User-Agent", "DendroMap-Android");
+                int st = c.getResponseCode();
+                if (st < 300 || st > 399) return null;
+                loc = c.getHeaderField("Location");
+            } finally {
+                c.disconnect();
+            }
+            if (loc == null) return null;
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("/releases/download/(v\\d+(?:\\.\\d+)+)/").matcher(loc);
+            if (!m.find()) return null;
+            return objavaBezApi(m.group(1));
+        }
+
+        private org.json.JSONObject objavaBezApi(String tag) throws org.json.JSONException {
+            org.json.JSONObject a = new org.json.JSONObject();
+            a.put("name", "app-debug.apk");
+            a.put("state", "uploaded");
+            a.put("browser_download_url", DOWNLOAD_BASE + tag + "/app-debug.apk");
+            org.json.JSONArray assets = new org.json.JSONArray();
+            assets.put(a);
+            org.json.JSONObject rel = new org.json.JSONObject();
+            rel.put("tag_name", tag);
+            rel.put("assets", assets);
+            return rel;
+        }
+
+        private org.json.JSONObject dohvatiIzFeeda() throws IOException, org.json.JSONException {
+            HttpURLConnection c = (HttpURLConnection) new URL(RELEASES_ATOM).openConnection();
+            String xml;
+            try {
+                c.setConnectTimeout(15000);
+                c.setReadTimeout(15000);
+                c.setRequestProperty("User-Agent", "DendroMap-Android");
+                if (c.getResponseCode() != 200) return null;
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                try (InputStream is = c.getInputStream()) {
+                    byte[] buf = new byte[8192];
+                    int n;
+                    while ((n = is.read(buf)) > 0 && bos.size() < 2_000_000) bos.write(buf, 0, n);
+                }
+                xml = bos.toString("UTF-8");
+            } finally {
+                c.disconnect();
+            }
+            // Feed je sortiran najnovije-prvo; prvi link na /releases/tag/vX.Y.Z.
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("/releases/tag/(v\\d+(?:\\.\\d+)+)").matcher(xml);
+            if (!m.find()) return null;
+            return objavaBezApi(m.group(1));
         }
 
         private void instalirajApk(File apk, String ver) {
@@ -780,7 +884,7 @@ public class MainActivity extends Activity {
             if (e instanceof javax.net.ssl.SSLException) return "sigurna veza prekinuta";
             if (e instanceof java.net.SocketException) return "veza resetovana";
             String m = e.getMessage();
-            if (m != null && m.matches("HTTP 5\\d\\d")) return "GitHub server privremeno ne odgovara, " + m;
+            if (m != null && m.matches("HTTP 5\\d\\d")) return "server privremeno ne odgovara, " + m;
             if (m != null && m.startsWith("HTTP ")) return "server " + m;
             if (m != null && !m.isEmpty()) return m.length() > 60 ? m.substring(0, 60) : m;
             return e.getClass().getSimpleName();
@@ -797,10 +901,10 @@ public class MainActivity extends Activity {
                         ? "Veza je pukla tokom preuzimanja (" + ime + "). Preuzeti dio je sačuvan — Pokušaj ponovo nastavlja odakle je stalo."
                         : "Veza je pukla (" + ime + ") — provjeri signal pa pokušaj ponovo.";
             if (e instanceof org.json.JSONException)
-                return "GitHub je vratio neočekivan odgovor. Pokušaj ponovo za par minuta.";
+                return "Server je vratio neočekivan odgovor. Pokušaj ponovo za par minuta.";
             String m = e.getMessage();
             if (m != null && m.matches("HTTP 5\\d\\d"))
-                return "GitHub server trenutno ne odgovara (" + m + ") — ne do tvoje veze. "
+                return "Server trenutno ne odgovara (" + m + ") — ne do tvoje veze. "
                         + (preuzimanjePocelo ? "Preuzeti dio je sačuvan; " : "") + "pokušaj ponovo za par minuta.";
             return "Ažuriranje nije uspjelo: " + (m != null && !m.isEmpty() ? m : ime);
         }

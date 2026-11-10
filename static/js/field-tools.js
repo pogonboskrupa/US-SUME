@@ -159,25 +159,6 @@ async function fieldImportBackup(file) {
   }catch(e){showToast('⚠ Obnova nije završena: '+e.message+'. Izvorni fajl ostaje sačuvan.');}
   finally{if(input)input.value='';}
 }
-function _fieldStatusUpdate() {
-  const el=document.getElementById('field-status');if(!el)return;
-  const recording=recOn || _tragOn || _dozGpsOn;
-  document.body.classList.toggle('field-recording',!!recording && !!sbUser);
-  el.style.display=recording && sbUser?'block':'none';if(!recording){_fieldStatusUpdate._started=0;return;}
-  const pts=_dozGpsOn?_dozGpsPts.length:_tragOn?_tragPts.length:vlake[actI]?.pts.length || 0;
-  const started=_dozGpsOn?_dozGpsStartTs:_fieldStatusUpdate._started || Date.now();
-  _fieldStatusUpdate._started ||= started;
-  const minutes=Math.max(0,Math.floor((Date.now()-started)/60000)),acc=_dozGpsOn?_fieldStatusUpdate.accuracyDoz:lastP?.ac;
-  const failed=_dozGpsOn?_dozLiveUpisPao:((recOn && _crashUpisPaoV) || (_tragOn && _crashUpisPaoT));
-  const quality=_mrezaStanje(),n=_serverNaCekanju();
-  const paused=_dozGpsOn?_dozGpsPaused:_tragOn?_tragPaused:recPaused;
-  el.textContent=(failed?'⚠ GREŠKA UPISA':paused?'⏸ Pauza':_dozGpsOn?'● Doznaka':_tragOn?'● Trag':'● Vlaka')+' · '+minutes+' min · '+pts+' tač. · GPS '+(acc!=null?Math.round(acc)+' m':'—')+
-    ' · '+(failed?'IZVEZI / provjeri memoriju':_dozGpsOn?(pts?'upis potvrđen':'čekam prvi upis'):'auto-save na 30 s')+' · '+
-    (quality==='slaba'||quality==='nema'?'lokalno':quality==='nepoznato'?'veza neprovjerena':'mreža dostupna')+' · čeka '+n.stavki;
-  el.classList.toggle('warn',!!failed);
-  const height=el.offsetHeight+8;
-  if(_fieldStatusUpdate._height!==height){document.body.style.setProperty('--field-status-height',height+'px');_fieldStatusUpdate._height=height;}
-}
-document.addEventListener('DOMContentLoaded',()=>{
-  setInterval(()=>{try{_fieldStatusUpdate();}catch(e){}},1000);
-});
+// Traka stanja snimanja ispod gornjeg bara ("● Trag · 1 min · 5 tač. · GPS 6 m …") uklonjena je na zahtjev;
+// greška upisa se i dalje javlja toastom (_localSetKriticno) i u DEBUG-u.
+

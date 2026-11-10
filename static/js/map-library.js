@@ -42,9 +42,10 @@
     // Kompaktan red: vrsta, naziv, jedan red podataka i tri brze radnje. Sve ostalo je iza "⋯".
     const meta=[r.odjel==='Bez odjela'?'':r.odjel,r.gj,r.detail,when,dist].filter(Boolean).map(esc).join(' · ');
     const quick=r.ready?btn('visibility',r.key,'<svg class="ic" aria-hidden="true"><use href="#ic-'+(r.visible?'prikazi':'sakrij')+'"/></svg>','class="ml-q ml-q-vis" aria-pressed="'+r.visible+'" aria-label="'+(r.visible?'Sakrij':'Prikaži')+'" title="'+(r.visible?'Sakrij sa karte':'Prikaži na karti')+'"')+btn('zoom',r.key,'<svg class="ic" aria-hidden="true"><use href="#ic-meta"/></svg>','class="ml-q" aria-label="Na karti" title="Prikaži na karti"')+btn('edit',r.key,otv?'×':'⋯','class="ml-q ml-q-more" aria-expanded="'+otv+'" aria-label="'+(otv?'Zatvori uređivanje':'Uredi')+'" title="Uredi i više radnji"'):btn('download',r.key,'↓ Preuzmi','class="ml-q ml-q-dl" aria-label="Preuzmi za offline"');
-    const extras=(r.category==='photos'&&!r.shared?btn('share',r.key,'Podijeli fotografiju'):'')+(r.category==='local'?btn('export-file',r.key,'Sačuvaj KML fajl'):'')+(r.category==='tracks'?btn('export',r.key,'Izvezi / podijeli KML'):'')+btn('remove',r.key,r.category==='server'?'Ukloni offline kopiju':r.shared?'Ukloni s ovog telefona':'Obriši','class="ml-danger"');
+    const extras=(r.category==='photos'&&!r.shared?btn('share',r.key,'Podijeli fotografiju'):'')+(r.category==='local'?btn('export-file',r.key,'Sačuvaj KML fajl')+btn('send',r.key,'Pošalji korisniku')+btn('klik',r.key,r.ref.klikOff?'🔓 Uključi klik na karti':'🔒 Isključi klik na karti'):'')+(r.category==='tracks'?btn('send',r.key,'Pošalji korisniku'):'')+(r.category==='tracks'?btn('export',r.key,'Izvezi / podijeli KML'):'')+btn('remove',r.key,r.category==='server'?'Ukloni offline kopiju':r.shared?'Ukloni s ovog telefona':'Obriši','class="ml-danger"');
     const naslov=r.ready?'<button type="button" class="ml-title" data-action="zoom" data-key="'+esc(r.key)+'" onclick="_libraryAction(this.dataset.action,this.dataset.key)" title="Prikaži na karti">'+esc(r.title)+'</button>':'<span class="ml-title">'+esc(r.title)+'</span>';
-    return '<article class="ml-card'+(r.visible?'':' ml-hidden')+(otv?' ml-open':'')+'" data-category="'+r.category+'" data-row-key="'+esc(r.key)+'"><div class="ml-card-head">'+main+'<div class="ml-txt"><h3>'+naslov+'</h3><small>'+[r.category==='photos'?'<b class="ml-type">Slika</b>':'',r.ready?'':'na serveru',meta].filter(Boolean).join(' · ')+'</small>'+(bezOdjela?btn('assign',r.key,'Dodijeli odjelu','class="ml-assign"'):'')+'</div><div class="ml-quick">'+quick+'</div></div>'+(r.note?'<p class="ml-note">'+esc(r.note)+'</p>':'')+(otv&&r.ready?'<div class="ml-actions">'+extras+'</div>'+editor(r):'')+'</article>';
+    const own=/^#[a-f\d]{6}$/i.test(r.color||'')?r.color:'';
+    return '<article class="ml-card'+(r.visible?'':' ml-hidden')+(otv?' ml-open':'')+(own?' ml-own':'')+'"'+(own?' style="--ml-own:'+own+';--ml-own-ink:'+(function(h){const l=[1,3,5].map(i=>{const v=parseInt(h.slice(i,i+2),16)/255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4);}),L=.2126*l[0]+.7152*l[1]+.0722*l[2];return (L+.05)/.0722>=(1.05)/(L+.05)?'#14202a':'#fff';})(own)+'"':'')+' data-category="'+r.category+'" data-row-key="'+esc(r.key)+'"><div class="ml-card-head">'+main+'<div class="ml-txt"><h3>'+naslov+'</h3><small>'+[r.category==='photos'?'<b class="ml-type">Slika</b>':'',r.ready?'':'na serveru',meta].filter(Boolean).join(' · ')+'</small>'+(bezOdjela?btn('assign',r.key,'Dodijeli odjelu','class="ml-assign"'):'')+'</div><div class="ml-quick">'+quick+'</div></div>'+(r.note?'<p class="ml-note">'+esc(r.note)+'</p>':'')+(otv&&r.ready?'<div class="ml-actions">'+extras+'</div>'+editor(r):'')+'</article>';
   }
   function render(){
     if(!el('library-list'))return;const rows=filtered(),all=model();
@@ -75,6 +76,12 @@
     }
     if(actionName==='open'){closeOznakePanel();await openFotoFullscreen(r.ref.ts,r.shared);return;}
     if(actionName==='share'){closeOznakePanel();await openShareFotoDlg(r.ref.ts);return;}
+    if(actionName==='klik'){if(r.category==='local'||r.category==='server'){_kmlKlikPostavi(r.ref,r.ref.klikOff!==true);showToast(r.ref.klikOff?'🔒 Klik na fajl isključen':'🔓 Klik na fajl uključen');}return;}
+    if(actionName==='send'){
+      if(r.category==='local'){await _layerPosalji(r.index);return;}
+      if(r.category==='tracks'){podaciPosalji('trag',_tragIme(r.ref),_tragToKml(r.ref));return;}
+      return;
+    }
     if(actionName==='export'){await _tragKmlMeni(r.ref.id);return;}
     if(actionName==='export-file'){
       const uid=sbUser?.id;

@@ -49,5 +49,7 @@ function measure(mode){if(!allowed())return;switchTab('karta');_izmjeriPick(mode
 function open(){if(!allowed())return;closeMenuDropdown();switchTab('teren');el('teren-panel').scrollTop=0;}
 function explorerToggle(on){if(!allowed())return;root.Explorer?.setPreference(!!on);render(false);}
 function explorerOpen(){if(!allowed())return;switchTab('karta');if(root.Explorer?.active){root.Explorer.setExplorerEnabled(root.Explorer.enabledPreference);root.Explorer.setVisible(true);}else showGuideChoice();}
-root.TerenWorkspace={open,explorerToggle,explorerOpen,render,rows,search,more,jump,note,measure};
+// Meni → Explorer mod: uključi Explorer i otvori kartu (bez navođenja traži odredište).
+function explorerMeni(){if(!allowed())return;root.Explorer?.setPreference(true);render(false);explorerOpen();}
+root.TerenWorkspace={open,explorerToggle,explorerOpen,explorerMeni,render,rows,search,more,jump,note,measure};
 })(window);

@@ -21,7 +21,7 @@ function api(env) {
   // gate po imenu (bez dijakritika, velika/mala slova)
   assert.strictEqual(api(mk({ id: '1', ime: 'Azra', prezime: 'Ćehić' }).env)._imeNorm(), 'azra cehic');
   assert(api(mk({ id: '1', ime: 'AZRA', prezime: 'ćehić' }).env)._dijagDozvoljeno(), 'Azra vidi Dijagnostiku');
-  assert(!api(mk({ id: '1', ime: 'Ana', prezime: 'Anić' }).env)._dijagDozvoljeno(), 'drugi ne vidi');
+  assert(api(mk({ id: '1', ime: 'Ana', prezime: 'Anić' }).env)._dijagDozvoljeno(), 'svaki prijavljeni korisnik vidi Dijagnostiku (v3.7.8)');
   assert(api(mk({ id: '1', ime: 'X', prezime: 'Y', is_admin: true }).env)._dijagDozvoljeno(), 'admin vidi');
   // prebacivanje: samo vlasnik ili račun već sačuvan na uređaju
   assert(api(mk({ id: '1', ime: 'Nedim', prezime: 'Ćehić' }).env)._racuniMoze());

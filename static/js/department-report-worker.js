@@ -33,6 +33,24 @@
  // manju grešku nagiba nego razlika samo po osi. Na ravni daje isti rezultat.
  // Vraća [dz/dx istok, dz/dy jug] u m/m; `step` je razmak susjeda u metrima.
  const horn=(h,step)=>[((h[2]+2*h[4]+h[7])-(h[0]+2*h[3]+h[5]))/(8*step),((h[5]+2*h[6]+h[7])-(h[0]+2*h[1]+h[2]))/(8*step)];
+ // Izglađivanje visina prije nagiba (v3.7.1). DEM ~30 m (SRTM/EU-DEM) mjeri vrh krošanja i ima
+ // šum od nekoliko metara po ćeliji; Hornov kernel sa razmakom ~30 m taj šum pretvara u nagib
+ // (izmjereno simulacijom: ravna kosina 20 % sa šumom ±5 m daje ~11 % ćelija u razredu 30 %+).
+ // Prosjek visina u kutiji ~100 m uklanja takve lažne ćelije, a srednji nagib ostaje isti.
+ // Kutija se računa preko integralne slike; gdje nema pune kutije (rub podataka) ostaje sirova visina.
+ const SMOOTH_M=75,validH=h=>Number.isFinite(h)&&h>-12000&&h<10000;
+ function smoother(sample,x0,y0,width,height,pad,k){
+  const W=width+2*pad,H=height+2*pad,ox=x0-pad,oy=y0-pad,stride=W+1,sumI=new Float64Array(stride*(H+1)),cntI=new Int32Array(stride*(H+1));
+  for(let y=0;y<H;y++){let rs=0,rc=0;for(let x=0;x<W;x++){const v=sample(ox+x,oy+y);if(validH(v)){rs+=v;rc++;}const i=(y+1)*stride+x+1;sumI[i]=sumI[i-stride]+rs;cntI[i]=cntI[i-stride]+rc;}}
+  const full=(2*k+1)**2;
+  return (gx,gy)=>{
+   gx=Math.floor(gx);gy=Math.floor(gy);
+   const xa=gx-k-ox,ya=gy-k-oy,xb=gx+k-ox+1,yb=gy+k-oy+1;
+   if(xa<0||ya<0||xb>W||yb>H)return sample(gx,gy);
+   const a=ya*stride+xa,b=ya*stride+xb,c=yb*stride+xa,d=yb*stride+xb;
+   return cntI[d]-cntI[b]-cntI[c]+cntI[a]===full?(sumI[d]-sumI[b]-sumI[c]+sumI[a])/full:sample(gx,gy);
+  };
+ }
  function profiles(input,t,sample,lng,lat,mask,areaHa){
   const {geometry,z,x0,y0,width,height}=input,feature=t.feature(geometry),world=256*2**z;
   const valid=h=>Number.isFinite(h)&&h>-12000&&h<10000;
@@ -98,6 +116,8 @@
   const feature=t.feature(geometry),tiles=new Map(input.tiles.map(r=>[r.x+':'+r.y,r.elev]));
   const sample=(x,y)=>{x=Math.floor(x);y=Math.floor(y);const tx=Math.floor(x/256),ty=Math.floor(y/256);return tiles.get(tx+':'+ty)?.[(y-ty*256)*256+x-tx*256]??NaN;};
   const lng=x=>x/(256*2**z)*360-180,lat=y=>Math.atan(Math.sinh(Math.PI*(1-2*y/(256*2**z))))*180/Math.PI;
+  const mAt=y=>Math.cos(lat(y)*Math.PI/180)*156543.03392/2**z,mMid=mAt(y0+height/2),k=Math.max(1,Math.round(SMOOTH_M/mMid)),rMax=Math.max(1,Math.round(30/Math.min(mAt(y0),mAt(y0+height)))),pad=rMax+k+2;
+  const rawSample=sample,smooth=smoother(rawSample,x0,y0,width,height,pad,k);
   const inside=(x,y)=>t.booleanPointInPolygon(t.point([lng(x),lat(y)]),feature);
   const classes=new Int8Array(width*height).fill(-1),aspects=new Int8Array(width*height).fill(-1),mask=new Float32Array(width*height),slopes=new Float32Array(width*height).fill(NaN),bands=new Float64Array(6),directions=new Float64Array(4);
   let total=0,valid=0,knownSlope=0,flat=0,min=Infinity,max=-Infinity,sum=0,slopeSum=0,slopeMax=0;
@@ -110,7 +130,7 @@
     if(!hits)continue;const w=weight*hits/4;mask[idx]=hits/4;total+=w;
     const h=sample(gx,gy);if(!Number.isFinite(h)||h<=-12000||h>=10000)continue;
     valid+=w;sum+=w*h;min=Math.min(min,h);max=Math.max(max,h);
-    const around=[];for(const oy of [-1,0,1])for(const ox of [-1,0,1])if(ox||oy)around.push(sample(gx+ox*r,gy+oy*r));
+    const around=[];for(const oy of [-1,0,1])for(const ox of [-1,0,1])if(ox||oy)around.push(smooth(gx+ox*r,gy+oy*r));
     if(!around.every(v=>Number.isFinite(v)&&v>-12000&&v<10000))continue;
     const [dx,dy]=horn(around,r*metres),percent=Math.hypot(dx,dy)*100,bearing=(Math.atan2(-dx,dy)*180/Math.PI+360)%360;
     const si=slopeIndex(percent),ai=aspectIndex(bearing,percent);slopes[idx]=percent;classes[idx]=si;aspects[idx]=ai;bands[si]+=w;knownSlope+=w;slopeSum+=w*percent;slopeMax=Math.max(slopeMax,percent);if(ai>=0)directions[ai]+=w;else flat+=w;
@@ -129,7 +149,7 @@
    for(const band of edgeBands)band.segments.push(...contourSegments(tl,tr,br,bl,band.level,x0+x+.5,y0+y+.5));
   }
   for(const band of edgeBands){band.paths=joinSegments(band.segments).map(path=>path.map(p=>[lat(p[1]),lng(p[0])]));delete band.segments;}
-  return {z,x0,y0,width,height,classes,aspects,mask,edgeBands,...profiles(input,t,sample,lng,lat,mask,areaHa),stats:{areaHa,min,max,mean:sum/valid,slopeMean:knownSlope?slopeSum/knownSlope:null,slopeMax:knownSlope?slopeMax:null,coverage:share(valid),slopeCoverage:share(knownSlope),flat:share(flat),resolution:Math.max(30,Math.cos(lat(y0+height/2)*Math.PI/180)*156543.03392/2**z),slope:rows(SLOPES,COLORS,bands),aspect:rows(ASPECTS,ACOLORS,directions)}};
+  return {z,x0,y0,width,height,classes,aspects,mask,edgeBands,...profiles(input,t,smooth,lng,lat,mask,areaHa),stats:{areaHa,min,max,mean:sum/valid,slopeMean:knownSlope?slopeSum/knownSlope:null,slopeMax:knownSlope?slopeMax:null,coverage:share(valid),slopeCoverage:share(knownSlope),flat:share(flat),resolution:Math.max(30,Math.cos(lat(y0+height/2)*Math.PI/180)*156543.03392/2**z),slope:rows(SLOPES,COLORS,bands),aspect:rows(ASPECTS,ACOLORS,directions)}};
  }
  if(typeof module!=='undefined'&&module.exports){module.exports={calculate,horn,slopeIndex,aspectIndex,contourSegments,joinSegments,SLOPES,COLORS,ASPECTS,ACOLORS};return;}
  importScripts('../libs/turf.min.js');

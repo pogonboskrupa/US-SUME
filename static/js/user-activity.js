@@ -1,7 +1,10 @@
 /* Aktivnost je rad u aplikaciji, ne autentikacija niti otvoren neaktivan ekran. */
 (function(root){
 'use strict';
-let busy=false,lastTry=0,missingUntil=0;
+let busy=false,lastTry=0,missingUntil=0,noVer=false;
+function appVer(){try{return typeof APP_VER==='string'?APP_VER:null;}catch(e){return null;}}
+// APK ima native mostove; webapp (Pages) ih nema.
+function platforma(){return root.AndroidUpdate||root.AndroidGps?'apk':'web';}
 const key=uid=>'dendro_activity_pending_v1:'+uid;
 function owner(){return typeof sbUser!=='undefined'?sbUser?.id:null;}
 function touch(gps=false){const uid=owner();if(!uid||!gps&&document.visibilityState!=='visible')return;try{localStorage.setItem(key(uid),String(Date.now()));}catch(e){}flush();}
@@ -11,10 +14,17 @@ async function flush(){
  let stamp;try{stamp=Number(localStorage.getItem(key(uid)));}catch(e){return;}if(!Number.isFinite(stamp)||stamp<=0)return;
  busy=true;lastTry=Date.now();
  const controller=new AbortController();let timer;
- try{const req=sb.rpc('app_record_activity_for_user',{p_user_id:uid,p_observed_at:new Date(stamp).toISOString()});
+ const observed=new Date(stamp).toISOString(),ver=appVer();
+ const call=withVer=>{const req=withVer
+   ?sb.rpc('app_record_activity_ver',{p_user_id:uid,p_observed_at:observed,p_app_ver:ver,p_platforma:platforma()})
+   :sb.rpc('app_record_activity_for_user',{p_user_id:uid,p_observed_at:observed});
   const timeout=new Promise(resolve=>{timer=setTimeout(()=>{controller.abort();resolve({error:{code:'TIMEOUT'}});},12000);});
-  const {error}=await Promise.race([req.abortSignal?req.abortSignal(controller.signal):req,timeout]);
-  if(error){if(error.code==='PGRST202'||error.code==='42883')missingUntil=Date.now()+300000;return;}
+  return Promise.race([req.abortSignal?req.abortSignal(controller.signal):req,timeout]);};
+ const missing=e=>e&&(e.code==='PGRST202'||e.code==='42883');
+ try{let {error}=await call(!!ver&&!noVer);
+  // Migracija verzije još nije pokrenuta: aktivnost ide starim putem.
+  if(missing(error)&&ver&&!noVer){noVer=true;clearTimeout(timer);({error}=await call(false));}
+  if(error){if(missing(error))missingUntil=Date.now()+300000;return;}
   if(owner()===uid&&Number(localStorage.getItem(key(uid)))===stamp)localStorage.removeItem(key(uid));
  }catch(e){}finally{clearTimeout(timer);busy=false;}
 }

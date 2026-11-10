@@ -109,15 +109,23 @@ async function _localLayerKmlImpl(name,content,owner,driveSource,fmt='') {
   const store=JSON.parse(localStorage.getItem(_LOCAL_KML_KEY)||'{}');
   let unique=name,n=2;
   while(Object.prototype.hasOwnProperty.call(store,unique)||kmlLs.some(k=>!k._key&&(k._origName||k.name)===unique))unique=name.replace(/\.kml$/i,'')+' ('+(n++)+').kml';
-  const col=KCOLS[kmlCI%KCOLS.length],grp=velik?await _kmlGrupaIzSadrzaja(content,col):pkml(doc,col);
+  let col=KCOLS[kmlCI%KCOLS.length];const grp=velik?await _kmlGrupaIzSadrzaja(content,col):pkml(doc,col);
   if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; uvoz je prekinut');
   if(!grp.getLayers().length)throw Error('KML nema tačaka, linija ili poligona za prikaz');
+  // Fajl samo s poligonima: oker boja i 60 % ispuna. Fajl s tačkama zadržava boju tačaka (poligoni se ne vide).
+  let imaPoligon=false,imaTacku=false;
+  const prodji=g=>g?.eachLayer?.(l=>{if(l._kmlIsPolygon)imaPoligon=true;else if(l._kmlIsPoint)imaTacku=true;else if(l.eachLayer)prodji(l);});
+  prodji(grp);
+  const samoPoligoni=imaPoligon&&!imaTacku;
+  if(samoPoligoni)col='#d4a52a';
   if(!await _localKmlSaveContent(unique,content,col,owner,driveSource,fmt))throw Error('Sloj nije trajno sačuvan — provjeri slobodnu memoriju');
   if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; uvoz je prekinut');
   kmlCI++;
-  const layer={name:unique,_origName:unique,_driveSource:driveSource,fmt,grp,col,dash:'',weight:2,opacity:.9,vis:true,fill:false,fillCol:col,fillPattern:'solid',fillOpacity:.35,tag:name.match(/^(\d+)/)?.[1]||'',_loadedAt:Date.now()};
+  const layer={name:unique,_origName:unique,_driveSource:driveSource,fmt,grp,col,dash:'',weight:2,opacity:.9,vis:true,fill:samoPoligoni,fillCol:col,fillPattern:'solid',fillOpacity:samoPoligoni?.6:.35,tag:name.match(/^(\d+)/)?.[1]||'',_loadedAt:Date.now()};
   layer.onlyPolygon=globalThis.GithubLayers?.defaultOnlyPolygon(layer)===true;
   kmlLs.push(layer);
+  applyKmlStyle(kmlLs.length-1);
+  try{_localKmlSaveAll(false);}catch(e){}
   if(!layer.onlyPolygon||globalThis.GithubLayers?.selecting())grp.addTo(map);
   _glCollapsed.delete('Lokalni / —');rndGraniceModal();
   try{const bounds=grp.getBounds();if(bounds.isValid())map.fitBounds(bounds,{padding:[20,20]});}catch(e){}
@@ -282,7 +290,7 @@ function _localLayerPatchFeature(k,pmIndex,name,description,owner=sbUser?.id) {
       const saved=local(s.id),older=!saved&&localByName(s),state=messages.get(s.id),row=document.createElement('article');row.className='kml-drive-row';
       const icon=document.createElement('span');icon.className='kml-drive-icon';icon.textContent='KML';icon.setAttribute('aria-hidden','true');
       const copy=document.createElement('div');copy.className='kml-drive-copy';const name=document.createElement('b');name.textContent=s.name;
-      const meta=document.createElement('small');meta.textContent=sizeText(s.size)+' · '+(saved?'Sačuvano na telefonu':older?'Na telefonu je starija verzija':github?'GitHub · '+(s.release||'KARTE'):'KARTA APP');
+      const meta=document.createElement('small');meta.textContent=sizeText(s.size)+' · '+(saved?'Sačuvano na telefonu':older?'Na telefonu je starija verzija':github?'Server · '+(s.release||'KARTE'):'KARTA APP');
       const status=document.createElement('span');status.className='kml-drive-status';status.setAttribute('role','status');status.textContent=state?.message||(saved?'✓ Preuzeto · dostupno bez interneta':older?'Objavljena je nova verzija'+(s.release?' ('+s.release+')':''):s.tooLarge?'Veće od 32 MB — podijeli sloj':'');
       copy.append(name,meta,status);const button=document.createElement('button');button.type='button';button.dataset.sourceId=s.id;
       button.textContent=state?.busy?(state.phase||'Preuzimam…'):saved?'Prikaži':older?'Ažuriraj':'Preuzmi i dodaj';if(saved)button.classList.add('kml-drive-saved');button.disabled=_layerImportBusy||!!state?.busy||!!s.tooLarge||!available();button.onclick=()=>start(s.id);
@@ -358,7 +366,7 @@ function _localLayerPatchFeature(k,pmIndex,name,description,owner=sbUser?.id) {
   }
   async function refreshGithub(){
     if(githubRefreshing)return;githubRefreshing=true;render();const note=el('kml-github-message');
-    if(note)note.textContent=available()?'Provjeravam GitHub slojeve…':'Preuzimanje slojeva dostupno je u Android aplikaciji.';
+    if(note)note.textContent=available()?'Provjeravam slojeve na serveru…':'Preuzimanje slojeva dostupno je u Android aplikaciji.';
     try{
       const cached=await request({type:'list',provider:'github',refresh:false});if(cached.ok){githubFiles=(cached.files||[]).filter(valid);render();}
       const offline=navigator.onLine===false,r=offline?cached:await request({type:'list',provider:'github',refresh:true});
