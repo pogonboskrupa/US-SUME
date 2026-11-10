@@ -17972,9 +17972,9 @@ function _pratiUp() { clearTimeout(_pratiLpT); _pratiLpT = null; }
 function _pratiKlik() { if (_pratiLpBio) { _pratiLpBio = false; return false; } return true; }
 function _pratiPostavi(on) {
   _pratiMe = !!on;
-  ['ab-centar', 'ab-loc'].forEach(id => { const b = document.getElementById(id); if (b) b.classList.toggle('prati', _pratiMe); });
   const c = document.querySelector('#ab-loc-popup .abp-centar');
-  if (c) c.textContent = _pratiMe ? '📍 Prati me ✓' : '⌖ Centriraj';
+  ['ab-centar'].forEach(id => { const b = document.getElementById(id); if (b) b.classList.toggle('prati', _pratiMe); });
+  if (c) { c.classList.toggle('prati', _pratiMe); c.setAttribute('aria-pressed', String(_pratiMe)); }
 }
 function _pratiToggle() {
   const p = document.getElementById('ab-loc-popup'); if (p) p.style.display = 'none';

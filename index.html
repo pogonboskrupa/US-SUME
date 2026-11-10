@@ -3644,7 +3644,16 @@ body.recbar-on #main { padding-bottom: 54px; }
 .ab-acc.slab    { color: #b91c1c; border-color: #ef4444; }
 /* Centar se ističe kad je karta odmaknuta od tvoje pozicije (_userPannedAway). */
 #ab-centar.odmaknuto .ab-ico { animation: abPulsPlavi 1.6s ease-out infinite; }
-#ab-centar.prati .ab-ico,#ab-loc.prati .ab-ico { box-shadow:0 0 0 3px #22c55e; }
+/* Prekidač "Prati me" unutar dugmeta (dug dodir): uključeno = zelena, knob desno */
+.prati-tog{display:inline-block;position:relative;width:24px;height:13px;margin-left:7px;border-radius:999px;background:#64748b;vertical-align:middle;flex:none;transition:background .15s}
+.prati-tog::after{content:"";position:absolute;top:2px;left:2px;width:9px;height:9px;border-radius:50%;background:#fff;transition:transform .15s}
+.prati .prati-tog,.prati.abp-centar .prati-tog{background:#16a34a}
+.prati .prati-tog::after{transform:translateX(11px)}
+#ab-centar{position:relative}
+#ab-centar .prati-tog{position:absolute;right:2px;top:2px;margin:0;width:20px;height:11px}
+#ab-centar .prati-tog::after{width:7px;height:7px}
+#ab-centar.prati .prati-tog::after{transform:translateX(9px)}
+.abp-centar{display:inline-flex;align-items:center;justify-content:center}
 
 #btrag.active .ab-ico { box-shadow: 0 0 0 3px rgba(239,68,68,0.3); }
 /* Natpis aktivnog snimanja jedini ostaje obojen — to je stanje, ne ukras. */
@@ -6019,7 +6028,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.9.8';
+const APP_VER = 'v3.9.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7764,7 +7773,7 @@ function _loadLocalVlake() {
       <button class="abp-ukljuci" onclick="toggleGPS()">
         <svg class="ic"><use href="#ic-meta"/></svg><span>Uključi lokaciju</span></button>
       <div class="abp-chips abp-red1">
-        <button type="button" class="abp-chip abp-centar" onclick="if(_pratiKlik())_locPopupCentriraj()" onpointerdown="_pratiDown()" onpointerup="_pratiUp()" onpointerleave="_pratiUp()" onpointercancel="_pratiUp()" title="Centriraj kartu na moju lokaciju (dug dodir: prati me)">⌖ Centriraj</button>
+        <button type="button" class="abp-chip abp-centar" onclick="if(_pratiKlik())_locPopupCentriraj()" onpointerdown="_pratiDown()" onpointerup="_pratiUp()" onpointerleave="_pratiUp()" onpointercancel="_pratiUp()" title="Centriraj kartu na moju lokaciju (dug dodir: prati me)"><span class="abp-centar-txt">⌖ Centriraj</span><i class="prati-tog" aria-hidden="true"></i></button>
         <button class="abp-chip" id="compass-switch" onclick="_togCompassSwitch()" title="Kompas / pravac gledanja">🧭 Kompas</button>
         <button class="abp-chip" id="radius-switch" onclick="_togRadiusRings()" title="Krugovi udaljenosti oko tebe">⊚ Radijus</button>
       </div>
@@ -7781,6 +7790,7 @@ function _loadLocalVlake() {
   <button id="ab-centar" onclick="if(_pratiKlik())fabLokacija()" onpointerdown="_pratiDown()" onpointerup="_pratiUp()" onpointerleave="_pratiUp()" onpointercancel="_pratiUp()" title="Centriraj kartu na moju lokaciju (dug dodir: prati me)" style="display:none;">
     <span class="ab-ico"><svg class="ic"><use href="#ic-meta"/></svg></span>
     <span>Centar</span>
+    <i class="prati-tog" aria-hidden="true"></i>
   </button>
   <!-- Trag snimanje kontrole -->
   <button id="ab-trag-pauza" onclick="togTragPause()" title="Pauziraj / Nastavi trag" style="display:none;">
