@@ -2306,14 +2306,22 @@ async function doLogout() {
     // Opozvan/neodobren nalog (dugme Odjava na ekranu "Čeka se odobrenje") ne
     // može slati — server odbija — pa ga ne pitamo; podaci samo ostaju sačuvani.
     const mozeSlati = sbProfile.odobren !== false || sbProfile.is_admin || (typeof AccessPolicy!=='undefined' && AccessPolicy.canUse(sbProfile));
-    if (n.stavki && mozeSlati) {
+    // Sve što čeka je više puta odbijeno (npr. 42501: projekat tuđeg naloga) — ponovno slanje je uzaludno
+    // i samo zadržava korisnika. Ostaje sačuvano, a odjava se pita jednim potvrdnim dijalogom.
+    const samoOdbijeno = n.red > 0 && n.blok === n.red && !n.doz;
+    if (n.stavki && mozeSlati && samoOdbijeno) {
+      if (!await _dlgConfirm('Čeka ' + n.stavki + ' stavke koje je server odbio (npr. tuđi projekat). Ostaju sačuvane na ovom telefonu. Odjaviti se?',
+        { title: '☁ Server', okLabel: 'Odjavi se' })) return;
+    } else if (n.stavki && mozeSlati) {
       const i = await _dlgActions('☁ Neposlano: ' + n.stavki, [
         { label: '⬆ Pošalji pa se odjavi' },
         { label: 'Odjavi se bez slanja<br><span style="font-size:11px;opacity:.7;">Ostaje na ovom telefonu i šalje se kad se opet prijaviš</span>' }
       ]);   // "Odustani" dijalog ima sam (vraća null)
       if (i == null) return;
       if (i === 0) {
-        await serverPosalji();
+        // Slanje ima više krugova sa rokovima po zahtjevu; na odbijenim stavkama zna trajati pola minute
+        // pa je odjava izgledala zaglavljeno. Poslije 25 s se nastavlja pitanjem (slanje teče dalje u pozadini).
+        await Promise.race([serverPosalji(), new Promise(r => setTimeout(r, 25000))]);
         let ost = 0;
         try { ost = _serverNaCekanju().stavki; } catch(e) {}
         if (ost && !await _dlgConfirm('Nije sve poslano — ' + ost + ' čeka. Odjaviti se svejedno? Ostaje sačuvano na ovom telefonu.',
