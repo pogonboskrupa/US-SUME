@@ -12516,6 +12516,7 @@ async function _mapFavMenu(i) {
 
 function openMapFavs() {
   _mapFavRender();
+  _mapFavMigrirajServer().then(p => { if (p) _mapFavRender(); }).catch(() => {});
   document.getElementById('mapfav-modal').classList.add('open');
 }
 function closeMapFavs() {
@@ -12616,6 +12617,20 @@ function _mapFavPrimijeniOvl(ovl) {
   });
   if (ovl && _OVL[ovl] && !map.hasLayer(_OVL[ovl])) _OVL[ovl].addTo(map);
   try { _demLegendUpdate(); } catch (e) {}
+}
+// Karte koje su već na telefonu (native, tj. skinute sa servera) dobijaju kombinacije jednom po karti.
+async function _mapFavMigrirajServer() {
+  let rows = [];
+  try { const r = await _sqlWCall({ type: 'list' }); rows = (r && r.rows) || []; } catch (e) { return false; }
+  let obradjene = [];
+  try { obradjene = JSON.parse(localStorage.getItem('tvlake_mapfav_srv_v1') || '[]'); } catch (e) {}
+  let promjena = false;
+  for (const m of rows) {
+    if (!m?.meta?._nativeId || !m.name || obradjene.includes(m.name)) continue;
+    _mapFavServerKarta(m.name); obradjene.push(m.name); promjena = true;
+  }
+  if (promjena) { try { localStorage.setItem('tvlake_mapfav_srv_v1', JSON.stringify(obradjene)); } catch (e) {} }
+  return promjena;
 }
 function _mapFavPodrazumijevani() {
   let done = null;

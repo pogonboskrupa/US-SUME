@@ -8,6 +8,8 @@ const cat=fs.readFileSync(__dirname+'/../../static/js/map-catalog.js','utf8');
 assert(/tvlake_mapfav_auto_v2/.test(src)&&/tlKey: '📡 Google'/.test(src));
 assert(/ovl: 'slope'/.test(src)&&/ovl: 'ekspo'/.test(src)&&/function _mapFavServerKarta/.test(src));
 assert(/_mapFavServerKarta\(row\.name\)/.test(dl),'skinuta karta ide u omiljene sa kombinacijama');
+assert(/_mapFavMigrirajServer/.test(src)&&/tvlake_mapfav_srv_v1/.test(src),'postojeće server karte dobijaju kombinacije');
+assert(/mfav-tag/.test(cat)&&/data-kind/.test(cat),'kartica pokazuje vrstu');
 assert(/_mapFavPrimijeniOvl\(fav\.ovl/.test(cat),'aktivacija primjenjuje sloj');
 // Ekspozicija kao podloga ostaje podržana
 assert(/key === '_ekspo'/.test(src));

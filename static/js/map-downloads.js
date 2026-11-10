@@ -121,7 +121,7 @@
         const r=await request({type:'installed',sourceId:s.id,nativeId:status.file.nativeId});if(!r.ok)throw Error(r.error);
         // Karta skinuta sa servera ide automatski u Omiljene.
         try{const l2=await _sqlWCall({type:'list'}),row=(l2.rows||[]).find(m=>m.meta?._nativeId===status.file.nativeId);
-          if(row&&typeof _mapFavServerKarta==='function'&&_mapFavServerKarta(row.name)&&typeof _mapFavRender==='function')_mapFavRender();}catch(e){}
+          if(row&&typeof _mapFavServerKarta==='function'&&(()=>{try{const k='tvlake_mapfav_srv_v1',l=JSON.parse(localStorage.getItem(k)||'[]');if(!l.includes(row.name)){l.push(row.name);localStorage.setItem(k,JSON.stringify(l));}}catch(e){}return _mapFavServerKarta(row.name);})()&&typeof _mapFavRender==='function')_mapFavRender();}catch(e){}
         return r;
       }catch(e){return {state:'failed',error:'Karta nije dodana: '+e.message};}
     });
