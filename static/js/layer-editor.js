@@ -130,10 +130,16 @@ function _layerPopupHtml(layer,uid) {
     '<header class="le-heading"><i class="le-sw le-sw-'+type.toLowerCase()+'" aria-hidden="true"></i><span>'+type+' · '+esc(k?.name||'Učitani sloj')+'</span><b id="'+uid+'-nm">'+esc(layer._kmlName||'Bez naziva')+'</b></header>'+
     (mjere.length?'<div class="le-object-measure">'+mjere.map(([n,v])=>'<div><span>'+n+'</span><b>'+esc(v)+'</b></div>').join('')+'</div>':'')+
     (info.text?'<p class="le-description">'+esc(info.text)+'</p>':'')+
-    (attrs.length?'<details class="le-attributes" open><summary>Podaci o objektu <em>'+attrs.length+'</em></summary><dl>'+attrs.map(([key,value])=>'<div><dt>'+esc(key)+'</dt><dd>'+esc(value||'—')+'</dd></div>').join('')+'</dl></details>':'')+
-    '<div class="le-actions le-pop-act">'+btn('_kmlPopKlikOff','kljuc','Isključi klik')+btn('_kmlPopEditStart','crtaj','Naziv i opis')+btn('_kmlPopStyleToggle','boja','Stil fajla')+btn('_kmlPopSakrij','sakrij','Sakrij')+'</div>'+
+    (attrs.length?'<details class="le-attributes"><summary>Podaci o objektu <em>'+attrs.length+'</em></summary><dl>'+attrs.map(([key,value])=>'<div><dt>'+esc(key)+'</dt><dd>'+esc(value||'—')+'</dd></div>').join('')+'</dl></details>':'')+
+    '<div class="le-actions le-pop-act">'+btn('_kmlPopKlikOff','kljuc','Isključi klik')+btn('_kmlPopPosalji','posalji','Pošalji')+btn('_kmlPopEditStart','crtaj','Naziv i opis')+btn('_kmlPopStyleToggle','boja','Stil fajla')+btn('_kmlPopSakrij','sakrij','Sakrij')+'</div>'+
     '<div id="'+uid+'-edit" class="le-fields" style="display:none"><div class="le-sub-bar"><button type="button" class="le-nazad" onclick="_kmlPopNazad(\''+uid+'\')">'+ic('nazad')+'<span>Nazad</span></button><b>Naziv i opis</b></div><label>Naziv objekta<input id="'+uid+'-name-in" maxlength="160" value="'+esc(layer._kmlName)+'"></label><label>Opis / napomena<textarea id="'+uid+'-desc-in" rows="3" maxlength="2000">'+esc(layer._kmlDesc)+'</textarea></label><small>'+(k?._key?'Izmjena naziva i opisa važi za ovaj prikaz server fajla.':'Naziv i opis čuvaju se u lokalnom fajlu.')+'</small><div class="le-actions"><button type="button" onclick="_kmlPopSave(\''+uid+'\')">'+(k?._key?'Primijeni':'Sačuvaj')+'</button><button type="button" onclick="_kmlPopCancel(\''+uid+'\')">Odustani</button></div></div>'+
     '<div id="'+uid+'-style" style="display:none">'+_layerStyleControls(i)+'</div></article>';
+}
+// Pošalji cijeli fajl (kao iz Preglednika KML oznaka): kolegi ili šifrom.
+function _kmlPopPosalji(uid) {
+  const i=_kmlPopFindIdx(uid);if(i<0)return;
+  try{map.closePopup();}catch(e){}
+  _layerPosalji(i);
 }
 // Sakrij cijeli fajl sa karte (isto kao isključivanje u Slojevi → Granice, odakle se i vraća).
 function _kmlPopSakrij(uid) {

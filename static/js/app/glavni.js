@@ -11673,7 +11673,7 @@ function _makeDemCanvasLayer(mode) {
             } else {
               const metres=metresRed;
               const g=DemQuality.gradient(elev,px,py,metres);
-              rgba=Number.isFinite(g.percent)&&g.percent>.01?_aspColor(g.bearing,1.5):[0,0,0,0];
+              rgba=Number.isFinite(g.percent)&&g.percent>.01&&_demFilter.ekspo[g.bearing>=315||g.bearing<45?0:g.bearing<135?1:g.bearing<225?2:3]?_aspColor(g.bearing,1.5):[0,0,0,0];
             }
             od[idx*4]=rgba[0]; od[idx*4+1]=rgba[1]; od[idx*4+2]=rgba[2]; od[idx*4+3]=rgba[3];
           }
@@ -11775,15 +11775,19 @@ function _termLat2y(lat, z) {
   const r = lat * Math.PI / 180;
   return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, z);
 }
+// Klase nagiba i ekspozicije za legendu i filter (checkbox u legendi bira šta se crta). Zadano nagib prikazuje
+// samo 30 %+ (kao i do sada), a ostale klase se uključuju u legendi.
+const _DEM_NAGIB_KLASE = [['0–10 %','#36856b'],['10–20 %','#789a39'],['20–30 %','#c2a036'],['30–40 %','#cf7532'],['40–50 %','#b94c4f'],['50 % i više','#78456e']];
+const _DEM_EKSPO_KLASE = [['Sjeverna','#3b7fd4'],['Istočna','#4caf50'],['Južna','#e8640a'],['Zapadna','#9c4dcc']];
+const _DEM_FILTER_KEY = 'tvlake_dem_filter_v1', _DEM_LEG_MIN_KEY = 'tvlake_dem_leg_min_v1';
+let _demFilter = { ekspo: [1,1,1,1], slope: [0,0,0,1,1,1] };
+try { const f = JSON.parse(localStorage.getItem(_DEM_FILTER_KEY) || 'null'); if (f && Array.isArray(f.ekspo) && f.ekspo.length === 4 && Array.isArray(f.slope) && f.slope.length === 6) _demFilter = f; } catch (e) {}
 function _slopeColor(pct) {
-  if (!Number.isFinite(pct) || pct <= 30) return [0, 0, 0, 0];
-  const t = Math.min(1, (pct - 30) / 80); // 0 pri 30%, 1 pri 110%+
-  return [
-    Math.round(230 - t * 50),   // R: 230→180
-    Math.round(170 - t * 160),  // G: 170→10
-    Math.round(170 - t * 160),  // B: 170→10
-    Math.round(110 + t * 130)   // A: 110→240
-  ];
+  if (!Number.isFinite(pct) || pct < 0) return [0, 0, 0, 0];
+  const k = Math.min(5, Math.floor(pct / 10));
+  if (!_demFilter.slope[k]) return [0, 0, 0, 0];
+  const c = _DEM_NAGIB_KLASE[k][1];
+  return [parseInt(c.slice(1,3),16), parseInt(c.slice(3,5),16), parseInt(c.slice(5,7),16), 190];
 }
 const DemSlopeClass = L.GridLayer.extend({
   createTile(coords, done) {
@@ -22077,36 +22081,45 @@ function _instToggle(id, on) {
   _demLegendUpdate();
 }
 
+function _demLegMin() { try { const m = JSON.parse(localStorage.getItem(_DEM_LEG_MIN_KEY) || '{}'); return m && typeof m === 'object' ? m : {}; } catch (e) { return {}; } }
+function _demLegMinToggle(id) { const m = _demLegMin(); m[id] = !m[id]; try { localStorage.setItem(_DEM_LEG_MIN_KEY, JSON.stringify(m)); } catch (e) {} _demLegendUpdate(); }
+function _demLegX(id) { _instToggle(id, false); }
+function _demFilterSet(id, i, on) {
+  if (!_demFilter[id]) return;
+  _demFilter[id][i] = on ? 1 : 0;
+  try { localStorage.setItem(_DEM_FILTER_KEY, JSON.stringify(_demFilter)); } catch (e) {}
+  try { _OVL[id].redraw(); } catch (e) {}
+}
+function _demFilterSve(id, on) {
+  if (!_demFilter[id]) return;
+  _demFilter[id] = _demFilter[id].map(() => on ? 1 : 0);
+  try { localStorage.setItem(_DEM_FILTER_KEY, JSON.stringify(_demFilter)); } catch (e) {}
+  try { _OVL[id].redraw(); } catch (e) {}
+  _demLegendUpdate();
+}
+function _demLegSekcija(id, naslov, tijelo) {
+  const min = !!_demLegMin()[id];
+  return '<div class="leg-sec"><div class="leg-head"><span class="leg-title">' + naslov + '</span>' +
+    '<button type="button" class="leg-b" aria-label="' + (min ? 'Proširi legendu' : 'Smanji legendu') + '" onclick="_demLegMinToggle(\'' + id + '\')">' + (min ? '▸' : '▾') + '</button>' +
+    '<button type="button" class="leg-b" aria-label="Isključi ovaj prikaz" onclick="_demLegX(\'' + id + '\')">✕</button></div>' + (min ? '' : tijelo) + '</div>';
+}
+function _demLegKlase(id, klase) {
+  const f = _demFilter[id];
+  return klase.map(([n, c], i) => '<label class="leg-dir"><input type="checkbox"' + (f[i] ? ' checked' : '') + ' onchange="_demFilterSet(\'' + id + '\',' + i + ',this.checked)"><div class="leg-dot" style="background:' + c + ';"></div>' + n + '</label>').join('') +
+    '<div class="leg-sve"><button type="button" onclick="_demFilterSve(\'' + id + '\',true)">Sve</button><button type="button" onclick="_demFilterSve(\'' + id + '\',false)">Ništa</button></div>';
+}
 function _demLegendUpdate() {
   const el = document.getElementById('dem-legend');
   if (!el) return;
-  const showEkspo = !!_ovlState.ekspo;
-  const showNv    = !!_ovlState.nv;
-  let html = '';
-  if (showEkspo) {
-    html += `<div class="leg-title">🧭 Ekspozicija padine</div>
-    <div style="display:flex;flex-direction:column;gap:3px;">
-      <div class="leg-dir"><div class="leg-dot" style="background:#3b7fd4;"></div>Sjeverna</div>
-      <div class="leg-dir"><div class="leg-dot" style="background:#4caf50;"></div>Istočna</div>
-      <div class="leg-dir"><div class="leg-dot" style="background:#e8640a;"></div>Južna</div>
-      <div class="leg-dir"><div class="leg-dot" style="background:#9c4dcc;"></div>Zapadna</div>
-    </div>`;
+  if (!el._klikZaustavljen && window.L && L.DomEvent) { L.DomEvent.disableClickPropagation(el); L.DomEvent.disableScrollPropagation(el); el._klikZaustavljen = true; }
+  const sek = [];
+  if (_ovlState.ekspo) sek.push(_demLegSekcija('ekspo', '🧭 Ekspozicija padine', _demLegKlase('ekspo', _DEM_EKSPO_KLASE)));
+  if (_ovlState.slope) sek.push(_demLegSekcija('slope', '📐 Nagib terena', _demLegKlase('slope', _DEM_NAGIB_KLASE)));
+  if (_ovlState.nv) {
+    const bands = [['#e2e8f0','> 1400 m'],['#06b6d4',' 1200 m'],['#3b82f6',' 1000 m'],['#a855f7','  800 m'],['#ef4444','  600 m'],['#f97316','  400 m'],['#facc15','  200 m'],['#22c55e','    0 m']];
+    sek.push(_demLegSekcija('nv', '📏 Nadmorska visina', bands.map(([c,l])=>'<div class="leg-nv-row"><div class="leg-nv-swatch" style="background:' + c + ';"></div><span class="leg-nv-lbl">' + l + '</span></div>').join('')));
   }
-  if (showNv) {
-    if (showEkspo) html += '<div class="leg-sep"></div>';
-    html += `<div class="leg-title">📏 Nadmorska visina</div>`;
-    const bands = [
-      ['#e2e8f0','> 1400 m'],
-      ['#06b6d4',' 1200 m'],
-      ['#3b82f6',' 1000 m'],
-      ['#a855f7','  800 m'],
-      ['#ef4444','  600 m'],
-      ['#f97316','  400 m'],
-      ['#facc15','  200 m'],
-      ['#22c55e','    0 m'],
-    ];
-    html += bands.map(([c,l])=>`<div class="leg-nv-row"><div class="leg-nv-swatch" style="background:${c};"></div><span class="leg-nv-lbl">${l}</span></div>`).join('');
-  }
+  const html = sek.join('<div class="leg-sep"></div>');
   el.style.display = html ? '' : 'none';
   el.innerHTML = html;
 }
