@@ -135,7 +135,7 @@ final class OfflineMaps implements WebViewAssetLoader.PathHandler {
             }
             if(entry.pages){entry.fmt="native-pages";entry.meta=new JSONObject().put("_nativePages",true).put("_nativeSize",entry.size);}
             else inspect(entry);
-            entry.meta.put("_nativeId",id).put("_nativeCopy",owned.isFile());
+            entry.meta.put("_nativeId",id).put("_nativeCopy",owned.isFile()).put("_nativeMode",doc.optBoolean("download")?"preuzeta":entry.pages?"stranice":owned.isFile()?"kopija":"direktno");
             synchronized(open){if(generation!=openingGeneration)throw new java.io.IOException("Učitavanje je prekinuto");open.put(id,entry);}return entry;
         }catch(Exception e){entry.close();throw e;}
     }
