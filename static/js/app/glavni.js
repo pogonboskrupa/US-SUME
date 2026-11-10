@@ -37082,6 +37082,14 @@ async function dozBackToList() {
 // ─── HELP MODAL ───────────────────────────────────────────────────────────────
 function showHelp() {
   const v=document.getElementById('help-app-version');if(v)v.textContent='DENDRO MAP · '+APP_VER;
+  // Slanje fajlova: otvoren je dio za svoj profil, tuđi je sklonjen (terenski ≠ projektant).
+  const terenac = typeof isSpdField === 'function' && isSpdField();
+  document.querySelectorAll('#help-pane-fajlovi .help-sec[data-profil]').forEach(sec => {
+    const moj = sec.dataset.profil === (terenac ? 'teren' : 'proj');
+    sec.style.display = moj ? '' : 'none';
+    const h = sec.querySelector('.help-sec-hdr'), b = sec.querySelector('.help-sec-body');
+    if (moj && h && b && !b.classList.contains('open')) toggleHelpSec(h);
+  });
   document.getElementById('help-modal').classList.add('open');
 }
 function closeHelp() {
@@ -37093,7 +37101,7 @@ function helpTab(id, btn) {
   document.querySelectorAll('.help-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('help-body').scrollTop = 0;
-  ['gen','vlake','doznaka','simboli'].forEach(t => {
+  ['gen','vlake','doznaka','fajlovi','simboli'].forEach(t => {
     document.getElementById('help-pane-' + t).style.display = (t === id) ? '' : 'none';
   });
 }
@@ -37424,9 +37432,13 @@ async function podaciPosalji(vrsta, naziv, kml) {
   if (typeof kml !== 'string' || !kml) { showToast('Nema podataka za slanje'); return; }
   if (new Blob([kml]).size > _PRIM_MAX_BAJTA) { showToast('Podatak je prevelik za slanje (najviše ~2,8 MB)'); return; }
   const admin = isAdmin();
-  const kolege = admin ? await _primaociSvi() : _shareKolege();
+  // Terenski profil ne vidi druge korisnike — šalje se SAMO šifrom (5 cifara).
+  const samoSifra = !admin && isSpdField();
+  const kolege = samoSifra ? [] : (admin ? await _primaociSvi() : _shareKolege());
   let i;
-  if (admin || kolege.length > 8) {
+  if (samoSifra) {
+    i = 0;
+  } else if (admin || kolege.length > 8) {
     i = await _primaocBiraj(kolege, naziv, admin);
   } else {
     const akcije = kolege.map(k => ({ label: _escHtml(k.ime) }));
@@ -37536,7 +37548,7 @@ function _primaocBiraj(lista, naziv, prikaziSumariju) {
 }
 // Šifra za preuzimanje: velika, uz kopiranje i dijeljenje porukom.
 async function _sifraPrikazi(sifra, naziv) {
-  const lijepa = sifra.slice(0, 4) + ' ' + sifra.slice(4);
+  const lijepa = sifra.length === 8 ? sifra.slice(0, 4) + ' ' + sifra.slice(4) : sifra;
   const txt = 'Dendro Map — podatak „' + naziv + '“. Šifra za preuzimanje: ' + sifra + ' (važi 2 dana, može je preuzeti više ljudi). U aplikaciji: Meni → Primljeni podaci → Preuzmi šifrom.';
   const i = await _dlgActions('🔑 Šifra: ' + lijepa + '\nVaži 2 dana i može je preuzeti više ljudi (cijela ekipa). Poslije isteka nestaje sa servera.', [
     { label: '📋 Kopiraj šifru' }, { label: '📤 Podijeli porukom (Viber, WhatsApp…)' }, { label: 'Zatvori' },
@@ -37551,10 +37563,10 @@ async function _sifraPrikazi(sifra, naziv) {
 // Primalac unosi šifru: preuzmi → spremi LOKALNO. Šifra ostaje aktivna do isteka (više primalaca).
 async function primljeniPreuzmiSifrom() {
   if (!sb || !sbUser || !sbProfile) { showToast('Prijavi se da preuzmeš podatak'); return; }
-  const unos = await _dlgPrompt('Unesi šifru koju si dobio (8 znakova):', '', { title: 'Preuzmi šifrom', okLabel: 'Preuzmi' });
+  const unos = await _dlgPrompt('Unesi šifru koju si dobio (5 cifara):', '', { title: 'Preuzmi šifrom', okLabel: 'Preuzmi' });
   if (unos == null) return;
   const sifra = String(unos).toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (sifra.length !== 8) { showToast('Šifra ima 8 znakova (slova i brojevi)'); return; }
+  if (sifra.length !== 5 && sifra.length !== 8) { showToast('Šifra ima 5 cifara'); return; }
   if (_primljeniUcitaj().some(x => String(x.id).startsWith('sifra_' + sifra + '_'))) { showToast('Ovu šifru si već preuzeo — podatak je u Primljenim podacima'); return; }
   if (typeof _mrezaSila === 'function') _mrezaSila(30000);
   if (sbUser._cachedStub && !(await _sesijaPinom(true))) { showToast('Preuzimanje traži vezu sa serverom'); return; }

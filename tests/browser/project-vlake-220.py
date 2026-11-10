@@ -66,15 +66,16 @@ async def main():
     await page.screenshot(path=str(b.OUT/f'help-{theme}-{w}-{h}.png'))
     if w==320:
      # Stvarne upute moraju biti čitljive i potpuno dostupne i bez mreže.
-     for tab in ['gen','vlake','doznaka','simboli']:
-      await page.locator('.help-tab').nth(['gen','vlake','doznaka','simboli'].index(tab)).click()
+     for tab in ['gen','vlake','doznaka','fajlovi','simboli']:
+      await page.locator('.help-tab').nth(['gen','vlake','doznaka','fajlovi','simboli'].index(tab)).click()
       pane=page.locator('#help-pane-'+tab)
       assert await pane.is_visible()
       assert await page.locator('#help-body').evaluate('e=>e.scrollTop')==0
-      if tab!='simboli':
+      if tab not in ('simboli','fajlovi'):
        assert await pane.locator('.help-start .help-steps li').count()>=5
        assert await pane.locator('.help-start li').first.evaluate("e=>parseFloat(getComputedStyle(e).fontSize)")>=14
       for header in await pane.locator('.help-sec-hdr').all():
+       if not await header.is_visible(): continue  # tuđi profil u uputama je sklonjen
        body=header.locator('xpath=following-sibling::*[1]')
        if not await body.is_visible():
         await header.focus();await page.keyboard.press('Enter')

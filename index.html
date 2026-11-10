@@ -6012,7 +6012,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.9.0';
+const APP_VER = 'v3.9.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6514,6 +6514,7 @@ function _loadLocalVlake() {
     <button class="help-tab active" onclick="helpTab('gen',this)">Prvi koraci</button>
     <button class="help-tab" onclick="helpTab('vlake',this)">Vlake</button>
     <button class="help-tab" onclick="helpTab('doznaka',this)">Doznaka</button>
+    <button class="help-tab" onclick="helpTab('fajlovi',this)">Slanje fajlova</button>
     <button class="help-tab" onclick="helpTab('simboli',this)">Simboli</button>
   </div>
   <div id="help-body">
@@ -6727,6 +6728,27 @@ function _loadLocalVlake() {
 <div class="help-row"><div class="help-txt"><b>Stil poligona</b><span>Podesi boju, ispunu, obrub i crtkano u sekciji Stil poligona, da podloga i pojasevi ostanu čitljivi.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Brisanje</b><span>Obriši odjel koristi samo vlasnik uz potvrdu. Za privremeno uklanjanje s karte koristi sakrivanje sloja; brisanje uklanja podatke.</span></div></div>
 
+</div></section>
+</div>
+
+    <!-- ── SLANJE FAJLOVA (po profilima) ───────── -->
+    <div id="help-pane-fajlovi" style="display:none;">
+<section class="help-start"><span class="help-eyebrow">Po profilima</span><h3>Slanje i primanje fajlova</h3><p>Vidi samo dio za svoj profil: <b>terenski</b> radnik šalje isključivo šifrom od 5 cifara, <b>projektant</b> šalje i izabranim kolegama.</p></section>
+<section class="help-sec" data-profil="teren"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Terenski profil — slanje i primanje fajlova</button><div class="help-sec-body">
+<div class="help-row"><div class="help-txt"><b>Šta se može slati</b><span>KML fajl, trag, izmjerena linija ili poligon. Otvori <b>Preglednik KML oznaka</b> (dugme 📁 na karti) i uz fajl pritisni <b>Pošalji</b>, ili u popupu fajla na karti pritisni <b>Pošalji</b>. Trag i mjerenje šalješ iz njihovog popupa/kartice.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Slanje: samo šifrom</b><span>Terenski profil ne vidi spisak drugih korisnika. Poslije <b>Pošalji</b> dobiješ <b>šifru od 5 cifara</b> (npr. 48213). Pritisni <b>Kopiraj šifru</b> ili <b>Podijeli porukom</b> (Viber, WhatsApp, SMS) i pošalji je kolegi — ili mu je samo reci.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Koliko šifra važi</b><span>Šifra važi <b>2 dana</b> i može je preuzeti <b>više ljudi</b> (cijela ekipa istom šifrom). Poslije isteka nestaje sa servera. Za slanje treba internet.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Primanje fajla</b><span>Dobio si šifru? <b>Meni → Primljeni podaci → Preuzmi šifrom</b>, ukucaj 5 cifara i pritisni <b>Preuzmi</b>. Fajl se sprema na telefon i poslije toga radi bez interneta. Preuzimanje traži internet.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Gdje je primljeno</b><span>U <b>Meni → Primljeni podaci</b>: tab <b>Primljeno</b> (ono što si preuzeo — dodirni za prikaz na karti) i tab <b>Poslano</b> (šta si i kome slao; uz šifru piše koju si dobio). <b>Obriši spisak</b> briše samo spisak, ne i same fajlove.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Pogrešna šifra</b><span>Previše pogrešnih pokušaja (10 u 10 minuta) privremeno blokira unos. Provjeri cifre i pokušaj za par minuta.</span></div></div>
+</div></section>
+<section class="help-sec" data-profil="proj"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Projektant / admin — slanje i primanje fajlova</button><div class="help-sec-body">
+<div class="help-row"><div class="help-txt"><b>Šta se može slati</b><span>KML fajl, trag, linija ili poligon — iz <b>Preglednika KML oznaka</b> (dugme <b>Pošalji</b> uz fajl), iz popupa fajla na karti ili iz kartice traga/mjerenja.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Slanje kolegi</b><span><b>Pošalji</b> otvara spisak kolega iz tvoje šumarije (admin vidi sve korisnike). Ukucaj ime u <b>Traži</b>, označi jednog ili više, ili pritisni <b>Odaberi sve</b> / <b>Ukloni</b>, pa <b>Pošalji</b>. Kolega ga dobije čim bude online; na serveru ne ostaje.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Slanje šifrom</b><span>Za terenski profil, drugu šumariju ili veliku ekipu izaberi <b>Pošalji šifrom</b>: dobiješ šifru od 5 cifara koja važi 2 dana i može je preuzeti više ljudi. Podijeli je porukom.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Primanje</b><span>Fajlove poslane tebi dobijaš automatski kad si online: <b>Meni → Primljeni podaci → Primljeno</b>. Šifru koju ti je neko dao ukucaš u <b>Preuzmi šifrom</b> (5 cifara; starije šifre od 8 znakova i dalje važe).</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Poslano i spisak</b><span>Tab <b>Poslano</b> pokazuje šta si poslao i kome (ili koju šifru). <b>Obriši spisak</b> briše samo spisak, ne i fajlove kod primalaca.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Ako slanje ne prođe</b><span>Bez veze dobiješ poruku da pošalješ ponovo kad imaš signal. Fajl veći od ~2,8 MB se ne šalje — podijeli ga na manje dijelove.</span></div></div>
 </div></section>
 </div>
 

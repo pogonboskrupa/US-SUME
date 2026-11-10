@@ -24,7 +24,7 @@ function mk(opts) {
     navigator: {}, window: {}, DOMParser: FakeDOMParser, Blob, localStorage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } },
     _withTimeout: p => p, _mrezaProbaj: () => true, _mrezaSila() {}, showToast: m => log.toasts.push(m),
     _kmlcSave: async (k) => { log.order.push('save:' + k); if (opts.saveFail) return false; log.saved.push(k); return true; }, _kmlcDelete: async () => {},
-    _localSetKriticno: (k, v) => { store[k] = v; return true; }, isAdmin: () => false, _shareKolege: () => [{ id: 'k1', ime: 'Kolega Jedan' }], _dlgActions: async () => 0,
+    _localSetKriticno: (k, v) => { store[k] = v; return true; }, isAdmin: () => false, isSpdField: () => false, _shareKolege: () => [{ id: 'k1', ime: 'Kolega Jedan' }], _dlgActions: async () => 0,
     _escHtml: x => x, _isNetworkErr: () => false, _sesijaPinom: async () => true,
   };
   env._dlgPrompt = async () => opts.sifraUnos ?? null; env._dlgActions = opts.akcije || (async () => 0); env.navigator = { clipboard: { writeText: async () => {} } };
@@ -85,7 +85,7 @@ function mk(opts) {
   t = mk({ sifraUnos: 'ABCD2345', saveFail: true, rpcFn: async (n) => n === 'preuzmi_podatke_sifrom' ? { data: [{ vrsta: 'trag', naziv: 'X', sadrzaj: KML }] } : { data: null } });
   await t.api.primljeniPreuzmiSifrom();
   assert(!t.log.rpcs.some(x => x.n === 'potvrdi_preuzimanje_sifrom'), 'neuspjeh lokalnog upisa NE potvrđuje (podatak ostaje na serveru)');
-  t = mk({ sifraUnos: 'kratko' }); await t.api.primljeniPreuzmiSifrom(); assert(t.log.toasts.some(m => /8 znakova/.test(m)));
+  t = mk({ sifraUnos: 'kratko' }); await t.api.primljeniPreuzmiSifrom(); assert(t.log.toasts.some(m => /5 cifara/.test(m)));
   // _msrToKml
   const m = src.slice(src.indexOf('function _msrToKml'), src.indexOf('function _msrPosalji'));
   const toKml = new Function('_hexToKmlColor', '_escXml', m + ';return _msrToKml;')(() => 'ff0000ff', x => x);
