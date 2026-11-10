@@ -3644,6 +3644,7 @@ body.recbar-on #main { padding-bottom: 54px; }
 .ab-acc.slab    { color: #b91c1c; border-color: #ef4444; }
 /* Centar se ističe kad je karta odmaknuta od tvoje pozicije (_userPannedAway). */
 #ab-centar.odmaknuto .ab-ico { animation: abPulsPlavi 1.6s ease-out infinite; }
+#ab-centar.prati .ab-ico,#ab-loc.prati .ab-ico { box-shadow:0 0 0 3px #22c55e; }
 
 #btrag.active .ab-ico { box-shadow: 0 0 0 3px rgba(239,68,68,0.3); }
 /* Natpis aktivnog snimanja jedini ostaje obojen — to je stanje, ne ukras. */
@@ -6018,7 +6019,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.9.7';
+const APP_VER = 'v3.9.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7763,7 +7764,7 @@ function _loadLocalVlake() {
       <button class="abp-ukljuci" onclick="toggleGPS()">
         <svg class="ic"><use href="#ic-meta"/></svg><span>Uključi lokaciju</span></button>
       <div class="abp-chips abp-red1">
-        <button type="button" class="abp-chip abp-centar" onclick="_locPopupCentriraj()" title="Centriraj kartu na moju lokaciju">⌖ Centriraj</button>
+        <button type="button" class="abp-chip abp-centar" onclick="if(_pratiKlik())_locPopupCentriraj()" onpointerdown="_pratiDown()" onpointerup="_pratiUp()" onpointerleave="_pratiUp()" onpointercancel="_pratiUp()" title="Centriraj kartu na moju lokaciju (dug dodir: prati me)">⌖ Centriraj</button>
         <button class="abp-chip" id="compass-switch" onclick="_togCompassSwitch()" title="Kompas / pravac gledanja">🧭 Kompas</button>
         <button class="abp-chip" id="radius-switch" onclick="_togRadiusRings()" title="Krugovi udaljenosti oko tebe">⊚ Radijus</button>
       </div>
@@ -7777,7 +7778,7 @@ function _loadLocalVlake() {
       </div>
     </div>
   </div>
-  <button id="ab-centar" onclick="fabLokacija()" title="Centriraj kartu na moju lokaciju" style="display:none;">
+  <button id="ab-centar" onclick="if(_pratiKlik())fabLokacija()" onpointerdown="_pratiDown()" onpointerup="_pratiUp()" onpointerleave="_pratiUp()" onpointercancel="_pratiUp()" title="Centriraj kartu na moju lokaciju (dug dodir: prati me)" style="display:none;">
     <span class="ab-ico"><svg class="ic"><use href="#ic-meta"/></svg></span>
     <span>Centar</span>
   </button>

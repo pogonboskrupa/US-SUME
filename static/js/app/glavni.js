@@ -12791,6 +12791,7 @@ map.on('dragstart', () => {
   // svoju GPS poziciju — N.V. treba pratiti centar karte (vidi komentar uz
   // _userPannedAway), ne ostati zaglavljena na GPS visini.
   _userPannedAway = true;
+  if (typeof _pratiMe !== 'undefined' && _pratiMe) { _pratiPostavi(false); showToast('Praćenje isključeno'); }
   _updCentarBtn();
 });
 
@@ -15702,6 +15703,7 @@ function startGPS() {
   });
 }
 function stopGPS() {
+  if (typeof _pratiMe !== 'undefined' && _pratiMe) _pratiPostavi(false);
   if (wid) navigator.geolocation.clearWatch(wid);
   gpsOn = false; wid = null; lastP = null;
   _gpsAlt = false;
@@ -16178,6 +16180,9 @@ function onP(p) {
 
   // Terenski profil: detekcija trenutnog odjela (jeftino — bounds pre-check po granici)
   if (typeof isSpdField === 'function' && isSpdField()) _trnUpdOdjel(la, lo);
+
+  // Dug dodir na Centriraj = "Prati me": karta ide za pozicijom (prekida se povlačenjem karte)
+  if (_pratiMe && !_userPannedAway) map.panTo([la, lo], { animate: true, duration: 0.5 });
 
   // Prati lokaciju kad se snima vlaka ili trag (osim u slobodnom pogledu)
   if (((recOn && !recPaused) || _tragOn) && !_recFreeView && !(typeof window !== 'undefined' && (window.Explorer?.active && _activeTab === 'karta'))) {
@@ -17955,6 +17960,28 @@ function _toggleLocPopup() {
     _locPopTimerStart();
     const im = document.getElementById('ab-izmjeri-menu'); if (im) im.style.display = 'none';
   }
+}
+// "Prati me": dug dodir (550 ms) na Centriraj / Centar uključuje praćenje pozicije, drugi dug dodir
+// ili povlačenje karte ga isključuje. Kratki dodir i dalje samo centrira.
+var _pratiMe = false, _pratiLpT = null, _pratiLpBio = false;
+function _pratiDown() {
+  _pratiLpBio = false; clearTimeout(_pratiLpT);
+  _pratiLpT = setTimeout(() => { _pratiLpBio = true; _pratiToggle(); }, 550);
+}
+function _pratiUp() { clearTimeout(_pratiLpT); _pratiLpT = null; }
+function _pratiKlik() { if (_pratiLpBio) { _pratiLpBio = false; return false; } return true; }
+function _pratiPostavi(on) {
+  _pratiMe = !!on;
+  ['ab-centar', 'ab-loc'].forEach(id => { const b = document.getElementById(id); if (b) b.classList.toggle('prati', _pratiMe); });
+  const c = document.querySelector('#ab-loc-popup .abp-centar');
+  if (c) c.textContent = _pratiMe ? '📍 Prati me ✓' : '⌖ Centriraj';
+}
+function _pratiToggle() {
+  const p = document.getElementById('ab-loc-popup'); if (p) p.style.display = 'none';
+  if (_pratiMe) { _pratiPostavi(false); showToast('Praćenje isključeno'); return; }
+  fabLokacija();
+  _pratiPostavi(true);
+  showToast('📍 Prati me: karta ide za tobom. Povuci kartu ili ponovo drži Centriraj za prekid.');
 }
 function _locPopupCentriraj() {
   document.getElementById('ab-loc-popup').style.display = 'none';
