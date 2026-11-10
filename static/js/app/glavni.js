@@ -21850,9 +21850,14 @@ async function _localKmlRestore() {
         if(typeof content!=='string')throw new Error('Nedostaje lokalni sadržaj sloja');
         // Veliki sloj se ne obrađuje u prvim sekundama: karta i meni prvo postanu upotrebljivi, pa tek onda
         // ide teško parsiranje u pozadini (sakriven sloj čeka duže — ne vidi se ionako).
-        if (content.length >= _KML_PO_DIJELOVIMA_MIN && !_localKmlRestore._odgodio) {
+        // Na sporijem uređaju (lagani prikaz) odgađa se SVAKI veliki lokalni sloj (npr. granice odjela), ne samo prvi:
+        // karta, meni i GPS prvo postanu upotrebljivi, a slojevi se učitavaju jedan po jedan kad se glavna nit smiri.
+        const spor = !!(typeof window !== 'undefined' && window.DendroRender?.state?.lite);
+        if (content.length >= _KML_PO_DIJELOVIMA_MIN && (spor || !_localKmlRestore._odgodio)) {
           _localKmlRestore._odgodio = true;
-          await new Promise(r => setTimeout(r, data.vis === false ? 8000 : 2000));
+          if (spor && data.vis !== false) { try { showToast('⏳ Veliki sloj „' + (data.displayName || origName) + '“ se učitava u pozadini'); } catch(e) {} }
+          await new Promise(r => setTimeout(r, spor ? (data.vis === false ? 15000 : 5000) : (data.vis === false ? 8000 : 2000)));
+          if (spor && typeof requestIdleCallback === 'function') await new Promise(r => requestIdleCallback(() => r(), { timeout: 4000 }));
           if(sbUser?.id!==owner)return;
           if(kmlLs.some(k=>(k._origName||k.name)===origName&&!k._key))continue;
         }
