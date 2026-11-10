@@ -16952,7 +16952,7 @@ function _tqmClose() {
 // dalje imaju prednost za taj trag. Čuva se lokalno po uređaju.
 const _LSTYLE_DEFAULT = {
   tragW: 4, tragOp: 85, tragDash: 'solid', tragCol: '', tragLen: false,
-  msrW: 4, msrFillOp: 18, msrArea: true, msrLen: false,
+  msrW: 4, msrFillOp: 18, msrArea: false, msrLen: false,
   tackaScale: 100, vlakaDotScale: 100, lagerScale: 100
 };
 const _LSTYLE_KEY = 'tvlake_stil_linija';
@@ -17023,8 +17023,7 @@ function _stilRender() {
       ${_stilPrekidac('tragLen', 'Dužina na tragu')}`,
     msr: `${_stilKlizac('msrW', 'Debljina', 1, 10, 1, ' px')}
       ${_stilKlizac('msrFillOp', 'Ispuna poligona', 0, 100, 5, '%')}
-      ${_stilPrekidac('msrArea', 'Površina u poligonu')}
-      ${_stilPrekidac('msrLen', 'Dužina na liniji')}`,
+      <div class="stl-red stl-kol"><span class="stl-lbl">Oznaka na karti</span><span style="font-size:12px;opacity:.75">Uključuje se po mjerenju: Edituj → „Prikaži oznaku na karti“.</span></div>`,
     tacke: `${_stilKlizac('tackaScale', 'Oznaka tačke', 50, 200, 10, '%')}
       ${_stilKlizac('vlakaDotScale', 'Početak/kraj vlake', 50, 200, 10, '%')}
       ${_stilKlizac('lagerScale', 'Lager', 50, 200, 10, '%')}`,
@@ -26235,6 +26234,7 @@ function _mqmOpen() {
   if (nameEl) nameEl.value = entry.name;
   const odj = document.getElementById('mqm-odjel');
   if (odj) odj.value = entry.odjel;
+  const lb0 = document.getElementById('mqm-lbl'); if (lb0) lb0.checked = false;
   const title = document.getElementById('mqm-title');
   if (title) title.textContent = '📏 Mjerenje završeno — spremi opis (opciono)';
   document.getElementById('mqm-delete-btn').style.display = 'none';  // novo mjerenje — ništa za brisanje
@@ -26249,6 +26249,7 @@ function _mqmSave() {
     m.odjel = (document.getElementById('mqm-odjel')?.value || '').trim();
     m.pts   = _msrPts.slice();
     m.color = _msrColor;
+    m.showLbl = !!document.getElementById('mqm-lbl')?.checked;
     _msrRegSave();
   }
   _mqmClose();
@@ -26489,6 +26490,38 @@ function _msrOpenPopupNa(m, latlng) {
   } catch(e) {}
 }
 
+// Položaj oznake mjerenja. Poligon: tačka UNUTAR poligona najdalja od ivica (pol nedostupnosti,
+// mrežno pretraživanje u metrima) — centroid konkavnog poligona zna pasti van njega ili na liniju.
+function _msrLblPoligon(pts) {
+  const la0 = pts.reduce((a, p) => a + p.lat, 0) / pts.length, k = Math.cos(la0 * Math.PI / 180);
+  const P = pts.map(p => [p.lng * k * 111320, p.lat * 111320]);
+  const unutra = (x, y) => { let in_ = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) in_ = !in_; } return in_; };
+  const dist = (x, y) => { let d = Infinity; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [ax, ay] = P[j], [bx, by] = P[i], dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy; let t = l2 ? ((x - ax) * dx + (y - ay) * dy) / l2 : 0; t = Math.max(0, Math.min(1, t)); const ex = ax + t * dx - x, ey = ay + t * dy - y; d = Math.min(d, Math.sqrt(ex * ex + ey * ey)); } return d; };
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  P.forEach(([x, y]) => { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); });
+  let best = null, bd = -1, sx = (x1 - x0), sy = (y1 - y0);
+  for (let pass = 0; pass < 3; pass++) {
+    const N = 14;
+    for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
+      const x = x0 + sx * i / N, y = y0 + sy * j / N;
+      if (!unutra(x, y)) continue;
+      const d = dist(x, y); if (d > bd) { bd = d; best = [x, y]; }
+    }
+    if (!best) break;
+    sx /= 4; sy /= 4; x0 = best[0] - sx / 2; y0 = best[1] - sy / 2;
+  }
+  if (!best) { const c = L.latLngBounds(pts.map(p => [p.lat, p.lng])).getCenter(); return [c.lat, c.lng]; }
+  return [best[1] / 111320, best[0] / (k * 111320)];
+}
+// Linija: tačka na polovini DUŽINE linije (ne srednji vrh, koji može biti uz sam kraj).
+function _msrLblLinija(pts) {
+  const la0 = pts.reduce((a, p) => a + p.lat, 0) / pts.length, k = Math.cos(la0 * Math.PI / 180);
+  const seg = []; let tot = 0;
+  for (let i = 1; i < pts.length; i++) { const dx = (pts[i].lng - pts[i - 1].lng) * k, dy = pts[i].lat - pts[i - 1].lat, l = Math.sqrt(dx * dx + dy * dy); seg.push(l); tot += l; }
+  let r = tot / 2;
+  for (let i = 0; i < seg.length; i++) { if (r <= seg[i] || i === seg.length - 1) { const t = seg[i] ? Math.min(1, r / seg[i]) : 0; return [pts[i].lat + (pts[i + 1].lat - pts[i].lat) * t, pts[i].lng + (pts[i + 1].lng - pts[i].lng) * t]; } r -= seg[i]; }
+  return [pts[0].lat, pts[0].lng];
+}
 function _msrDrawAllSaved() {
   if (!window.map) return;
   if (!_msrSavedLayer) { _msrSavedLayer = L.layerGroup(); }
@@ -26507,7 +26540,7 @@ function _msrDrawAllSaved() {
     // Tekstualna oznaka na karti (dužina na sredini linije / površina u centru poligona)
     const _msrTextMk = (lat, lng, txt) => L.marker([lat, lng], {
       icon: L.divIcon({ className: '', iconSize: [0,0], iconAnchor: [0,0],
-        html: `<div class="vlaka-lbl" style="color:#fff;font-size:11px;font-weight:bold;pointer-events:none;white-space:nowrap;text-shadow:0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;">${txt}</div>` }),
+        html: `<div class="vlaka-lbl" style="transform:translate(-50%,-50%);color:#fff;font-size:11px;font-weight:bold;pointer-events:none;white-space:nowrap;text-shadow:0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;">${txt}</div>` }),
       interactive: false, pane: 'vlakeLabels'
     });
     // Klik otvara popup preko EKSPLICITNOG handlera (ne oslanjanjem na bindPopup-ov
@@ -26529,10 +26562,10 @@ function _msrDrawAllSaved() {
       poly.bindPopup(buildPopup, {maxWidth: 260});
       poly.on('click', _msrOpenPopup(poly));
       _msrSavedLayer.addLayer(poly);
-      if (_lineStyle.msrArea) {
-        const c = poly.getBounds().getCenter();
+      if (m.showLbl === true) {
+        const c = _msrLblPoligon(m.pts);
         const aM2 = _msrPoligonPovrsina(m.pts);
-        _msrSavedLayer.addLayer(_msrTextMk(c.lat, c.lng, (aM2/10000).toFixed(2) + ' ha'));
+        _msrSavedLayer.addLayer(_msrTextMk(c[0], c[1], (aM2/10000).toFixed(2) + ' ha'));
       }
     } else {
       const drawLL = mode === 'area' ? [...latlngs, latlngs[0]] : latlngs;
@@ -26544,9 +26577,9 @@ function _msrDrawAllSaved() {
       _msrSavedLayer.addLayer(hit);
       _msrSavedLayer.addLayer(bg);
       _msrSavedLayer.addLayer(fg);
-      if (_lineStyle.msrLen && m.pts.length >= 2) {
-        const midP = m.pts[Math.floor(m.pts.length / 2)];
-        _msrSavedLayer.addLayer(_msrTextMk(midP.lat, midP.lng, _msrFmt(_msrPts2Len(m.pts))));
+      if (m.showLbl === true && m.pts.length >= 2) {
+        const midP = _msrLblLinija(m.pts);
+        _msrSavedLayer.addLayer(_msrTextMk(midP[0], midP[1], _msrFmt(_msrPts2Len(m.pts))));
       }
     }
   });
@@ -26589,6 +26622,7 @@ function _msrRegZoom(id) {
   if (nameEl) nameEl.value = m.name || '';
   const odj = document.getElementById('mqm-odjel');
   if (odj) odj.value = m.odjel || '';
+  const lb = document.getElementById('mqm-lbl'); if (lb) lb.checked = m.showLbl === true;
   const title = document.getElementById('mqm-title');
   if (title) title.textContent = '✏️ Edituj mjerenje — vuci tačke ili dodaj nove';
   document.getElementById('mqm-delete-btn').style.display = '';  // postojeće mjerenje — nudi brisanje odmah
@@ -26613,6 +26647,7 @@ function _msrRegSetMeta(id) {
   m.name  = (document.getElementById('mreg-ei-name-'+id)?.value || m.name).trim() || m.name;
   m.gj    = _gjGetValue('mreg-'+id);
   m.odjel = (document.getElementById('mreg-ei-odjel-'+id)?.value || '').trim();
+  m.showLbl = !!document.getElementById('mreg-ei-lbl-'+id)?.checked;
   _msrRegSave();
   _msrRegRender();
 }
@@ -26637,6 +26672,7 @@ function _msrRegRender() {
         <div class="mf-col"><label>Naziv</label><input id="mreg-ei-name-${m.id}" value="${_escHtml(m.name)}"></div>
         <div class="mf-col"><label>GJ</label>${_gjFieldHtml('mreg-'+m.id, m.gj||'')}</div>
         <div class="mf-col"><label>Odjel</label><input id="mreg-ei-odjel-${m.id}" value="${_escHtml(m.odjel||'')}" placeholder="npr. 14a"></div>
+        <label class="mf-col" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="mreg-ei-lbl-${m.id}" ${m.showLbl===true?'checked':''}> Prikaži oznaku na karti</label>
         <button class="mf-save" onclick="_msrRegSetMeta('${m.id}')"><svg class="ic"><use href="#ic-potvrdi"/></svg> Spremi</button>
       </div>
       <div class="treg-btns">

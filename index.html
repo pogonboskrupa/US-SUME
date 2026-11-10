@@ -6028,7 +6028,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v3.9.9';
+const APP_VER = 'v3.10.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7599,6 +7599,7 @@ function _loadLocalVlake() {
       <input id="mqm-odjel" style="width:100%;background:#f8fafc;border:1.5px solid #e2e8f0;color:#1e293b;border-radius:10px;padding:9px 11px;font-size:13px;box-sizing:border-box;outline:none;transition:border-color 0.15s;" onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'" placeholder="npr. 14a">
     </div>
   </div>
+  <label style="display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:13px;color:#1e293b;"><input type="checkbox" id="mqm-lbl" style="width:18px;height:18px"> Prikaži oznaku na karti (površina / dužina)</label>
   <div style="display:flex;gap:10px;">
     <button id="mqm-delete-btn" onclick="_mqmDelete()" style="display:none;flex:0 0 auto;background:#fef2f2;color:#dc2626;border:1.5px solid #fecaca;border-radius:12px;padding:12px 14px;font-size:14px;cursor:pointer;"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
     <button onclick="_mqmSave()"
