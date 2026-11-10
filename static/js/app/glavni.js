@@ -12516,7 +12516,7 @@ async function _mapFavMenu(i) {
 
 function openMapFavs() {
   _mapFavRender();
-  _mapFavMigrirajServer().then(p => { if (p) _mapFavRender(); }).catch(() => {});
+  if (typeof _mapFavMigrirajServer === 'function') _mapFavMigrirajServer().then(p => { if (p) _mapFavRender(); }).catch(() => {});
   document.getElementById('mapfav-modal').classList.add('open');
 }
 function closeMapFavs() {
