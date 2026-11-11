@@ -7848,12 +7848,19 @@ async function openShareFotoDlg(tsKey) {
     }
   }
 
-  const entries = Object.entries(kolegeMap).filter(([kid]) => kid !== myId);
+  // Terenski nalog bira samo svoje kolege (dodane pozivom), ne sve korisnike; ostali: šumarija + kolege iz poziva.
+  const teren = isSpdField() && !isAdmin();
+  const kontakti = _kontaktiLista();
+  let entries = teren ? [] : Object.entries(kolegeMap).filter(([kid]) => kid !== myId);
+  kontakti.forEach(k => { if (k.id !== myId && !entries.some(([kid]) => kid === k.id)) entries.push([k.id, { ime: k.ime, color: k.color }]); });
+  if (teren) projShareHtml = '';
+  const dodajHtml = '<button type="button" onclick="_shareFotoDodajKolegu()" style="width:100%;margin:6px 0 10px;padding:9px;border-radius:8px;border:1px dashed #3b82f6;background:transparent;color:#93c5fd;font-weight:600;">➕ Dodaj kolegu (poziv)</button>';
+  if (teren && !kontakti.length) _kontaktiOsvjezi().then(l => { if (l.length && _shareFotoKey === tsKey) openShareFotoDlg(tsKey); }).catch(() => {});
   if (!entries.length && !projShareHtml) {
-    list.innerHTML = '<div style="text-align:center;padding:12px;color:#94a3b8;">Nema kolega u šumariji</div>';
+    list.innerHTML = '<div style="text-align:center;padding:12px;color:#94a3b8;">Još nemaš dodanih kolega — dodaj ih pozivom.</div>' + dodajHtml;
     return;
   }
-  list.innerHTML = projShareHtml + entries.map(([kid, info]) => {
+  list.innerHTML = dodajHtml + projShareHtml + entries.map(([kid, info]) => {
     const done = alreadyWith.has(kid);
     return `<label class="share-kolega-row" onclick="event.stopPropagation()" style="${done?'opacity:0.65;':''}">
       <input type="checkbox" value="${kid}" ${done ? 'checked disabled' : ''}>
@@ -7864,6 +7871,12 @@ async function openShareFotoDlg(tsKey) {
   }).join('');
 }
 
+async function _shareFotoDodajKolegu() {
+  const key = _shareFotoKey;
+  document.getElementById('share-foto-dlg').style.display = 'none';
+  await kontaktiDodaj();
+  if (key) openShareFotoDlg(key);
+}
 function closeShareFotoDlg() {
   document.getElementById('share-foto-dlg').style.display = 'none';
   _shareFotoKey = null;
@@ -37629,7 +37642,7 @@ async function _primljeniSync(force) {
     _primljeniObavijesti(novi);
     if (novi.length && document.getElementById('primljeni-panel')) _primljeniRender();
   } catch (e) { _primLog('sync', false, 0, e && e.message || String(e)); /* nema veze / nema tabele — pokušaj ponovo kasnije */ }
-  finally { _primljeniBusy = false; }
+  finally { _primljeniBusy = false; try { _kontaktiOsvjezi().catch(() => {}); } catch (e) {} }
 }
 
 // Lokalni upis primljenog podatka: sadržaj u IndexedDB, metapodaci u listu. Vraća stavku ili null.
@@ -37656,25 +37669,127 @@ function _primLogUcitaj() {
 }
 
 // ── Slanje ──
+// ── KOLEGE (KONTAKTI) ZA SLANJE ───────────────────────────────────────────────
+// Terenski nalog ne bira primaoce iz spiska svih korisnika: kolegu DODAJE pozivom (kod od 5 cifara),
+// a kad kolega prihvati, ostaje u njegovom spisku za slanje KML-a, traga, mjerenja i fotografija.
+// Spisak se čuva lokalno (radi bez mreže) i osvježava sa servera (kontakti_moji).
+const _KONTAKTI_PREF = 'tvlake_kontakti_v1:';
+function _kontaktiKljuc() { return _KONTAKTI_PREF + (sbUser?.id || 'x'); }
+function _kontaktiLokalno() {
+  try { const a = JSON.parse(localStorage.getItem(_kontaktiKljuc()) || '[]'); return Array.isArray(a) ? a.filter(k => k && k.id) : []; } catch (e) { return []; }
+}
+function _kontaktiSpremi(lista) { try { localStorage.setItem(_kontaktiKljuc(), JSON.stringify(lista)); } catch (e) {} }
+// Spisak za izbor primaoca: oblik kao _shareKolege() ({id, ime, sumarija, color})
+function _kontaktiLista() {
+  return _kontaktiLokalno().map(k => ({ id: k.id, ime: k.ime || 'Kolega', sumarija: k.sumarija || '', color: (typeof _bojaZaId === 'function' ? _bojaZaId(k.id) : '#64748b') }));
+}
+let _kontaktiZadnji = 0;
+async function _kontaktiOsvjezi(force) {
+  if (!sb || !sbUser || sbUser._cachedStub) return _kontaktiLokalno();
+  const sad = Date.now();
+  if (!force && sad - _kontaktiZadnji < 600000) return _kontaktiLokalno();
+  if (typeof _mrezaProbaj === 'function' && !_mrezaProbaj()) return _kontaktiLokalno();
+  _kontaktiZadnji = sad;
+  const prije = _kontaktiLokalno();
+  try {
+    const r = await _withTimeout(sb.rpc('kontakti_moji'), 15000);
+    if (r.error) throw r.error;
+    const nova = (r.data || []).map(k => ({ id: k.id, ime: k.ime, sumarija: k.sumarija }));
+    _kontaktiSpremi(nova);
+    const ids = new Set(prije.map(k => k.id));
+    nova.filter(k => !ids.has(k.id)).forEach(k => { if (prije.length || force) showToast('👥 ' + (k.ime || 'Kolega') + ' je dodan u tvoje kolege'); });
+    return nova;
+  } catch (e) { return prije; }
+}
+async function _kontaktiPozovi() {
+  if (typeof _mrezaSila === 'function') _mrezaSila(30000);
+  try {
+    const r = await _withTimeout(sb.rpc('kontakt_poziv_napravi'), 20000);
+    if (r.error) throw r.error;
+    const kod = String(r.data);
+    const txt = 'Dendro Map — poziv za dijeljenje. Kod: ' + kod + ' (važi 1 dan). U aplikaciji: Meni → Primljeni podaci → Kolege → Unesi kod poziva.';
+    const i = await _dlgActions('👥 Kod poziva: ' + kod + '\nKolega ga unosi u Meni → Primljeni podaci → Kolege. Važi 1 dan i jednokratan je. Kad ga prihvati, pojavit će se u tvom spisku.', [
+      { label: '📋 Kopiraj kod' }, { label: '📤 Podijeli porukom (Viber, WhatsApp…)' }, { label: 'Zatvori' }]);
+    if (i === 0) { try { await navigator.clipboard.writeText(kod); showToast('📋 Kod kopiran: ' + kod); } catch (e) { showToast('Kod: ' + kod); } }
+    else if (i === 1) {
+      try { if (window.AndroidShare && AndroidShare.shareText) { AndroidShare.shareText('Dendro Map — poziv', txt); return; } } catch (e) {}
+      try { if (navigator.share) { await navigator.share({ text: txt }); return; } } catch (e) {}
+      try { await navigator.clipboard.writeText(txt); showToast('📋 Poruka kopirana'); } catch (e) { showToast('Kod: ' + kod); }
+    }
+  } catch (e) {
+    const m = String(e?.message || e);
+    showToast(/PGRST202|does not exist|kontakt_poziv/i.test(m) ? '⚠ Server još nema ovu mogućnost — admin treba pokrenuti migraciju 20261112_kontakti.sql' : (typeof _isNetworkErr === 'function' && _isNetworkErr(e)) ? '⚠ Nema veze — pokušaj kad imaš signal' : '⚠ ' + m);
+  }
+}
+async function _kontaktiPrihvati() {
+  const unos = await _dlgPrompt('Unesi kod poziva koji si dobio (5 cifara):', '', { title: 'Prihvati poziv', okLabel: 'Prihvati' });
+  if (unos == null) return;
+  const kod = String(unos).replace(/[^0-9]/g, '');
+  if (kod.length !== 5) { showToast('Kod ima 5 cifara'); return; }
+  if (typeof _mrezaSila === 'function') _mrezaSila(30000);
+  try {
+    const r = await _withTimeout(sb.rpc('kontakt_poziv_prihvati', { p_kod: kod }), 20000);
+    if (r.error) throw r.error;
+    const k = (r.data || [])[0];
+    if (!k) { showToast('Kod nije ispravan ili je istekao'); return; }
+    const lista = _kontaktiLokalno().filter(x => x.id !== k.id);
+    lista.push({ id: k.id, ime: k.ime, sumarija: k.sumarija });
+    _kontaktiSpremi(lista);
+    showToast('✓ ' + (k.ime || 'Kolega') + ' je dodan — možeš mu slati fajlove');
+  } catch (e) {
+    const m = String(e?.message || e);
+    showToast(/PGRST202|does not exist|kontakt_poziv/i.test(m) ? '⚠ Server još nema ovu mogućnost — admin treba pokrenuti migraciju 20261112_kontakti.sql' : (typeof _isNetworkErr === 'function' && _isNetworkErr(e)) ? '⚠ Nema veze — pokušaj kad imaš signal' : '⚠ ' + m);
+  }
+}
+async function _kontaktiUkloniDlg() {
+  const lista = _kontaktiLokalno();
+  if (!lista.length) { showToast('Nemaš dodanih kolega'); return; }
+  const i = await _dlgActions('Koga ukloniti iz kolega? (Ukloni i njega kod tebe)', lista.map(k => ({ label: '✕ ' + _escHtml(k.ime || 'Kolega'), danger: true })).concat([{ label: 'Odustani' }]));
+  if (i == null || i >= lista.length) return;
+  const k = lista[i];
+  try {
+    const r = await _withTimeout(sb.rpc('kontakt_ukloni', { p_id: k.id }), 15000);
+    if (r.error) throw r.error;
+    _kontaktiSpremi(lista.filter(x => x.id !== k.id));
+    showToast('Kolega uklonjen: ' + (k.ime || ''));
+  } catch (e) { showToast('⚠ Nema veze — ukloni kad imaš signal'); }
+}
+// Glavni izbornik "Kolege": poziv, prihvatanje, uklanjanje. Vraća se kad se nešto promijeni.
+async function kontaktiDodaj() {
+  if (!sbUser || !sbProfile) { showToast('Prijavi se da dodaš kolegu'); return; }
+  await _kontaktiOsvjezi(true);
+  const n = _kontaktiLokalno().length;
+  const i = await _dlgActions('👥 Kolege za slanje (' + n + ')\nKolegu dodaješ pozivom; kad prihvati, ostaje u tvom spisku za slanje fajlova, tragova i fotografija.', [
+    { label: '📨 Pozovi kolegu (dobiješ kod od 5 cifara)' },
+    { label: '🔢 Unesi kod koji sam dobio' },
+    { label: '✕ Ukloni kolegu' },
+    { label: 'Zatvori' }]);
+  if (i === 0) await _kontaktiPozovi();
+  else if (i === 1) await _kontaktiPrihvati();
+  else if (i === 2) await _kontaktiUkloniDlg();
+}
 async function podaciPosalji(vrsta, naziv, kml) {
   if (!sbUser || !sbProfile) { showToast('Prijavi se da šalješ podatke'); return; }
   if (typeof kml !== 'string' || !kml) { showToast('Nema podataka za slanje'); return; }
   if (new Blob([kml]).size > _PRIM_MAX_BAJTA) { showToast('Podatak je prevelik za slanje (najviše ~2,8 MB)'); return; }
   const admin = isAdmin();
-  // Terenski profil ne vidi druge korisnike — šalje se SAMO šifrom (5 cifara).
-  const samoSifra = !admin && isSpdField();
-  const kolege = samoSifra ? [] : (admin ? await _primaociSvi() : _shareKolege());
+  // Terenski profil ne vidi druge korisnike: bira iz SVOJIH kolega (dodanih pozivom) ili šalje šifrom.
+  // Ostali vide svoju šumariju + kolege dodane pozivom (npr. iz druge šumarije).
+  const teren = !admin && isSpdField();
+  let kolege = teren ? _kontaktiLista() : (admin ? await _primaociSvi() : _shareKolege());
+  if (!teren && !admin) { const ima = new Set(kolege.map(k => k.id)); _kontaktiLista().forEach(k => { if (!ima.has(k.id)) kolege.push(k); }); }
+  if (teren && !_kontaktiLokalno().length) _kontaktiOsvjezi().catch(() => {});
   let i;
-  if (samoSifra) {
-    i = 0;
-  } else if (admin || kolege.length > 8) {
+  if (admin || kolege.length > 8) {
     i = await _primaocBiraj(kolege, naziv, admin);
   } else {
     const akcije = kolege.map(k => ({ label: _escHtml(k.ime) }));
     akcije.push({ label: '🔑 Pošalji šifrom — više ljudi, drugi profil ili šumarija (važi 2 dana)' });
+    akcije.push({ label: '➕ Dodaj kolegu (poziv)' });
     akcije.push({ label: 'Odustani' });
-    i = await _dlgActions('📤 Pošalji: ' + naziv, akcije);
+    i = await _dlgActions('📤 Pošalji: ' + naziv + (teren && !kolege.length ? '\nJoš nemaš dodanih kolega — dodaj ih pozivom ili pošalji šifrom.' : ''), akcije);
   }
+  if (i === kolege.length + 1) { await kontaktiDodaj(); return podaciPosalji(vrsta, naziv, kml); }
   const sifrom = i === kolege.length;
   const izabrani = Array.isArray(i) ? i : (sifrom ? [] : [i]);
   if (i == null || (!sifrom && !izabrani.length) || izabrani.some(x => !(x >= 0 && x < kolege.length))) return;
@@ -37738,11 +37853,12 @@ function _primaocBiraj(lista, naziv, prikaziSumariju) {
     box.style.cssText = 'background:var(--bg2,#14201a);color:var(--text,#e8f0ea);width:100%;max-width:520px;max-height:85vh;display:flex;flex-direction:column;border-radius:16px 16px 0 0;padding:14px';
     const dugme = 'padding:10px 12px;border-radius:10px;border:1px solid #476;background:transparent;color:inherit;min-height:44px';
     box.innerHTML = '<div style="font-weight:700;margin-bottom:8px">📤 Pošalji: ' + _escHtml(naziv) + '</div>' +
-      '<input id="prim-trazi" type="search" autocomplete="off" placeholder="Traži korisnika (ime ili šumarija)" style="font-size:16px;padding:10px;border-radius:10px;border:1px solid #476;background:rgba(255,255,255,.07);color:inherit;margin-bottom:8px">' +
+      '<input id="prim-trazi" type="search" autocomplete="off" placeholder="Traži kolegu (ime ili šumarija)" style="font-size:16px;padding:10px;border-radius:10px;border:1px solid #476;background:rgba(255,255,255,.07);color:inherit;margin-bottom:8px">' +
       '<div style="display:flex;gap:8px;margin-bottom:6px"><button type="button" id="prim-sve" style="flex:1;' + dugme + '">Odaberi sve</button><button type="button" id="prim-ukloni" style="flex:1;' + dugme + '">Ukloni</button></div>' +
       '<div id="prim-lista" style="overflow-y:auto;flex:1;min-height:120px"></div>' +
       '<button type="button" id="prim-salji" style="margin-top:8px;padding:12px;border-radius:10px;border:0;background:#2f7d4f;color:#fff;font-weight:700;min-height:46px"></button>' +
       '<button type="button" id="prim-sifra" style="margin-top:6px;' + dugme + '">🔑 Pošalji šifrom (više ljudi, važi 2 dana)</button>' +
+      '<button type="button" id="prim-dodaj" style="margin-top:6px;' + dugme + '">➕ Dodaj kolegu (poziv)</button>' +
       '<button type="button" id="prim-x" style="margin-top:4px;padding:10px;border:0;background:transparent;color:inherit;opacity:.7">Odustani</button>';
     bg.appendChild(box); document.body.appendChild(bg);
     const kraj = v => { bg.remove(); res(v); };
@@ -37770,6 +37886,7 @@ function _primaocBiraj(lista, naziv, prikaziSumariju) {
     });
     box.querySelector('#prim-salji').addEventListener('click', () => { if (izabrani.size) kraj([...izabrani].sort((a, b) => a - b)); });
     box.querySelector('#prim-sifra').addEventListener('click', () => kraj(lista.length));
+    box.querySelector('#prim-dodaj').addEventListener('click', () => kraj(lista.length + 1));
     box.querySelector('#prim-x').addEventListener('click', () => kraj(null));
     bg.addEventListener('click', e => { if (e.target === bg) kraj(null); });
     crtaj();
@@ -37889,6 +38006,7 @@ function _primljeniRender(oznaciVidjeno) {
     '<button type="button" role="tab" aria-selected="' + poslano + '" onclick="_primTabPostavi(\'s\')">📤 Poslano (' + poslani.length + ')</button></div><div class="prm-body">';
   if (!poslano) {
     h += '<button type="button" class="prm-sifra" onclick="primljeniPreuzmiSifrom()">🔑 Preuzmi šifrom</button>';
+    h += '<button type="button" class="prm-sifra" onclick="kontaktiDodaj().then(_primljeniRender)">👥 Kolege (' + _kontaktiLokalno().length + ')</button>';
     if (!lista.length) h += '<p class="prm-prazno">Još ništa nije primljeno. Kad ti kolega pošalje trag, poligon ili KML, stiže ovdje i dobiješ obavijest. Kolegama šalješ iz kartice traga, mjerenja ili Dodaj fajl na kartu → Pošalji.</p>';
     lista.forEach(x => {
       h += '<div class="prm-red' + (!x.vidjeno ? ' novo' : '') + '"><div class="prm-info"><b>' + (_PRIM_IKONA[x.vrsta] || '🗺') + ' ' + _escHtml(x.naziv) + (!x.vidjeno ? ' <i>NOVO</i>' : '') + '</b>' +

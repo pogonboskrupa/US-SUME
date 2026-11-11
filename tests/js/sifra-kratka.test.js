@@ -7,11 +7,12 @@ const html=fs.readFileSync(__dirname+'/../../index.html','utf8');
 assert(/\^\[0-9\]\{5\}\$/.test(sql)&&/\[A-HJKMNP-Z2-9\]\{8\}/.test(sql),'constraint dopušta 5 cifara i staru šifru');
 assert(/lpad\(v_br::text, 5, '0'\)/.test(sql),'šifra se dopunjava nulama do 5 cifara');
 assert(/gen_random_uuid/.test(sql),'CSPRNG izvor');
-// Klijent: terenski profil bez spiska korisnika, direktno šifra
+// Klijent: terenski bira iz SVOJIH kolega (dodanih pozivom), ne iz spiska svih korisnika
 const f=src.slice(src.indexOf('async function podaciPosalji'),src.indexOf('// Admin šalje BILO KOM'));
-assert(/samoSifra = !admin && isSpdField\(\)/.test(f));
-assert(/samoSifra \? \[\]/.test(f),'terenski ne učitava kolege');
-assert(/if \(samoSifra\) \{\s*i = 0;/.test(f),'terenski preskače birač');
+assert(/const teren = !admin && isSpdField\(\)/.test(f));
+assert(/teren \? _kontaktiLista\(\)/.test(f),'terenski vidi samo svoje kolege');
+assert(/_kontaktiLista\(\)\.forEach/.test(f),'ostali dobijaju i kolege iz poziva');
+assert(/kontaktiDodaj\(\); return podaciPosalji/.test(f),'dodaj kolegu pa ponovo izbor');
 // Unos: 5 cifara (i stara 8)
 const u=src.slice(src.indexOf('async function primljeniPreuzmiSifrom'),src.indexOf('async function primljeniPreuzmiSifrom')+900);
 assert(/sifra\.length !== 5 && sifra\.length !== 8/.test(u)&&/5 cifara/.test(u));

@@ -64,11 +64,11 @@ function mk(opts) {
   t = mk({}); await t.api.podaciPosalji('kml', 'Veliki', 'x'.repeat(3000000)); assert.strictEqual(t.log.rpc, null);
   // šifra: opcija iza kolega; šalje bez p_to, prikazuje šifru
   let prikazano = null;
-  t = mk({ akcije: async (naslov, lista) => { if (/Šifra:/.test(naslov)) { prikazano = naslov; return 2; } return lista.length - 2; }, rpcFn: async (n) => n === 'posalji_podatke_sifrom' ? { data: 'ABCD2345' } : { data: null } });
+  t = mk({ akcije: async (naslov, lista) => { if (/Šifra:/.test(naslov)) { prikazano = naslov; return 2; } return lista.length - 3; }, rpcFn: async (n) => n === 'posalji_podatke_sifrom' ? { data: 'ABCD2345' } : { data: null } });
   await t.api.podaciPosalji('trag', 'Moj trag', KML);
   assert.strictEqual(t.log.rpcs[0].n, 'posalji_podatke_sifrom'); assert(!('p_to' in t.log.rpcs[0].p)); assert(/ABCD 2345/.test(prikazano));
   // bez kolega (terenski profil) šifra je i dalje dostupna
-  const t0 = mk({ akcije: async (naslov, lista) => { assert.strictEqual(lista.length, 3, 'kolega + šifra + odustani'); return 2; }, rpcFn: async () => ({ data: 'ZZZZ2222' }) });
+  const t0 = mk({ akcije: async (naslov, lista) => { assert.strictEqual(lista.length, 4, 'kolega + šifra + dodaj kolegu + odustani'); return 2; }, rpcFn: async () => ({ data: 'ZZZZ2222' }) });
   // preuzimanje: lokalno spremi PRIJE potvrde; neispravna šifra → nema upisa
   t = mk({ sifraUnos: 'abcd-2345', rpcFn: async (n) => n === 'preuzmi_podatke_sifrom' ? { data: [{ vrsta: 'trag', naziv: 'Sifrom', sadrzaj: KML, od_ime: 'Neko Treći' }] } : { data: null } });
   await t.api.primljeniPreuzmiSifrom();
