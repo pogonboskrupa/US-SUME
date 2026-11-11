@@ -62,16 +62,16 @@ jobs:
       - name: Pregled Menija, projekata, Dnevnog moda i štampe
         run: |
           python -m pip install playwright==1.55.0
-          # apt mirror (azure.archive.ubuntu.com) zna privremeno ne odgovarati (run 317, 403) pa se
-          # instalacija ponavlja; ako apt ostane mrtav, preglednik se instalira bez sistemskih paketa
-          # (runner ih većinom već ima) umjesto da cijeli release stane.
+          # apt mirror (azure.archive.ubuntu.com) zna ne odgovarati: run 317 i 403 pali na exit 100, a run 404
+          # je visio preko 38 min. Zato svaki apt korak ima tvrd rok, a ako ne uspije preglednik se
+          # instalira bez sistemskih paketa (runner ih većinom već ima).
           ok=0
-          for i in 1 2 3; do
-            sudo apt-get update -o Acquire::Retries=3 || true
-            if python -m playwright install --with-deps chromium; then ok=1; break; fi
-            echo "Pokušaj $i instalacije preglednika nije uspio"; sleep $((i * 20))
+          for i in 1 2; do
+            timeout 60 sudo apt-get update -o Acquire::Retries=1 -o Acquire::http::Timeout=15 || true
+            if timeout 240 python -m playwright install --with-deps chromium; then ok=1; break; fi
+            echo "Pokušaj $i instalacije preglednika nije uspio"; sleep 10
           done
-          if [ "$ok" != 1 ]; then python -m playwright install chromium; fi
+          if [ "$ok" != 1 ]; then timeout 300 python -m playwright install chromium; fi
           bash tests/browser/run-ci.sh
       - uses: actions/upload-artifact@v4
         if: always()
