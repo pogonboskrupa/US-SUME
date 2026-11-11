@@ -15,7 +15,7 @@ assert(m,'indeks u listi ostaje originalni, ne pozicija u filtriranom prikazu');
 console.log('OK admin salje svima');
 // v3.7.4: višestruki izbor, "Odaberi sve" / "Ukloni", i akcija Pošalji u pregledniku oznaka
 assert(/prim-sve/.test(src)&&/prim-ukloni/.test(src)&&/prim-salji/.test(src));
-assert(/for \(const idx of izabrani\)/.test(src),'šalje svakom izabranom korisniku');
+assert(src.includes('for (const idx of (svima ? kolege.map((_, k) => k) : izabrani))'),'šalje svakom izabranom korisniku');
 const lib=fs.readFileSync(__dirname+'/../../static/js/map-library.js','utf8');
 assert(/actionName==='send'/.test(lib)&&/btn\('send'/.test(lib),'preglednik oznaka ima Pošalji');
 console.log('OK multi + preglednik');
