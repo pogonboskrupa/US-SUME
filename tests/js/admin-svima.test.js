@@ -1,0 +1,13 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('fs');
+const src=require('./_izvor').izvor();
+const sql=fs.readFileSync(__dirname+'/../../supabase/migrations/20261113_admin_svima.sql','utf8');
+assert(/function public\.posalji_podatke_svima/.test(sql)&&/Samo admin može poslati svima/.test(sql),'RPC samo za admina');
+assert(/insert into public\.primljeni_podaci[\s\S]*?select auth\.uid\(\), k\.id/.test(sql)&&/k\.id <> auth\.uid\(\)/.test(sql),'upis za sve osim pošiljaoca');
+assert(/120000000/.test(sql),'ograničenje ukupne veličine');
+assert(/if not v_ja_admin then[\s\S]*?>= 60/.test(sql),'admin izuzet od satnog ograničenja');
+const f=src.slice(src.indexOf('async function podaciPosalji'),src.indexOf('// Admin šalje BILO KOM'));
+assert(/const svima = admin && i === kolege\.length \+ 2/.test(f)&&/posalji_podatke_svima/.test(f),'klijent zove RPC');
+assert(/for \(const idx of \(svima \? kolege\.map/.test(f),'rezerva: petlja po korisnicima ako RPC ne postoji');
+assert(/id="prim-svima"/.test(src)&&/prikaziSumariju \?/.test(src),'dugme samo za admina');
+console.log('OK admin svima');

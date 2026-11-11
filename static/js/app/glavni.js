@@ -37790,9 +37790,12 @@ async function podaciPosalji(vrsta, naziv, kml) {
     i = await _dlgActions('📤 Pošalji: ' + naziv + (teren && !kolege.length ? '\nJoš nemaš dodanih kolega — dodaj ih pozivom ili pošalji šifrom.' : ''), akcije);
   }
   if (i === kolege.length + 1) { await kontaktiDodaj(); return podaciPosalji(vrsta, naziv, kml); }
+  const svima = admin && i === kolege.length + 2;
   const sifrom = i === kolege.length;
   const izabrani = Array.isArray(i) ? i : (sifrom ? [] : [i]);
-  if (i == null || (!sifrom && !izabrani.length) || izabrani.some(x => !(x >= 0 && x < kolege.length))) return;
+  if (svima) {
+    if (!await _dlgConfirm('Poslati „' + naziv + '“ SVIM korisnicima (' + kolege.length + ')?', { okLabel: 'Pošalji svima' })) return;
+  } else if (i == null || (!sifrom && !izabrani.length) || izabrani.some(x => !(x >= 0 && x < kolege.length))) return;
   if (typeof _mrezaSila === 'function') _mrezaSila(30000);
   if (sbUser._cachedStub && !(await _sesijaPinom(true))) { showToast('Slanje traži vezu sa serverom'); return; }
   const poruka = e => {
@@ -37801,6 +37804,18 @@ async function podaciPosalji(vrsta, naziv, kml) {
     if (typeof _isNetworkErr === 'function' && _isNetworkErr(e)) return '⚠ Nema veze — pošalji ponovo kad imaš signal';
     return '⚠ ' + m;
   };
+  if (svima) {
+    // Jedan poziv za sve (brzo i na slabom signalu); ako server još nema funkciju, ide petlja po korisnicima.
+    try {
+      const r = await _withTimeout(sb.rpc('posalji_podatke_svima', { p_vrsta: vrsta, p_naziv: String(naziv).slice(0, 120), p_sadrzaj: kml }), 60000);
+      if (r.error) throw r.error;
+      try { _poslaniDodaj(vrsta, naziv, '📣 svi korisnici (' + r.data + ')'); } catch (e) {}
+      showToast('✓ Poslano svima: ' + r.data + ' korisnika');
+      return;
+    } catch (e) {
+      if (!/PGRST202|does not exist|posalji_podatke_svima/i.test(String(e?.message || e))) { showToast(poruka(e)); return; }
+    }
+  }
   if (sifrom) {
     try {
       const r = await _withTimeout(sb.rpc('posalji_podatke_sifrom', { p_vrsta: vrsta, p_naziv: String(naziv).slice(0, 120), p_sadrzaj: kml }), 25000);
@@ -37812,7 +37827,7 @@ async function podaciPosalji(vrsta, naziv, kml) {
   }
   const ok = [], neuspjeli = [];
   let zadnjaGreska = null;
-  for (const idx of izabrani) {
+  for (const idx of (svima ? kolege.map((_, k) => k) : izabrani)) {
     try {
       const r = await _withTimeout(sb.rpc('posalji_podatke', { p_to: kolege[idx].id, p_vrsta: vrsta, p_naziv: String(naziv).slice(0, 120), p_sadrzaj: kml }), 25000);
       if (r.error) throw r.error;
@@ -37859,6 +37874,7 @@ function _primaocBiraj(lista, naziv, prikaziSumariju) {
       '<button type="button" id="prim-salji" style="margin-top:8px;padding:12px;border-radius:10px;border:0;background:#2f7d4f;color:#fff;font-weight:700;min-height:46px"></button>' +
       '<button type="button" id="prim-sifra" style="margin-top:6px;' + dugme + '">🔑 Pošalji šifrom (više ljudi, važi 2 dana)</button>' +
       '<button type="button" id="prim-dodaj" style="margin-top:6px;' + dugme + '">➕ Dodaj kolegu (poziv)</button>' +
+      (prikaziSumariju ? '<button type="button" id="prim-svima" style="margin-top:6px;' + dugme + ';border-color:#d97706">📣 Pošalji SVIM korisnicima (' + lista.length + ')</button>' : '') +
       '<button type="button" id="prim-x" style="margin-top:4px;padding:10px;border:0;background:transparent;color:inherit;opacity:.7">Odustani</button>';
     bg.appendChild(box); document.body.appendChild(bg);
     const kraj = v => { bg.remove(); res(v); };
@@ -37887,6 +37903,7 @@ function _primaocBiraj(lista, naziv, prikaziSumariju) {
     box.querySelector('#prim-salji').addEventListener('click', () => { if (izabrani.size) kraj([...izabrani].sort((a, b) => a - b)); });
     box.querySelector('#prim-sifra').addEventListener('click', () => kraj(lista.length));
     box.querySelector('#prim-dodaj').addEventListener('click', () => kraj(lista.length + 1));
+    box.querySelector('#prim-svima')?.addEventListener('click', () => kraj(lista.length + 2));
     box.querySelector('#prim-x').addEventListener('click', () => kraj(null));
     bg.addEventListener('click', e => { if (e.target === bg) kraj(null); });
     crtaj();
