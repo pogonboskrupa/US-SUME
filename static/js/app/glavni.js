@@ -15709,6 +15709,9 @@ function toggleGPS() {
 function startGPS() {
   if (!navigator.geolocation) { showToast('⚠ Uređaj ne podržava GPS!'); return; }
   gpsOn = true;
+  // "Prati me" je podrazumijevano uključeno čim se lokacija upali; isključuje ga povlačenje karte,
+  // dug dodir na Centriraj ili gašenje lokacije (stopGPS).
+  try { _pratiPostavi(true); } catch (e) {}
   document.getElementById('gps-info').textContent = 'Tražim signal…';
   if (!_compassConeOn) togCompassCone();
   _updGpsSwitch();
@@ -16196,7 +16199,7 @@ function onP(p) {
   if (typeof isSpdField === 'function' && isSpdField()) _trnUpdOdjel(la, lo);
 
   // Dug dodir na Centriraj = "Prati me": karta ide za pozicijom (prekida se povlačenjem karte)
-  if (_pratiMe && !_userPannedAway) map.panTo([la, lo], { animate: true, duration: 0.5 });
+  if (_pratiMe && !_userPannedAway && !_recFreeView) map.panTo([la, lo], { animate: true, duration: 0.5 });
 
   // Prati lokaciju kad se snima vlaka ili trag (osim u slobodnom pogledu)
   if (((recOn && !recPaused) || _tragOn) && !_recFreeView && !(typeof window !== 'undefined' && (window.Explorer?.active && _activeTab === 'karta'))) {
