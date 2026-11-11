@@ -4019,7 +4019,7 @@ function _npGjChange(sel) {
 function _npIsKrupa() { return (sbProfile?.sumarija || '') === 'ŠUMARIJA BOS.KRUPA'; }
 
 function _npGjValue() {
-  if (!_npIsKrupa()) return document.getElementById('np-gj-plain').value.trim();
+  if (!_npIsKrupa()) { const v = document.getElementById('np-gj-plain').value.trim(); _gjZapamti(v); return v; }
   const sel = document.getElementById('np-gj');
   if (sel.value === '_custom') return document.getElementById('np-gj-custom').value.trim();
   return sel.value;
@@ -4035,6 +4035,8 @@ function showNovProjektForm() {
   document.getElementById('np-gj-custom').style.display = 'none';
   document.getElementById('np-gj-custom').value = '';
   document.getElementById('np-gj-plain').value = '';
+  const dl = document.getElementById('np-gj-lista');
+  if (dl) dl.innerHTML = _gjMoje().map(v => `<option value="${_escHtml(v)}">`).join('');
   const isKrupa = _npIsKrupa();
   document.getElementById('np-gj').style.display = isKrupa ? '' : 'none';
   document.getElementById('np-gj-plain').style.display = isKrupa ? 'none' : '';
@@ -12804,10 +12806,25 @@ map.on('dragstart', () => {
   // Ručno pomjeranje karte znači da korisnik gleda NEKO DRUGO mjesto, ne
   // svoju GPS poziciju — N.V. treba pratiti centar karte (vidi komentar uz
   // _userPannedAway), ne ostati zaglavljena na GPS visini.
-  _userPannedAway = true;
-  if (typeof _pratiMe !== 'undefined' && _pratiMe) { _pratiPostavi(false); showToast('Praćenje isključeno'); }
+  // Dok je "Prati me" uključeno, o isključenju odlučuje tek kraj povlačenja (dragend): mali pomak ne gasi praćenje.
+  if (!(typeof _pratiMe !== 'undefined' && _pratiMe)) _userPannedAway = true;
   _updCentarBtn();
 });
+// "Prati me" se gasi tek kad se karta odmakne od svog trenutnog centra (pozicije korisnika) za više od
+// _PRATI_ODMAK_PX; manji pomak se vraća na poziciju, a praćenje ostaje.
+function _pratiOdmakPx() { const s = map.getSize(); return Math.max(90, 0.25 * Math.min(s.x, s.y)); }
+function _pratiDragEnd() {
+  if (typeof _pratiMe === 'undefined' || !_pratiMe) return;
+  if (!lastP) { _pratiPostavi(false); _userPannedAway = true; _updCentarBtn(); return; }
+  const c = map.getSize().divideBy(2), p = map.latLngToContainerPoint([lastP.la, lastP.lo]);
+  if (c.distanceTo(p) > _pratiOdmakPx()) {
+    _userPannedAway = true; _pratiPostavi(false); showToast('Praćenje isključeno'); _updCentarBtn();
+  } else {
+    _userPannedAway = false;
+    map.panTo([lastP.la, lastP.lo], { animate: true, duration: 0.4 });
+  }
+}
+map.on('dragend', _pratiDragEnd);
 
 // Ažuriraj N.V. i GPS distancu pri pomicanju karte (throttled za performanse)
 let _moveRafPending = false, _moveZadnji = 0;
@@ -16918,8 +16935,8 @@ let _tqmId = null;
 function _tqmOpen(id) {
   _tqmId = id;
   const sel = document.getElementById('tqm-gj-sel');
-  if (sel && !sel.options.length) {
-    sel.innerHTML = ['', ..._GJ_OPTIONS, 'CUSTOM'].map(v =>
+  if (sel) {
+    sel.innerHTML = ['', ..._gjOpcije(), 'CUSTOM'].map(v =>
       `<option value="${_escHtml(v)}">${v || '— odaberi GJ —'}</option>`
     ).join('');
   }
@@ -16944,7 +16961,7 @@ function _tqmOpen(id) {
   const odjV = detectedOdjel || aktP?.odjel || '';
 
   if (sel) {
-    sel.value = (_GJ_OPTIONS.includes(gjV) ? gjV : (gjV ? 'CUSTOM' : ''));
+    sel.value = (_gjOpcije().includes(gjV) ? gjV : (gjV ? 'CUSTOM' : ''));
     const cust = document.getElementById('tqm-gj-cust');
     if (cust) { cust.style.display = sel.value==='CUSTOM' ? '' : 'none'; cust.value = sel.value==='CUSTOM' ? gjV : ''; }
   }
@@ -17245,10 +17262,22 @@ let _msrGrpBy = 'date';
 const _GJ_OPTIONS = ['RISOVAC KRUPA','GRMEČ JASENICA','VOJSKOVA','BAŠTRA ĆORKOVAČA','GOMILA'];
 const _SUMARIJE   = ['ŠPD US ŠUME','ŠUMARIJA BOS.KRUPA','ŠUMARIJA BOS.PETROVAC','ŠUMARIJA SANSKI MOST','ŠUMARIJA BIHAĆ','ŠUMARIJA CAZIN','ŠUMARIJA KLJUČ'];
 
+// Fiksni spisak GJ postoji samo za Šumariju Bos. Krupa. Ostale šumarije počinju prazne, a svaka GJ koju
+// korisnik upiše pamti se lokalno (po korisniku) i od tada se nudi u padajućem spisku.
+const _GJ_MOJE_KEY = 'tvlake_gj_moje_v1:';
+function _gjMoje() {
+  try { const a = JSON.parse(localStorage.getItem(_GJ_MOJE_KEY + (sbUser?.id || '')) || '[]'); return Array.isArray(a) ? a.filter(x => typeof x === 'string' && x) : []; } catch (e) { return []; }
+}
+function _gjOpcije() { return _npIsKrupa() ? _GJ_OPTIONS : _gjMoje(); }
+function _gjZapamti(v) {
+  v = (v || '').trim();
+  if (!v || _npIsKrupa() || _gjMoje().some(x => x.toLowerCase() === v.toLowerCase())) return;
+  try { localStorage.setItem(_GJ_MOJE_KEY + (sbUser?.id || ''), JSON.stringify([..._gjMoje(), v].sort((a, b) => a.localeCompare(b, 'bs')))); } catch (e) {}
+}
 function _gjFieldHtml(pfx, val) {
-  const isCustom = !!val && !_GJ_OPTIONS.includes(val);
+  const isCustom = !!val && !_gjOpcije().includes(val);
   const sel = isCustom ? 'CUSTOM' : (val || '');
-  const opts = ['', ..._GJ_OPTIONS, 'CUSTOM'].map(v =>
+  const opts = ['', ..._gjOpcije(), 'CUSTOM'].map(v =>
     `<option value="${_escHtml(v)}"${sel===v?' selected':''}>${v || '— odaberi GJ —'}</option>`
   ).join('');
   return `<select id="${pfx}-gj-sel" onchange="_gjSelChange('${pfx}')">${opts}</select>`
@@ -17262,7 +17291,7 @@ function _gjSelChange(pfx) {
 function _gjGetValue(pfx) {
   const sel = document.getElementById(pfx+'-gj-sel');
   if (!sel) return '';
-  if (sel.value === 'CUSTOM') return (document.getElementById(pfx+'-gj-cust')?.value || '').trim();
+  if (sel.value === 'CUSTOM') { const v = (document.getElementById(pfx+'-gj-cust')?.value || '').trim(); _gjZapamti(v); return v; }
   return sel.value;
 }
 
@@ -26239,14 +26268,14 @@ function _mqmOpen() {
   _msrRegRender();
   // Popuni select
   const sel = document.getElementById('mqm-gj-sel');
-  if (sel && !sel.options.length) {
-    sel.innerHTML = ['', ..._GJ_OPTIONS, 'CUSTOM'].map(v =>
+  if (sel) {
+    sel.innerHTML = ['', ..._gjOpcije(), 'CUSTOM'].map(v =>
       `<option value="${_escHtml(v)}">${v || '— odaberi GJ —'}</option>`
     ).join('');
   }
   if (sel) {
     const gjV = entry.gj;
-    sel.value = _GJ_OPTIONS.includes(gjV) ? gjV : (gjV ? 'CUSTOM' : '');
+    sel.value = _gjOpcije().includes(gjV) ? gjV : (gjV ? 'CUSTOM' : '');
     const cust = document.getElementById('mqm-gj-cust');
     if (cust) { cust.style.display = sel.value==='CUSTOM' ? '' : 'none'; cust.value = sel.value==='CUSTOM' ? gjV : ''; }
   }
@@ -26628,13 +26657,13 @@ function _msrRegZoom(id) {
 
   // Popuni panel s postojećim podacima
   const sel = document.getElementById('mqm-gj-sel');
-  if (sel && !sel.options.length) {
-    sel.innerHTML = ['', ..._GJ_OPTIONS, 'CUSTOM'].map(v =>
+  if (sel) {
+    sel.innerHTML = ['', ..._gjOpcije(), 'CUSTOM'].map(v =>
       `<option value="${_escHtml(v)}">${v || '— odaberi GJ —'}</option>`
     ).join('');
   }
   if (sel) {
-    sel.value = _GJ_OPTIONS.includes(m.gj) ? m.gj : (m.gj ? 'CUSTOM' : '');
+    sel.value = _gjOpcije().includes(m.gj) ? m.gj : (m.gj ? 'CUSTOM' : '');
     const cust = document.getElementById('mqm-gj-cust');
     if (cust) { cust.style.display = sel.value==='CUSTOM' ? '' : 'none'; cust.value = sel.value==='CUSTOM' ? m.gj : ''; }
   }

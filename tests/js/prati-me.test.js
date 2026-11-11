@@ -5,7 +5,16 @@ const html=fs.readFileSync(__dirname+'/../../index.html','utf8');
 assert(/onpointerdown="_pratiDown\(\)"/.test(html)&&/if\(_pratiKlik\(\)\)_locPopupCentriraj\(\)/.test(html),'popup Centriraj');
 assert(/id="ab-centar" onclick="if\(_pratiKlik\(\)\)fabLokacija\(\)"/.test(html),'dugme Centar');
 assert(/_pratiMe && !_userPannedAway && !_recFreeView\) map\.panTo/.test(src),"onP prati poziciju");
-assert(/_pratiPostavi\(false\); showToast\('Praćenje isključeno'\)/.test(src),'povlačenje karte prekida');
+assert(/map\.on\('dragend', _pratiDragEnd\)/.test(src)&&/_pratiPostavi\(false\); showToast\('Praćenje isključeno'\)/.test(src),'praćenje gasi tek dragend iza praga');
+const dsA=src.slice(src.indexOf("map.on('dragstart'"),src.indexOf('function _pratiOdmakPx'));
+assert(!/_pratiPostavi\(false\)/.test(dsA),'dragstart ne gasi praćenje');
+// Prag odmaka: mali pomak ostaje, veliki gasi
+{const f=src.slice(src.indexOf('function _pratiOdmakPx'),src.indexOf("map.on('dragend', _pratiDragEnd)"));
+ const mk=(dist)=>{let off=0,pan=0;const st={_pratiMe:true,lastP:{la:1,lo:1},_userPannedAway:false};
+  const map={getSize:()=>({x:400,y:800,divideBy:()=>({distanceTo:()=>dist})}),latLngToContainerPoint:()=>({}),panTo(){pan++;}};
+  new Function('map','S','_pratiPostavi','showToast','_updCentarBtn','with(S){'+f+';_pratiDragEnd();}')(map,st,()=>{off++;},()=>{},()=>{});return {off,pan,pa:st._userPannedAway};};
+ assert.deepEqual(mk(40),{off:0,pan:1,pa:false},'mali pomak: ostaje i vraća se');
+ assert.deepEqual(mk(250),{off:1,pan:0,pa:true},'veliki pomak: gasi');}
 // Ponašanje
 const body=src.slice(src.indexOf('var _pratiMe'),src.indexOf('function _locPopupCentriraj'));
 const els={};const mk=id=>els[id]={style:{},textContent:'',classList:{s:new Set(),toggle(c,on){on?this.s.add(c):this.s.delete(c);}}};

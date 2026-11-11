@@ -5149,7 +5149,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         </select>
         <input class="pinput" id="np-gj-custom" placeholder="Upiši naziv GJ" style="display:none;margin-top:4px;">
         <!-- Dropdown GJ lista je specifična za Šumariju Bos. Krupa — ostale šumarije GJ upisuju slobodno. -->
-        <input class="pinput" id="np-gj-plain" placeholder="Upišite naziv G.J." style="display:none;">
+        <input class="pinput" id="np-gj-plain" list="np-gj-lista" autocomplete="off" placeholder="Upišite naziv G.J." style="display:none;"><datalist id="np-gj-lista"></datalist>
         <div style="display:flex;gap:8px;">
           <div style="flex:1;">
             <span class="lbl">Površina (ha)</span>
@@ -6029,7 +6029,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.0.6';
+const APP_VER = 'v4.0.7';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
