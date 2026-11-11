@@ -1,0 +1,20 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('fs');
+const src=require('./_izvor').izvor();
+const html=fs.readFileSync(__dirname+'/../../index.html','utf8');
+const f=src.slice(src.indexOf('function _helpUloga'),src.indexOf('function showHelp'));
+const mk=(a,s,v)=>new Function('isAdmin','isSpdField','isVodeci',f+';return _helpUloga;')(()=>a,()=>s,()=>v)();
+assert.equal(mk(true,false,false),'admin');
+assert.equal(mk(false,true,false),'teren');
+assert.equal(mk(false,false,true),'vodeci');
+assert.equal(mk(false,false,false),'projektant');
+// Oznake u markupu
+const uloge=(naslov)=>{const i=html.indexOf('</span>'+naslov+'</button>');const j=html.lastIndexOf('<section class="help-sec"',i);return /data-uloge="([^"]+)"/.exec(html.slice(j,j+120))?.[1];};
+assert.equal(uloge('Vodeći projektant'),'vodeci','vodeći dio samo vodećem');
+assert(!/teren/.test(uloge('Projekat: odjel, vlake, boje i strelice')),'projekat nije za terenski');
+assert(/data-uloge="projektant vodeci admin" onclick="helpTab\('vlake'/.test(html),'tab Vlake sakriven terenskom');
+assert(/data-uloge="projektant vodeci" onclick="helpTab\('doznaka'/.test(html),'tab Doznaka sakriven terenskom i adminu');
+assert(/class="help-start" data-uloge="teren"/.test(html),'terenski ima svoje kratke upute');
+assert(/data-uloge="admin"/.test(html));
+assert(/#help-modal \[hidden\]\s*\{\s*display:none !important/.test(html),'hidden mora pobijediti CSS display');
+console.log('OK upute po ulozi');

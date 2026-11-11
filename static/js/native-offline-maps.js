@@ -45,5 +45,7 @@
   async function activate(oldName,newName){const e=loaded.get(oldName);if(e?.pages){const r=await _sqlWCallWorker({type:'rename-live',old:oldName,neu:newName});if(!r.ok)throw Error(r.error);}rename(oldName,newName);}
   async function remove(nativeId){if(!nativeId)return;for(const [n,e]of loaded)if(e.nativeId===nativeId){if(e.pages)await _sqlWCallWorker({type:'close',name:n});loaded.delete(n);}const r=await request({type:'remove',nativeId});if(!r.ok)throw Error(r.error);}
   async function clear(){if(available()){const r=await request({type:'clear'});if(!r.ok)throw Error(r.error);}loaded.clear();}
-  root.NativeOfflineMaps={available,request,reply,handle,rename,activate,remove,clear};
+  // Osnova URL-a pločica native karte (bez straničnog čitača): sloj ih učitava direktno u <img>.
+  function tileUrl(name){const e=loaded.get(name);return e&&!e.pages&&e.nativeId?'/offline-maps/'+e.nativeId:null;}
+  root.NativeOfflineMaps={available,request,reply,handle,rename,activate,remove,clear,tileUrl};
 })(typeof window!=='undefined'?window:globalThis);

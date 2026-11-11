@@ -7848,12 +7848,19 @@ async function openShareFotoDlg(tsKey) {
     }
   }
 
-  const entries = Object.entries(kolegeMap).filter(([kid]) => kid !== myId);
+  // Terenski nalog bira samo svoje kolege (dodane pozivom), ne sve korisnike; ostali: šumarija + kolege iz poziva.
+  const teren = isSpdField() && !isAdmin();
+  const kontakti = _kontaktiLista();
+  let entries = teren ? [] : Object.entries(kolegeMap).filter(([kid]) => kid !== myId);
+  kontakti.forEach(k => { if (k.id !== myId && !entries.some(([kid]) => kid === k.id)) entries.push([k.id, { ime: k.ime, color: k.color }]); });
+  if (teren) projShareHtml = '';
+  const dodajHtml = '<button type="button" onclick="_shareFotoDodajKolegu()" style="width:100%;margin:6px 0 10px;padding:9px;border-radius:8px;border:1px dashed #3b82f6;background:transparent;color:#93c5fd;font-weight:600;">➕ Dodaj kolegu (poziv)</button>';
+  if (teren && !kontakti.length) _kontaktiOsvjezi().then(l => { if (l.length && _shareFotoKey === tsKey) openShareFotoDlg(tsKey); }).catch(() => {});
   if (!entries.length && !projShareHtml) {
-    list.innerHTML = '<div style="text-align:center;padding:12px;color:#94a3b8;">Nema kolega u šumariji</div>';
+    list.innerHTML = '<div style="text-align:center;padding:12px;color:#94a3b8;">Još nemaš dodanih kolega — dodaj ih pozivom.</div>' + dodajHtml;
     return;
   }
-  list.innerHTML = projShareHtml + entries.map(([kid, info]) => {
+  list.innerHTML = dodajHtml + projShareHtml + entries.map(([kid, info]) => {
     const done = alreadyWith.has(kid);
     return `<label class="share-kolega-row" onclick="event.stopPropagation()" style="${done?'opacity:0.65;':''}">
       <input type="checkbox" value="${kid}" ${done ? 'checked disabled' : ''}>
@@ -7864,6 +7871,12 @@ async function openShareFotoDlg(tsKey) {
   }).join('');
 }
 
+async function _shareFotoDodajKolegu() {
+  const key = _shareFotoKey;
+  document.getElementById('share-foto-dlg').style.display = 'none';
+  await kontaktiDodaj();
+  if (key) openShareFotoDlg(key);
+}
 function closeShareFotoDlg() {
   document.getElementById('share-foto-dlg').style.display = 'none';
   _shareFotoKey = null;
@@ -11604,7 +11617,7 @@ function _aspColor(deg, mag) {
   const b = lerp(lo[1][2], hi[1][2], t);
   return [r, g, b, Math.min(210, Math.round(85 + mag * 30))];
 }
-async function _getTerrariumTile(z, x, y) {
+async function _getTerrariumTile(z, x, y, opts) {
   const url = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
   let cache=null,resp=null;
   try { if ('caches' in window) {cache=await caches.open(_TERR_CACHE);resp=await cache.match(url);} } catch(e) {}
@@ -11623,6 +11636,7 @@ async function _getTerrariumTile(z, x, y) {
   if(resp){try{const img=await decode(resp);if(img)return img;}catch(e){}
     try{await cache?.delete(url);}catch(e){}
   }
+  if(opts&&opts.samoKes)return null;   // samo sačuvane pločice (izvještaj odjela, prva faza)
   if(typeof _mrezaProbaj==='function'&&!_mrezaProbaj())return null;
   try{
     resp=await _fetchT(url,10000,{mode:'cors'});const saved=cache?resp.clone():null;
@@ -12070,6 +12084,8 @@ function _activeLayerKey() {
   if (si >= 0) return '_sqlite_' + si;
   // Topo + Nagib
   if (map.hasLayer(TL['⛰ Topo']) && _OVL.slope && map.hasLayer(_OVL.slope)) return '_nagib';
+  // Topo + Ekspozicija
+  if (map.hasLayer(TL['⛰ Topo']) && _OVL.ekspo && map.hasLayer(_OVL.ekspo)) return '_ekspo';
   // Topo + Granice
   const gl = (typeof _geojsonLayer !== 'undefined') ? _geojsonLayer : null;
   if (map.hasLayer(TL['⛰ Topo']) && gl && map.hasLayer(gl)) return '_granice';
@@ -12360,6 +12376,7 @@ function setLayer(key) {
   if (key === '_nagib') {
     if(typeof ProjectTerrain!=='undefined')ProjectTerrain.toggle('slope',false);
     TL['⛰ Topo'].addTo(map);
+    if (_OVL.ekspo && map.hasLayer(_OVL.ekspo) && !_ovlState.ekspo) map.removeLayer(_OVL.ekspo);
     if (!map.hasLayer(_OVL.slope)) _OVL.slope.addTo(map);
     const btn = document.getElementById('layer-switch-btn');
     if (btn) btn.innerHTML = '<svg class="ic"><use href="#ic-uglomjer"/></svg>';
@@ -12368,6 +12385,20 @@ function setLayer(key) {
     _lsRenderSqlite();
     return;
   }
+  if (key === '_ekspo') {
+    TL['⛰ Topo'].addTo(map);
+    if (_OVL.slope && map.hasLayer(_OVL.slope) && !_ovlState.slope) map.removeLayer(_OVL.slope);
+    if (!map.hasLayer(_OVL.ekspo)) _OVL.ekspo.addTo(map);
+    const btn = document.getElementById('layer-switch-btn');
+    if (btn) btn.innerHTML = '<svg class="ic"><use href="#ic-uglomjer"/></svg>';
+    _saveLastMap('tl', '⛰ Topo');
+    try { _demLegendUpdate(); } catch (e) {}
+    closeLayerSheet();
+    _lsRenderSqlite();
+    return;
+  }
+  // Ekspozicija koja je došla preko omiljene (bez trajne oznake) odlazi sa promjenom podloge
+  if (_OVL.ekspo && map.hasLayer(_OVL.ekspo) && !_ovlState.ekspo) { map.removeLayer(_OVL.ekspo); try { _demLegendUpdate(); } catch (e) {} }
   // Remove slope overlay if switching away from _nagib
   if (_OVL.slope && map.hasLayer(_OVL.slope) && !_ovlState.slope) map.removeLayer(_OVL.slope);
 
@@ -12499,6 +12530,7 @@ async function _mapFavMenu(i) {
 
 function openMapFavs() {
   _mapFavRender();
+  if (typeof _mapFavMigrirajServer === 'function') _mapFavMigrirajServer().then(p => { if (p) _mapFavRender(); }).catch(() => {});
   document.getElementById('mapfav-modal').classList.add('open');
 }
 function closeMapFavs() {
@@ -12514,8 +12546,8 @@ async function mapFavAddCurrent() {
     const name = await _dlgPrompt('Naziv ove offline karte:', sqlActive.name, { title: 'Dodaj u omiljene' });
     if (!name) return;
     fav = { id: 'fav_'+Date.now(), name: name.trim(), type: 'sqlite', sqliteId: sqlActive.name };
-  } else if (['_granice','_nagib'].includes(activeKey)) {
-    const name = await _dlgPrompt('Naziv:', activeKey==='_nagib'?'Topo + Nagib terena':'Topo + Granice odjela', { title: 'Dodaj u omiljene' });
+  } else if (['_granice','_nagib','_ekspo'].includes(activeKey)) {
+    const name = await _dlgPrompt('Naziv:', activeKey==='_nagib'?'Topo + Nagib terena':activeKey==='_ekspo'?'Topo + Ekspozicija':'Topo + Granice odjela', { title: 'Dodaj u omiljene' });
     if (!name) return;
     fav = { id: 'fav_'+Date.now(), name: name.trim(), type: 'tl', tlKey: activeKey, tileUrl: '', arcgis: false };
   } else if (activeKey && TL[activeKey]) {
@@ -12539,7 +12571,7 @@ function mapFavSwitch(i) {
   const fav = _mapFavs[i];
   if (!fav) return;
   if (fav.type === 'tl') {
-    if (fav.tlKey === '_granice' || TL[fav.tlKey]) {
+    if (fav.tlKey === '_granice' || fav.tlKey === '_ekspo' || TL[fav.tlKey]) {
       setLayer(fav.tlKey);
     } else {
       showToast('Sloj nije dostupan: ' + fav.tlKey); return;
@@ -12570,7 +12602,64 @@ function mapFavDel(i) {
   _mapFavRender();
 }
 
+// Automatski omiljeni. Redoslijed: karta sa servera (1.), Google satelit (2.), pa kombinacije
+// server karta + nagib / ekspozicija. Obrisani se ne vraćaju (zastavice po koraku).
+function _mapFavKljuc(f) { return f.type + '|' + (f.tlKey || f.sqliteId || '') + '|' + (f.ovl || ''); }
+function _mapFavDodajAuto(fav) {
+  if (_mapFavs.some(f => _mapFavKljuc(f) === _mapFavKljuc(fav))) return false;
+  _mapFavs.push(Object.assign({ id: 'fav_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6) }, fav));
+  return true;
+}
+// Stabilno uredi: server karta, Google satelit, ostalo (korisnikov redoslijed ostaje).
+function _mapFavUredi() {
+  const rang = f => (f.auto === 'srv' && !f.ovl) ? 0 : (f.type === 'tl' && f.tlKey === '📡 Google') ? 1 : 2;
+  const sa = _mapFavs.map((f, i) => ({ f, i, r: rang(f) }));
+  sa.sort((x, y) => x.r - y.r || x.i - y.i);
+  _mapFavs.splice(0, _mapFavs.length, ...sa.map(x => x.f));
+}
+function _mapFavServerKarta(ime) {
+  let nov = _mapFavDodajAuto({ name: ime, type: 'sqlite', sqliteId: ime, auto: 'srv' });
+  nov = _mapFavDodajAuto({ name: ime + ' + Nagib', type: 'sqlite', sqliteId: ime, ovl: 'slope', auto: 'srv' }) || nov;
+  nov = _mapFavDodajAuto({ name: ime + ' + Ekspozicija', type: 'sqlite', sqliteId: ime, ovl: 'ekspo', auto: 'srv' }) || nov;
+  _mapFavUredi(); _mapFavSave();
+  return nov;
+}
+// Privremeni DEM sloj uz offline kartu iz omiljenih (bez trajne oznake); ovl=null ga skida.
+function _mapFavPrimijeniOvl(ovl) {
+  ['slope', 'ekspo'].forEach(id => {
+    if (_OVL[id] && map.hasLayer(_OVL[id]) && !_ovlState[id] && id !== ovl) map.removeLayer(_OVL[id]);
+  });
+  if (ovl && _OVL[ovl] && !map.hasLayer(_OVL[ovl])) _OVL[ovl].addTo(map);
+  try { _demLegendUpdate(); } catch (e) {}
+}
+// Karte koje su već na telefonu (native, tj. skinute sa servera) dobijaju kombinacije jednom po karti.
+async function _mapFavMigrirajServer() {
+  let rows = [];
+  try { const r = await _sqlWCall({ type: 'list' }); rows = (r && r.rows) || []; } catch (e) { return false; }
+  let obradjene = [];
+  try { obradjene = JSON.parse(localStorage.getItem('tvlake_mapfav_srv_v1') || '[]'); } catch (e) {}
+  let promjena = false;
+  for (const m of rows) {
+    if (!m?.meta?._nativeId || !m.name || obradjene.includes(m.name)) continue;
+    _mapFavServerKarta(m.name); obradjene.push(m.name); promjena = true;
+  }
+  if (promjena) { try { localStorage.setItem('tvlake_mapfav_srv_v1', JSON.stringify(obradjene)); } catch (e) {} }
+  return promjena;
+}
+function _mapFavPodrazumijevani() {
+  let done = null;
+  try { done = localStorage.getItem('tvlake_mapfav_auto_v2'); } catch (e) {}
+  if (done) return;
+  // v3.9.2 je dodala Topo + nagib/ekspozicija; zamjenjuju ih kombinacije sa server kartom.
+  const prije = _mapFavs.length;
+  _mapFavs = _mapFavs.filter(f => !(f.type === 'tl' && (f.tlKey === '_ekspo' || (f.tlKey === '_nagib' && f.name === 'Topo + Nagib terena'))));
+  _mapFavDodajAuto({ name: 'Google satelit', type: 'tl', tlKey: '📡 Google', tileUrl: 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', arcgis: false });
+  _mapFavUredi();
+  _mapFavSave();
+  try { localStorage.setItem('tvlake_mapfav_auto_v2', '1'); } catch (e) {}
+}
 _mapFavLoad();
+try { _mapFavPodrazumijevani(); } catch (e) {}
 _loadPutevi();
 
 // Prevent overlay and banner from passing events to Leaflet map
@@ -12716,6 +12805,7 @@ map.on('dragstart', () => {
   // svoju GPS poziciju — N.V. treba pratiti centar karte (vidi komentar uz
   // _userPannedAway), ne ostati zaglavljena na GPS visini.
   _userPannedAway = true;
+  if (typeof _pratiMe !== 'undefined' && _pratiMe) { _pratiPostavi(false); showToast('Praćenje isključeno'); }
   _updCentarBtn();
 });
 
@@ -15627,6 +15717,7 @@ function startGPS() {
   });
 }
 function stopGPS() {
+  if (typeof _pratiMe !== 'undefined' && _pratiMe) _pratiPostavi(false);
   if (wid) navigator.geolocation.clearWatch(wid);
   gpsOn = false; wid = null; lastP = null;
   _gpsAlt = false;
@@ -16085,6 +16176,8 @@ function onP(p) {
         </defs>
         <path id="loc-cone" d="M0,0 L-76,-90 A118,118 0 0,1 76,-90 Z" fill="url(#loc-cone-grad)" opacity="0" style="transition:opacity 0.3s;"/>
         <polygon id="loc-arrow" points="0,-18 -6,-6 6,-6" fill="#3b82f6" opacity="0" style="transition:opacity 0.3s;"/>
+        <circle class="loc-puls" cx="0" cy="0" r="9" fill="#3b82f6"/>
+        <circle class="loc-puls loc-puls2" cx="0" cy="0" r="9" fill="#3b82f6"/>
         <circle cx="0" cy="0" r="8" fill="#3b82f6" stroke="#fff" stroke-width="2.5" style="filter:drop-shadow(0 0 5px #3b82f6);"/>
         <circle cx="0" cy="0" r="3" fill="#fff"/>
       </svg>`});
@@ -16101,6 +16194,9 @@ function onP(p) {
 
   // Terenski profil: detekcija trenutnog odjela (jeftino — bounds pre-check po granici)
   if (typeof isSpdField === 'function' && isSpdField()) _trnUpdOdjel(la, lo);
+
+  // Dug dodir na Centriraj = "Prati me": karta ide za pozicijom (prekida se povlačenjem karte)
+  if (_pratiMe && !_userPannedAway) map.panTo([la, lo], { animate: true, duration: 0.5 });
 
   // Prati lokaciju kad se snima vlaka ili trag (osim u slobodnom pogledu)
   if (((recOn && !recPaused) || _tragOn) && !_recFreeView && !(typeof window !== 'undefined' && (window.Explorer?.active && _activeTab === 'karta'))) {
@@ -16870,7 +16966,7 @@ function _tqmClose() {
 // dalje imaju prednost za taj trag. Čuva se lokalno po uređaju.
 const _LSTYLE_DEFAULT = {
   tragW: 4, tragOp: 85, tragDash: 'solid', tragCol: '', tragLen: false,
-  msrW: 4, msrFillOp: 18, msrArea: true, msrLen: false,
+  msrW: 4, msrFillOp: 18, msrArea: false, msrLen: false,
   tackaScale: 100, vlakaDotScale: 100, lagerScale: 100
 };
 const _LSTYLE_KEY = 'tvlake_stil_linija';
@@ -16941,8 +17037,7 @@ function _stilRender() {
       ${_stilPrekidac('tragLen', 'Dužina na tragu')}`,
     msr: `${_stilKlizac('msrW', 'Debljina', 1, 10, 1, ' px')}
       ${_stilKlizac('msrFillOp', 'Ispuna poligona', 0, 100, 5, '%')}
-      ${_stilPrekidac('msrArea', 'Površina u poligonu')}
-      ${_stilPrekidac('msrLen', 'Dužina na liniji')}`,
+      <div class="stl-red stl-kol"><span class="stl-lbl">Oznaka na karti</span><span style="font-size:12px;opacity:.75">Uključuje se po mjerenju: Edituj → „Prikaži oznaku na karti“.</span></div>`,
     tacke: `${_stilKlizac('tackaScale', 'Oznaka tačke', 50, 200, 10, '%')}
       ${_stilKlizac('vlakaDotScale', 'Početak/kraj vlake', 50, 200, 10, '%')}
       ${_stilKlizac('lagerScale', 'Lager', 50, 200, 10, '%')}`,
@@ -17878,6 +17973,28 @@ function _toggleLocPopup() {
     _locPopTimerStart();
     const im = document.getElementById('ab-izmjeri-menu'); if (im) im.style.display = 'none';
   }
+}
+// "Prati me": dug dodir (550 ms) na Centriraj / Centar uključuje praćenje pozicije, drugi dug dodir
+// ili povlačenje karte ga isključuje. Kratki dodir i dalje samo centrira.
+var _pratiMe = false, _pratiLpT = null, _pratiLpBio = false;
+function _pratiDown() {
+  _pratiLpBio = false; clearTimeout(_pratiLpT);
+  _pratiLpT = setTimeout(() => { _pratiLpBio = true; _pratiToggle(); }, 550);
+}
+function _pratiUp() { clearTimeout(_pratiLpT); _pratiLpT = null; }
+function _pratiKlik() { if (_pratiLpBio) { _pratiLpBio = false; return false; } return true; }
+function _pratiPostavi(on) {
+  _pratiMe = !!on;
+  const c = document.querySelector('#ab-loc-popup .abp-centar');
+  ['ab-centar'].forEach(id => { const b = document.getElementById(id); if (b) b.classList.toggle('prati', _pratiMe); });
+  if (c) { c.classList.toggle('prati', _pratiMe); c.setAttribute('aria-pressed', String(_pratiMe)); }
+}
+function _pratiToggle() {
+  const p = document.getElementById('ab-loc-popup'); if (p) p.style.display = 'none';
+  if (_pratiMe) { _pratiPostavi(false); showToast('Praćenje isključeno'); return; }
+  fabLokacija();
+  _pratiPostavi(true);
+  showToast('📍 Prati me: karta ide za tobom. Povuci kartu ili ponovo drži Centriraj za prekid.');
 }
 function _locPopupCentriraj() {
   document.getElementById('ab-loc-popup').style.display = 'none';
@@ -26131,6 +26248,7 @@ function _mqmOpen() {
   if (nameEl) nameEl.value = entry.name;
   const odj = document.getElementById('mqm-odjel');
   if (odj) odj.value = entry.odjel;
+  const lb0 = document.getElementById('mqm-lbl'); if (lb0) lb0.checked = false;
   const title = document.getElementById('mqm-title');
   if (title) title.textContent = '📏 Mjerenje završeno — spremi opis (opciono)';
   document.getElementById('mqm-delete-btn').style.display = 'none';  // novo mjerenje — ništa za brisanje
@@ -26145,6 +26263,7 @@ function _mqmSave() {
     m.odjel = (document.getElementById('mqm-odjel')?.value || '').trim();
     m.pts   = _msrPts.slice();
     m.color = _msrColor;
+    m.showLbl = !!document.getElementById('mqm-lbl')?.checked;
     _msrRegSave();
   }
   _mqmClose();
@@ -26385,6 +26504,38 @@ function _msrOpenPopupNa(m, latlng) {
   } catch(e) {}
 }
 
+// Položaj oznake mjerenja. Poligon: tačka UNUTAR poligona najdalja od ivica (pol nedostupnosti,
+// mrežno pretraživanje u metrima) — centroid konkavnog poligona zna pasti van njega ili na liniju.
+function _msrLblPoligon(pts) {
+  const la0 = pts.reduce((a, p) => a + p.lat, 0) / pts.length, k = Math.cos(la0 * Math.PI / 180);
+  const P = pts.map(p => [p.lng * k * 111320, p.lat * 111320]);
+  const unutra = (x, y) => { let in_ = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) in_ = !in_; } return in_; };
+  const dist = (x, y) => { let d = Infinity; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [ax, ay] = P[j], [bx, by] = P[i], dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy; let t = l2 ? ((x - ax) * dx + (y - ay) * dy) / l2 : 0; t = Math.max(0, Math.min(1, t)); const ex = ax + t * dx - x, ey = ay + t * dy - y; d = Math.min(d, Math.sqrt(ex * ex + ey * ey)); } return d; };
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  P.forEach(([x, y]) => { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); });
+  let best = null, bd = -1, sx = (x1 - x0), sy = (y1 - y0);
+  for (let pass = 0; pass < 3; pass++) {
+    const N = 14;
+    for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
+      const x = x0 + sx * i / N, y = y0 + sy * j / N;
+      if (!unutra(x, y)) continue;
+      const d = dist(x, y); if (d > bd) { bd = d; best = [x, y]; }
+    }
+    if (!best) break;
+    sx /= 4; sy /= 4; x0 = best[0] - sx / 2; y0 = best[1] - sy / 2;
+  }
+  if (!best) { const c = L.latLngBounds(pts.map(p => [p.lat, p.lng])).getCenter(); return [c.lat, c.lng]; }
+  return [best[1] / 111320, best[0] / (k * 111320)];
+}
+// Linija: tačka na polovini DUŽINE linije (ne srednji vrh, koji može biti uz sam kraj).
+function _msrLblLinija(pts) {
+  const la0 = pts.reduce((a, p) => a + p.lat, 0) / pts.length, k = Math.cos(la0 * Math.PI / 180);
+  const seg = []; let tot = 0;
+  for (let i = 1; i < pts.length; i++) { const dx = (pts[i].lng - pts[i - 1].lng) * k, dy = pts[i].lat - pts[i - 1].lat, l = Math.sqrt(dx * dx + dy * dy); seg.push(l); tot += l; }
+  let r = tot / 2;
+  for (let i = 0; i < seg.length; i++) { if (r <= seg[i] || i === seg.length - 1) { const t = seg[i] ? Math.min(1, r / seg[i]) : 0; return [pts[i].lat + (pts[i + 1].lat - pts[i].lat) * t, pts[i].lng + (pts[i + 1].lng - pts[i].lng) * t]; } r -= seg[i]; }
+  return [pts[0].lat, pts[0].lng];
+}
 function _msrDrawAllSaved() {
   if (!window.map) return;
   if (!_msrSavedLayer) { _msrSavedLayer = L.layerGroup(); }
@@ -26403,7 +26554,7 @@ function _msrDrawAllSaved() {
     // Tekstualna oznaka na karti (dužina na sredini linije / površina u centru poligona)
     const _msrTextMk = (lat, lng, txt) => L.marker([lat, lng], {
       icon: L.divIcon({ className: '', iconSize: [0,0], iconAnchor: [0,0],
-        html: `<div class="vlaka-lbl" style="color:#fff;font-size:11px;font-weight:bold;pointer-events:none;white-space:nowrap;text-shadow:0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;">${txt}</div>` }),
+        html: `<div class="vlaka-lbl" style="transform:translate(-50%,-50%);color:#fff;font-size:11px;font-weight:bold;pointer-events:none;white-space:nowrap;text-shadow:0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;">${txt}</div>` }),
       interactive: false, pane: 'vlakeLabels'
     });
     // Klik otvara popup preko EKSPLICITNOG handlera (ne oslanjanjem na bindPopup-ov
@@ -26425,10 +26576,10 @@ function _msrDrawAllSaved() {
       poly.bindPopup(buildPopup, {maxWidth: 260});
       poly.on('click', _msrOpenPopup(poly));
       _msrSavedLayer.addLayer(poly);
-      if (_lineStyle.msrArea) {
-        const c = poly.getBounds().getCenter();
+      if (m.showLbl === true) {
+        const c = _msrLblPoligon(m.pts);
         const aM2 = _msrPoligonPovrsina(m.pts);
-        _msrSavedLayer.addLayer(_msrTextMk(c.lat, c.lng, (aM2/10000).toFixed(2) + ' ha'));
+        _msrSavedLayer.addLayer(_msrTextMk(c[0], c[1], (aM2/10000).toFixed(2) + ' ha'));
       }
     } else {
       const drawLL = mode === 'area' ? [...latlngs, latlngs[0]] : latlngs;
@@ -26440,9 +26591,9 @@ function _msrDrawAllSaved() {
       _msrSavedLayer.addLayer(hit);
       _msrSavedLayer.addLayer(bg);
       _msrSavedLayer.addLayer(fg);
-      if (_lineStyle.msrLen && m.pts.length >= 2) {
-        const midP = m.pts[Math.floor(m.pts.length / 2)];
-        _msrSavedLayer.addLayer(_msrTextMk(midP.lat, midP.lng, _msrFmt(_msrPts2Len(m.pts))));
+      if (m.showLbl === true && m.pts.length >= 2) {
+        const midP = _msrLblLinija(m.pts);
+        _msrSavedLayer.addLayer(_msrTextMk(midP[0], midP[1], _msrFmt(_msrPts2Len(m.pts))));
       }
     }
   });
@@ -26485,6 +26636,7 @@ function _msrRegZoom(id) {
   if (nameEl) nameEl.value = m.name || '';
   const odj = document.getElementById('mqm-odjel');
   if (odj) odj.value = m.odjel || '';
+  const lb = document.getElementById('mqm-lbl'); if (lb) lb.checked = m.showLbl === true;
   const title = document.getElementById('mqm-title');
   if (title) title.textContent = '✏️ Edituj mjerenje — vuci tačke ili dodaj nove';
   document.getElementById('mqm-delete-btn').style.display = '';  // postojeće mjerenje — nudi brisanje odmah
@@ -26509,6 +26661,7 @@ function _msrRegSetMeta(id) {
   m.name  = (document.getElementById('mreg-ei-name-'+id)?.value || m.name).trim() || m.name;
   m.gj    = _gjGetValue('mreg-'+id);
   m.odjel = (document.getElementById('mreg-ei-odjel-'+id)?.value || '').trim();
+  m.showLbl = !!document.getElementById('mreg-ei-lbl-'+id)?.checked;
   _msrRegSave();
   _msrRegRender();
 }
@@ -26533,6 +26686,7 @@ function _msrRegRender() {
         <div class="mf-col"><label>Naziv</label><input id="mreg-ei-name-${m.id}" value="${_escHtml(m.name)}"></div>
         <div class="mf-col"><label>GJ</label>${_gjFieldHtml('mreg-'+m.id, m.gj||'')}</div>
         <div class="mf-col"><label>Odjel</label><input id="mreg-ei-odjel-${m.id}" value="${_escHtml(m.odjel||'')}" placeholder="npr. 14a"></div>
+        <label class="mf-col" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="mreg-ei-lbl-${m.id}" ${m.showLbl===true?'checked':''}> Prikaži oznaku na karti</label>
         <button class="mf-save" onclick="_msrRegSetMeta('${m.id}')"><svg class="ic"><use href="#ic-potvrdi"/></svg> Spremi</button>
       </div>
       <div class="treg-btns">
@@ -29573,11 +29727,24 @@ const _MiniSqliteMain = (function() {
 })();
 
 // ── Worker management ─────────────────────────────────────────────────────────
+// Mikro-mjerenje pokretanja: sinhroni razmak između dvije tačke duži od 40 ms se bilježi sa nazivom,
+// pa izvještaj Dijagnostike kaže KOJI dio koraka je držao nit (ne samo ime koraka).
+var _perfMikroT = 0;
+function _perfTacka(naziv) {
+  try {
+    if (naziv == null) { _perfMikroT = 0; return; }   // reset (poslije asinhronog čekanja razmak ne znači ništa)
+    const t = performance.now();
+    if (_perfMikroT && t - _perfMikroT >= 40) (window._PERF_MIKRO = window._PERF_MIKRO || []).push({ do: naziv, ms: Math.round(t - _perfMikroT), at: Math.round(t) });
+    _perfMikroT = t;
+  } catch (e) {}
+}
 function _sqlWorkerEnsure() {
   if (_sqlW) return;
+  _perfTacka('prije radnika');
   const url = URL.createObjectURL(new Blob([_SQL_WORKER_SRC], {type:'application/javascript'}));
   _sqlW = new Worker(url);
   URL.revokeObjectURL(url);
+  _perfTacka('pravljenje radnika (Blob + Worker)');
   _sqlW.onmessage = ({data:d}) => {
     // Nezatražena poruka iz workera (nema id, pa nema ni callbacka): velika
     // OPFS karta je u pozadini dobila sync handle i od sad čita punom
@@ -30429,8 +30596,35 @@ const _tileProf = {
 };
 const _now = () => (typeof performance!=='undefined'?performance.now():Date.now());
 
+// Negativni keš: pločica za koju je potvrđeno da je NEMA u karti se ne traži ponovo. Na rijetko
+// pokrivenoj karti (izvještaj uređaja: 988 od 1860 čitanja prazno) isti nepostojeći roditelji
+// su se čitali iznova pri svakom pomicanju, a svako čitanje čeka u redu iza ostalih.
+const _sqlTileNeg = new Set();
+const _SQL_TILE_NEG_MAX = 40000;
+function _sqlTileNegKljuc(m) { return m.name + '/' + m.z + '/' + m.x + '/' + m.y; }
+function _sqlTileNegOcisti(name) {
+  const pre = name + '/';
+  for (const k of _sqlTileNeg) if (k.startsWith(pre)) _sqlTileNeg.delete(k);
+}
+// Slot u istom redu čitanja, ali bez poziva radniku: pozivalac sam učita pločicu (npr. <img src>)
+// i javi kraj. Vraća funkciju za oslobađanje slota, ili null kad je pločica u međuvremenu napuštena.
+function _wTileSlot(pri) {
+  const enq = _now();
+  return new Promise(resolve => {
+    const run = () => {
+      const qw = _now() - enq; _tileProf.qWaitN++; _tileProf.qWaitSum += qw; if (qw > _tileProf.qWaitMax) _tileProf.qWaitMax = qw;
+      _wTileActive++;
+      let pusteno = false;
+      resolve(() => { if (pusteno) return; pusteno = true; _wTileActive--; const next = _tileUzmiSljedeci(_wTileStack); if (next) next(); });
+    };
+    run._pri = pri; run._odustani = () => resolve(null);
+    if (_wTileActive < _W_TILE_MAX_INFLIGHT) run(); else _wTileStack.push(run);
+  });
+}
 function _wTileScheduleCall(msg, pri) {
   const enq = _now();
+  const negK = msg.type === 'tile' ? _sqlTileNegKljuc(msg) : null;
+  if (negK && _sqlTileNeg.has(negK)) return Promise.resolve({ ok: true, data: null });
   return new Promise(resolve => {
     const run = () => {
       if (msg.type === 'tile') { const qw = _now()-enq; _tileProf.qWaitN++; _tileProf.qWaitSum += qw; if (qw>_tileProf.qWaitMax) _tileProf.qWaitMax = qw; }
@@ -30438,6 +30632,10 @@ function _wTileScheduleCall(msg, pri) {
       const rt0 = _now();
       _sqlWCall(msg).then(r => {
         if (msg.type === 'tile') { const dt = _now()-rt0; _tileProf.reads++; _tileProf.readSum += dt; if (dt>_tileProf.readMax) _tileProf.readMax = dt; }
+        if (negK && r && !r.data && !r.error && r.ok !== false) {
+          if (_sqlTileNeg.size >= _SQL_TILE_NEG_MAX) _sqlTileNeg.clear();
+          _sqlTileNeg.add(negK);
+        }
         resolve(r);
       }, () => resolve(null)).finally(() => {
         _wTileActive--;
@@ -30561,6 +30759,8 @@ async function sqlmapRestoreAll() {
   const _tBrk = [];
   let shownAny = false;
   _mapLoadDiagStep('sqlmapRestoreAll pokrenut', 'startup je ušao u restore funkciju');
+  const _pt = typeof _perfTacka === 'function' ? _perfTacka : () => {};
+  _pt(null); _pt('restore: ulaz');
   try {
   if (await _sqlCrashCheck()) { _mapLoadDiagStep('crash zaštita', 'automatsko učitavanje je preskočeno'); return; }
   _sqlRestoreFailed = [];
@@ -30609,9 +30809,12 @@ async function sqlmapRestoreAll() {
     }
   }
 
+  _pt('restore: do popisa karata');
   try {
     const _tListT0 = performance.now();
-    const r = await _sqlWCall({type:'list'}, [], 30000);
+    const _lp = _sqlWCall({type:'list'}, [], 30000);
+    _pt('restore: slanje popisa radniku'); _pt(null);
+    const r = await _lp;
     const _tListMs = Math.round(performance.now() - _tListT0);
     _tBrk.push('list ' + _tListMs + 'ms');
     _mapLoadDiagStep('IndexedDB popis', _tListMs + 'ms · ' + (r.ok ? ((r.rows?.length || 0) + ' karata') : ('NEUSPJEH: ' + (r.error || 'worker'))));
@@ -31157,6 +31360,7 @@ function _drawTileBytesC(ctx, data, canvas, done, cacheKey, sz) {
 
 function _sqlmapCreateLayerW(name, fmt, meta) {
   const { minNative, maxNative } = _zoomBounds(meta);
+  _sqlTileNegOcisti(name);   // nova/zamijenjena karta pod istim imenom: stari "nema pločice" ne važi
   const WTileLayer = L.GridLayer.extend(Object.assign({}, _sqlGridObruc, {
     createTile(coords, done) {
       // D2-7: <img> pločice — browser ih kompozitira NATIVNO (kao Leaflet default/online
@@ -31196,6 +31400,28 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
           }).catch(() => _doneP());
         }).catch(() => { if (tries < 3) _tryRead(tries + 1); else { _tileProf.err++; _doneP(); } });
       };
+      // Native karta (Java čita fajl): pločica ide DIREKTNO u <img src> — bez fetch → arrayBuffer →
+      // Blob → objectURL na glavnoj niti (izvještaj uređaja: "Response.arrayBuffer.then 154 ms").
+      // Red i prioritet ostaju isti (_wTileSlot). Greška učitavanja (nema pločice / čitanje palo)
+      // ide starim putem, koji potvrdi "nema" (negativni keš) i nacrta uvećanog roditelja.
+      const nUrl = (window.NativeOfflineMaps && NativeOfflineMaps.tileUrl) ? NativeOfflineMaps.tileUrl(name) : null;
+      if (nUrl && !_sqlTileNeg.has(name + '/' + z + '/' + x + '/' + y)) {
+        _wTileSlot(_pri).then(pusti => {
+          if (!pusti) { _doneP(); return; }
+          const rt0 = _now();
+          let gotovo = false;
+          const kraj = () => { if (gotovo) return false; gotovo = true; clearTimeout(tm); pusti(); return true; };
+          const tm = setTimeout(() => { if (kraj()) { img.onload = img.onerror = null; img.removeAttribute('src'); _tileProf.timeout++; _doneP(); } }, 20000);
+          img.onload = () => {
+            if (!kraj()) return;
+            const dt = _now() - rt0; _tileProf.reads++; _tileProf.readSum += dt; if (dt > _tileProf.readMax) _tileProf.readMax = dt;
+            _doneP();
+          };
+          img.onerror = () => { if (!kraj()) return; img.onerror = null; img.removeAttribute('src'); _tryRead(0); };
+          img.src = nUrl + '/' + z + '/' + x + '/' + y;
+        });
+        return img;
+      }
       _tryRead(0);
       return img;
     }
@@ -37080,16 +37306,31 @@ async function dozBackToList() {
 }
 
 // ─── HELP MODAL ───────────────────────────────────────────────────────────────
+// Uloga za upute: terenski | admin | vodeci | projektant
+function _helpUloga() {
+  try {
+    if (typeof isAdmin === 'function' && isAdmin()) return 'admin';
+    if (typeof isSpdField === 'function' && isSpdField()) return 'teren';
+    if (typeof isVodeci === 'function' && isVodeci()) return 'vodeci';
+  } catch (e) {}
+  return 'projektant';
+}
 function showHelp() {
   const v=document.getElementById('help-app-version');if(v)v.textContent='DENDRO MAP · '+APP_VER;
-  // Slanje fajlova: otvoren je dio za svoj profil, tuđi je sklonjen (terenski ≠ projektant).
-  const terenac = typeof isSpdField === 'function' && isSpdField();
-  document.querySelectorAll('#help-pane-fajlovi .help-sec[data-profil]').forEach(sec => {
-    const moj = sec.dataset.profil === (terenac ? 'teren' : 'proj');
-    sec.style.display = moj ? '' : 'none';
-    const h = sec.querySelector('.help-sec-hdr'), b = sec.querySelector('.help-sec-body');
-    if (moj && h && b && !b.classList.contains('open')) toggleHelpSec(h);
+  // Upute po ulozi: sve što nosi data-uloge i ne važi za tvoju ulogu je sklonjeno
+  // (terenski ne vidi Vlake/Doznaku/vodećeg projektanta, projektant ne vidi admin dio itd.).
+  const uloga = _helpUloga();
+  document.querySelectorAll('#help-modal [data-uloge]').forEach(el => {
+    el.hidden = !el.dataset.uloge.split(/\s+/).includes(uloga);
   });
+  // Dio za slanje fajlova koji se tiče tebe je otvoren
+  document.querySelectorAll('#help-pane-fajlovi .help-sec[data-uloge]').forEach(sec => {
+    const h = sec.querySelector('.help-sec-hdr'), b = sec.querySelector('.help-sec-body');
+    if (!sec.hidden && h && b && !b.classList.contains('open')) toggleHelpSec(h);
+  });
+  // Aktivan tab koji ti ne pripada (npr. Vlake za terenski profil) → Prvi koraci
+  const aktivan = document.querySelector('#help-tabs .help-tab.active');
+  if (aktivan && aktivan.hidden) { const prvi = document.querySelector('#help-tabs .help-tab:not([hidden])'); if (prvi) { const m = /helpTab\('(\w+)'/.exec(prvi.getAttribute('onclick')); if (m) helpTab(m[1], prvi); } }
   document.getElementById('help-modal').classList.add('open');
 }
 function closeHelp() {
@@ -37260,6 +37501,7 @@ function _perfSnimak() {
   o.idb = Object.entries(window._PERF_IDB || {}).map(([k, v]) => ({ vrsta: k, n: v.n, ms: v.ms, max: v.max, kbMax: v.kb })).sort((a, b) => b.ms - a.ms);
   o.greske = (window._PERF_GRESKE || []).slice(-10);
   o.loaf = _PERF.loaf.slice(0, 8);
+  if (window._PERF_MIKRO && window._PERF_MIKRO.length) o.mikro = window._PERF_MIKRO.slice(0, 12);
   o.koraci = (window._PERF_KORACI || []).filter(k => Math.max(k.sync, k.ukupno || 0) >= 20).sort((a, b) => Math.max(b.sync, b.ukupno || 0) - Math.max(a.sync, a.ukupno || 0)).slice(0, 8);
   o.najduzi = _PERF.lt.slice().sort((a, b) => b.ms - a.ms).slice(0, 8);
   try { const R = window.DendroRender; if (R && R.state) { o.nacin = R.state.lite ? 'lagani' : 'puni'; o.pomicanja = (R.state.hist || []).map(x => x.p50 + '/' + x.p95); } } catch (e) {}
@@ -37400,7 +37642,7 @@ async function _primljeniSync(force) {
     _primljeniObavijesti(novi);
     if (novi.length && document.getElementById('primljeni-panel')) _primljeniRender();
   } catch (e) { _primLog('sync', false, 0, e && e.message || String(e)); /* nema veze / nema tabele — pokušaj ponovo kasnije */ }
-  finally { _primljeniBusy = false; }
+  finally { _primljeniBusy = false; try { _kontaktiOsvjezi().catch(() => {}); } catch (e) {} }
 }
 
 // Lokalni upis primljenog podatka: sadržaj u IndexedDB, metapodaci u listu. Vraća stavku ili null.
@@ -37427,25 +37669,127 @@ function _primLogUcitaj() {
 }
 
 // ── Slanje ──
+// ── KOLEGE (KONTAKTI) ZA SLANJE ───────────────────────────────────────────────
+// Terenski nalog ne bira primaoce iz spiska svih korisnika: kolegu DODAJE pozivom (kod od 5 cifara),
+// a kad kolega prihvati, ostaje u njegovom spisku za slanje KML-a, traga, mjerenja i fotografija.
+// Spisak se čuva lokalno (radi bez mreže) i osvježava sa servera (kontakti_moji).
+const _KONTAKTI_PREF = 'tvlake_kontakti_v1:';
+function _kontaktiKljuc() { return _KONTAKTI_PREF + (sbUser?.id || 'x'); }
+function _kontaktiLokalno() {
+  try { const a = JSON.parse(localStorage.getItem(_kontaktiKljuc()) || '[]'); return Array.isArray(a) ? a.filter(k => k && k.id) : []; } catch (e) { return []; }
+}
+function _kontaktiSpremi(lista) { try { localStorage.setItem(_kontaktiKljuc(), JSON.stringify(lista)); } catch (e) {} }
+// Spisak za izbor primaoca: oblik kao _shareKolege() ({id, ime, sumarija, color})
+function _kontaktiLista() {
+  return _kontaktiLokalno().map(k => ({ id: k.id, ime: k.ime || 'Kolega', sumarija: k.sumarija || '', color: (typeof _bojaZaId === 'function' ? _bojaZaId(k.id) : '#64748b') }));
+}
+let _kontaktiZadnji = 0;
+async function _kontaktiOsvjezi(force) {
+  if (!sb || !sbUser || sbUser._cachedStub) return _kontaktiLokalno();
+  const sad = Date.now();
+  if (!force && sad - _kontaktiZadnji < 600000) return _kontaktiLokalno();
+  if (typeof _mrezaProbaj === 'function' && !_mrezaProbaj()) return _kontaktiLokalno();
+  _kontaktiZadnji = sad;
+  const prije = _kontaktiLokalno();
+  try {
+    const r = await _withTimeout(sb.rpc('kontakti_moji'), 15000);
+    if (r.error) throw r.error;
+    const nova = (r.data || []).map(k => ({ id: k.id, ime: k.ime, sumarija: k.sumarija }));
+    _kontaktiSpremi(nova);
+    const ids = new Set(prije.map(k => k.id));
+    nova.filter(k => !ids.has(k.id)).forEach(k => { if (prije.length || force) showToast('👥 ' + (k.ime || 'Kolega') + ' je dodan u tvoje kolege'); });
+    return nova;
+  } catch (e) { return prije; }
+}
+async function _kontaktiPozovi() {
+  if (typeof _mrezaSila === 'function') _mrezaSila(30000);
+  try {
+    const r = await _withTimeout(sb.rpc('kontakt_poziv_napravi'), 20000);
+    if (r.error) throw r.error;
+    const kod = String(r.data);
+    const txt = 'Dendro Map — poziv za dijeljenje. Kod: ' + kod + ' (važi 1 dan). U aplikaciji: Meni → Primljeni podaci → Kolege → Unesi kod poziva.';
+    const i = await _dlgActions('👥 Kod poziva: ' + kod + '\nKolega ga unosi u Meni → Primljeni podaci → Kolege. Važi 1 dan i jednokratan je. Kad ga prihvati, pojavit će se u tvom spisku.', [
+      { label: '📋 Kopiraj kod' }, { label: '📤 Podijeli porukom (Viber, WhatsApp…)' }, { label: 'Zatvori' }]);
+    if (i === 0) { try { await navigator.clipboard.writeText(kod); showToast('📋 Kod kopiran: ' + kod); } catch (e) { showToast('Kod: ' + kod); } }
+    else if (i === 1) {
+      try { if (window.AndroidShare && AndroidShare.shareText) { AndroidShare.shareText('Dendro Map — poziv', txt); return; } } catch (e) {}
+      try { if (navigator.share) { await navigator.share({ text: txt }); return; } } catch (e) {}
+      try { await navigator.clipboard.writeText(txt); showToast('📋 Poruka kopirana'); } catch (e) { showToast('Kod: ' + kod); }
+    }
+  } catch (e) {
+    const m = String(e?.message || e);
+    showToast(/PGRST202|does not exist|kontakt_poziv/i.test(m) ? '⚠ Server još nema ovu mogućnost — admin treba pokrenuti migraciju 20261112_kontakti.sql' : (typeof _isNetworkErr === 'function' && _isNetworkErr(e)) ? '⚠ Nema veze — pokušaj kad imaš signal' : '⚠ ' + m);
+  }
+}
+async function _kontaktiPrihvati() {
+  const unos = await _dlgPrompt('Unesi kod poziva koji si dobio (5 cifara):', '', { title: 'Prihvati poziv', okLabel: 'Prihvati' });
+  if (unos == null) return;
+  const kod = String(unos).replace(/[^0-9]/g, '');
+  if (kod.length !== 5) { showToast('Kod ima 5 cifara'); return; }
+  if (typeof _mrezaSila === 'function') _mrezaSila(30000);
+  try {
+    const r = await _withTimeout(sb.rpc('kontakt_poziv_prihvati', { p_kod: kod }), 20000);
+    if (r.error) throw r.error;
+    const k = (r.data || [])[0];
+    if (!k) { showToast('Kod nije ispravan ili je istekao'); return; }
+    const lista = _kontaktiLokalno().filter(x => x.id !== k.id);
+    lista.push({ id: k.id, ime: k.ime, sumarija: k.sumarija });
+    _kontaktiSpremi(lista);
+    showToast('✓ ' + (k.ime || 'Kolega') + ' je dodan — možeš mu slati fajlove');
+  } catch (e) {
+    const m = String(e?.message || e);
+    showToast(/PGRST202|does not exist|kontakt_poziv/i.test(m) ? '⚠ Server još nema ovu mogućnost — admin treba pokrenuti migraciju 20261112_kontakti.sql' : (typeof _isNetworkErr === 'function' && _isNetworkErr(e)) ? '⚠ Nema veze — pokušaj kad imaš signal' : '⚠ ' + m);
+  }
+}
+async function _kontaktiUkloniDlg() {
+  const lista = _kontaktiLokalno();
+  if (!lista.length) { showToast('Nemaš dodanih kolega'); return; }
+  const i = await _dlgActions('Koga ukloniti iz kolega? (Ukloni i njega kod tebe)', lista.map(k => ({ label: '✕ ' + _escHtml(k.ime || 'Kolega'), danger: true })).concat([{ label: 'Odustani' }]));
+  if (i == null || i >= lista.length) return;
+  const k = lista[i];
+  try {
+    const r = await _withTimeout(sb.rpc('kontakt_ukloni', { p_id: k.id }), 15000);
+    if (r.error) throw r.error;
+    _kontaktiSpremi(lista.filter(x => x.id !== k.id));
+    showToast('Kolega uklonjen: ' + (k.ime || ''));
+  } catch (e) { showToast('⚠ Nema veze — ukloni kad imaš signal'); }
+}
+// Glavni izbornik "Kolege": poziv, prihvatanje, uklanjanje. Vraća se kad se nešto promijeni.
+async function kontaktiDodaj() {
+  if (!sbUser || !sbProfile) { showToast('Prijavi se da dodaš kolegu'); return; }
+  await _kontaktiOsvjezi(true);
+  const n = _kontaktiLokalno().length;
+  const i = await _dlgActions('👥 Kolege za slanje (' + n + ')\nKolegu dodaješ pozivom; kad prihvati, ostaje u tvom spisku za slanje fajlova, tragova i fotografija.', [
+    { label: '📨 Pozovi kolegu (dobiješ kod od 5 cifara)' },
+    { label: '🔢 Unesi kod koji sam dobio' },
+    { label: '✕ Ukloni kolegu' },
+    { label: 'Zatvori' }]);
+  if (i === 0) await _kontaktiPozovi();
+  else if (i === 1) await _kontaktiPrihvati();
+  else if (i === 2) await _kontaktiUkloniDlg();
+}
 async function podaciPosalji(vrsta, naziv, kml) {
   if (!sbUser || !sbProfile) { showToast('Prijavi se da šalješ podatke'); return; }
   if (typeof kml !== 'string' || !kml) { showToast('Nema podataka za slanje'); return; }
   if (new Blob([kml]).size > _PRIM_MAX_BAJTA) { showToast('Podatak je prevelik za slanje (najviše ~2,8 MB)'); return; }
   const admin = isAdmin();
-  // Terenski profil ne vidi druge korisnike — šalje se SAMO šifrom (5 cifara).
-  const samoSifra = !admin && isSpdField();
-  const kolege = samoSifra ? [] : (admin ? await _primaociSvi() : _shareKolege());
+  // Terenski profil ne vidi druge korisnike: bira iz SVOJIH kolega (dodanih pozivom) ili šalje šifrom.
+  // Ostali vide svoju šumariju + kolege dodane pozivom (npr. iz druge šumarije).
+  const teren = !admin && isSpdField();
+  let kolege = teren ? _kontaktiLista() : (admin ? await _primaociSvi() : _shareKolege());
+  if (!teren && !admin) { const ima = new Set(kolege.map(k => k.id)); _kontaktiLista().forEach(k => { if (!ima.has(k.id)) kolege.push(k); }); }
+  if (teren && !_kontaktiLokalno().length) _kontaktiOsvjezi().catch(() => {});
   let i;
-  if (samoSifra) {
-    i = 0;
-  } else if (admin || kolege.length > 8) {
+  if (admin || kolege.length > 8) {
     i = await _primaocBiraj(kolege, naziv, admin);
   } else {
     const akcije = kolege.map(k => ({ label: _escHtml(k.ime) }));
     akcije.push({ label: '🔑 Pošalji šifrom — više ljudi, drugi profil ili šumarija (važi 2 dana)' });
+    akcije.push({ label: '➕ Dodaj kolegu (poziv)' });
     akcije.push({ label: 'Odustani' });
-    i = await _dlgActions('📤 Pošalji: ' + naziv, akcije);
+    i = await _dlgActions('📤 Pošalji: ' + naziv + (teren && !kolege.length ? '\nJoš nemaš dodanih kolega — dodaj ih pozivom ili pošalji šifrom.' : ''), akcije);
   }
+  if (i === kolege.length + 1) { await kontaktiDodaj(); return podaciPosalji(vrsta, naziv, kml); }
   const sifrom = i === kolege.length;
   const izabrani = Array.isArray(i) ? i : (sifrom ? [] : [i]);
   if (i == null || (!sifrom && !izabrani.length) || izabrani.some(x => !(x >= 0 && x < kolege.length))) return;
@@ -37509,11 +37853,12 @@ function _primaocBiraj(lista, naziv, prikaziSumariju) {
     box.style.cssText = 'background:var(--bg2,#14201a);color:var(--text,#e8f0ea);width:100%;max-width:520px;max-height:85vh;display:flex;flex-direction:column;border-radius:16px 16px 0 0;padding:14px';
     const dugme = 'padding:10px 12px;border-radius:10px;border:1px solid #476;background:transparent;color:inherit;min-height:44px';
     box.innerHTML = '<div style="font-weight:700;margin-bottom:8px">📤 Pošalji: ' + _escHtml(naziv) + '</div>' +
-      '<input id="prim-trazi" type="search" autocomplete="off" placeholder="Traži korisnika (ime ili šumarija)" style="font-size:16px;padding:10px;border-radius:10px;border:1px solid #476;background:rgba(255,255,255,.07);color:inherit;margin-bottom:8px">' +
+      '<input id="prim-trazi" type="search" autocomplete="off" placeholder="Traži kolegu (ime ili šumarija)" style="font-size:16px;padding:10px;border-radius:10px;border:1px solid #476;background:rgba(255,255,255,.07);color:inherit;margin-bottom:8px">' +
       '<div style="display:flex;gap:8px;margin-bottom:6px"><button type="button" id="prim-sve" style="flex:1;' + dugme + '">Odaberi sve</button><button type="button" id="prim-ukloni" style="flex:1;' + dugme + '">Ukloni</button></div>' +
       '<div id="prim-lista" style="overflow-y:auto;flex:1;min-height:120px"></div>' +
       '<button type="button" id="prim-salji" style="margin-top:8px;padding:12px;border-radius:10px;border:0;background:#2f7d4f;color:#fff;font-weight:700;min-height:46px"></button>' +
       '<button type="button" id="prim-sifra" style="margin-top:6px;' + dugme + '">🔑 Pošalji šifrom (više ljudi, važi 2 dana)</button>' +
+      '<button type="button" id="prim-dodaj" style="margin-top:6px;' + dugme + '">➕ Dodaj kolegu (poziv)</button>' +
       '<button type="button" id="prim-x" style="margin-top:4px;padding:10px;border:0;background:transparent;color:inherit;opacity:.7">Odustani</button>';
     bg.appendChild(box); document.body.appendChild(bg);
     const kraj = v => { bg.remove(); res(v); };
@@ -37541,6 +37886,7 @@ function _primaocBiraj(lista, naziv, prikaziSumariju) {
     });
     box.querySelector('#prim-salji').addEventListener('click', () => { if (izabrani.size) kraj([...izabrani].sort((a, b) => a - b)); });
     box.querySelector('#prim-sifra').addEventListener('click', () => kraj(lista.length));
+    box.querySelector('#prim-dodaj').addEventListener('click', () => kraj(lista.length + 1));
     box.querySelector('#prim-x').addEventListener('click', () => kraj(null));
     bg.addEventListener('click', e => { if (e.target === bg) kraj(null); });
     crtaj();
@@ -37660,6 +38006,7 @@ function _primljeniRender(oznaciVidjeno) {
     '<button type="button" role="tab" aria-selected="' + poslano + '" onclick="_primTabPostavi(\'s\')">📤 Poslano (' + poslani.length + ')</button></div><div class="prm-body">';
   if (!poslano) {
     h += '<button type="button" class="prm-sifra" onclick="primljeniPreuzmiSifrom()">🔑 Preuzmi šifrom</button>';
+    h += '<button type="button" class="prm-sifra" onclick="kontaktiDodaj().then(_primljeniRender)">👥 Kolege (' + _kontaktiLokalno().length + ')</button>';
     if (!lista.length) h += '<p class="prm-prazno">Još ništa nije primljeno. Kad ti kolega pošalje trag, poligon ili KML, stiže ovdje i dobiješ obavijest. Kolegama šalješ iz kartice traga, mjerenja ili Dodaj fajl na kartu → Pošalji.</p>';
     lista.forEach(x => {
       h += '<div class="prm-red' + (!x.vidjeno ? ' novo' : '') + '"><div class="prm-info"><b>' + (_PRIM_IKONA[x.vrsta] || '🗺') + ' ' + _escHtml(x.naziv) + (!x.vidjeno ? ' <i>NOVO</i>' : '') + '</b>' +

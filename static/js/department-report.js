@@ -212,18 +212,44 @@
    // dostupne (bez interneta, nije preuzeto unaprijed) pada na gruplji zum.
    // z12 ima uzorak ~27 m, pa je mali odjel imao samo desetak ćelija.
    const bounds=geometryBounds(geometry);let z=null,x0,y0,width,height,tiles=[],attempted=false;
-   for(let zz=14;zz>=4&&z===null;zz--){
-    const px0=Math.floor(_termLon2x(bounds.getWest(),zz)*256),py0=Math.floor(_termLat2y(bounds.getNorth(),zz)*256),pw=Math.ceil(_termLon2x(bounds.getEast(),zz)*256)-px0,ph=Math.ceil(_termLat2y(bounds.getSouth(),zz)*256)-py0;
-    if(pw*ph>160000||Math.ceil(pw/256)*Math.ceil(ph/256)>36)continue;
-    const jobs=[];for(let y=Math.floor(py0/256)-1;y<=Math.floor((py0+ph)/256)+1;y++)for(let x=Math.floor(px0/256)-1;x<=Math.floor((px0+pw)/256)+1;x++)jobs.push({x,y});
-    if(jobs.length>81)continue;
-    attempted=true;const got=[];let cursor=0,done=0;
-    await Promise.all(Array.from({length:3},async()=>{while(cursor<jobs.length&&check()){const job=jobs[cursor++],src=await _getTerrariumTile(zz,job.x,job.y);if(src){try{got.push({...job,elev:_terrariumDecodeTile(src)});}finally{src.close?.();}}done++;if(check())node('dr-status').textContent='DEM '+done+'/'+jobs.length+' pločica (zum '+zz+')';}}));
-    if(!check())return;
-    // Pločice koje stvarno prekrivaju odjel moraju sve postojati; rubne (za susjedne ćelije) su dodatak.
-    const have=new Set(got.map(t=>t.x+':'+t.y));let complete=true;
-    for(let y=Math.floor(py0/256);y<=Math.floor((py0+ph-1)/256);y++)for(let x=Math.floor(px0/256);x<=Math.floor((px0+pw-1)/256);x++)if(!have.has(x+':'+y))complete=false;
-    if(complete||(zz<=12&&got.length)){z=zz;x0=px0;y0=py0;width=pw;height=ph;tiles=got;}
+   // Dvije faze: PRVO samo sačuvane pločice (trenutno, bez mreže) od najfinijeg zuma nadolje; tek ako
+   // ništa potpuno nije sačuvano ide preuzimanje. Ranije je svaki zum od 14 do 4 čekao mrežu (do 81
+   // pločica × 10 s), pa je na slabom signalu izvještaj trajao minutama. Preuzimanje staje čim 3 pločice
+   // zaredom ne stignu (nema signala), ima ukupni budžet vremena, a na slabom signalu traži samo
+   // pločice koje pokrivaju odjel (bez rubnih) i zum sa najviše 6 takvih pločica.
+   const kvalitet=typeof _netKvalitet==='function'?_netKvalitet():'nepoznato',slaba=kvalitet==='slaba';
+   const NET_BUDZET=45000;let netStart=null,mrezaMrtva=false;
+   for(const samoKes of [true,false]){
+    if(!samoKes&&mrezaMrtva)break;
+    if(z!==null)break;
+    for(let zz=14;zz>=4&&z===null;zz--){
+     const px0=Math.floor(_termLon2x(bounds.getWest(),zz)*256),py0=Math.floor(_termLat2y(bounds.getNorth(),zz)*256),pw=Math.ceil(_termLon2x(bounds.getEast(),zz)*256)-px0,ph=Math.ceil(_termLat2y(bounds.getSouth(),zz)*256)-py0;
+     if(pw*ph>160000||Math.ceil(pw/256)*Math.ceil(ph/256)>36)continue;
+     const nuzne=[],rubne=[];
+     for(let y=Math.floor(py0/256)-1;y<=Math.floor((py0+ph)/256)+1;y++)for(let x=Math.floor(px0/256)-1;x<=Math.floor((px0+pw)/256)+1;x++){
+      const unutra=x>=Math.floor(px0/256)&&x<=Math.floor((px0+pw-1)/256)&&y>=Math.floor(py0/256)&&y<=Math.floor((py0+ph-1)/256);
+      (unutra?nuzne:rubne).push({x,y});
+     }
+     if(nuzne.length+rubne.length>81)continue;
+     if(!samoKes&&slaba&&nuzne.length>6)continue;
+     if(!samoKes&&netStart!==null&&Date.now()-netStart>NET_BUDZET)break;
+     attempted=true;
+     const jobs=(samoKes||!slaba)?nuzne.concat(rubne):nuzne;
+     const got=[];let cursor=0,done=0,niz=0,prekid=false;
+     node('dr-status').textContent=samoKes?'Tražim sačuvani DEM…':'DEM preuzimanje (zum '+zz+')…';
+     await Promise.all(Array.from({length:3},async()=>{while(cursor<jobs.length&&check()&&!prekid){const job=jobs[cursor++];
+      if(!samoKes&&netStart===null)netStart=Date.now();
+      const src=await _getTerrariumTile(zz,job.x,job.y,samoKes?{samoKes:true}:undefined);
+      if(src){niz=0;try{got.push({...job,elev:_terrariumDecodeTile(src)});}finally{src.close?.();}}
+      else if(!samoKes&&++niz>=3){prekid=true;mrezaMrtva=true;}
+      done++;if(check()&&!samoKes)node('dr-status').textContent='DEM '+done+'/'+jobs.length+' pločica (zum '+zz+')';}}));
+     if(!check())return;
+     // Pločice koje stvarno prekrivaju odjel moraju sve postojati; rubne (za susjedne ćelije) su dodatak.
+     const have=new Set(got.map(t=>t.x+':'+t.y));let complete=true;
+     for(let y=Math.floor(py0/256);y<=Math.floor((py0+ph-1)/256);y++)for(let x=Math.floor(px0/256);x<=Math.floor((px0+pw-1)/256);x++)if(!have.has(x+':'+y))complete=false;
+     if(complete||(!samoKes&&zz<=12&&got.length)){z=zz;x0=px0;y0=py0;width=pw;height=ph;tiles=got;}
+     if(!samoKes&&mrezaMrtva)break;
+    }
    }
    if(z===null)throw Error(!attempted?'Izaberi manji prostor':'Nema sačuvanog DEM-a. Poveži internet pa ponovi izračun.');
    if(!check())return;if(!tiles.length)throw Error('Nema sačuvanog DEM-a. Poveži internet pa ponovi izračun.');

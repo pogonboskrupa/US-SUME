@@ -26,7 +26,7 @@ uređaju:
 **Šema brojeva (od v1.1.0, na eksplicitan zahtjev — resetovano sa v3.128.1)**:
 `Z` (patch) raste 0→9 unutar istog `Y` (minor); kad bi `Z` prešao 9, umjesto
 toga `Y` se poveća za 1 i `Z` se vrati na 0 (npr. `v1.1.9` → sljedeća izmjena
-je `v1.2.0`, NE `v1.1.10`). Isto pravilo se ponavlja i za `Y` (kad `Y` pređe 9,
+je `v1.2.0`, NE `v1.1.10`). Isto važi i za prelaz `Y`: poslije `v3.9.9` dolazi `v4.0.0`, NE `v3.10.0` (greška iz 2026-11-10: izdane su `v3.10.0` i `v3.10.1` pa je ispravljeno na `v4.0.0`). Isto pravilo se ponavlja i za `Y` (kad `Y` pređe 9,
 `X` raste za 1 i `Y` se vrati na 0). `versionCode` u `build.gradle` OVO NE
 PRATI — on je zaseban, čisto monotono rastući cijeli broj (Android to
 zahtijeva da bi update uopšte instalirao), raste +1 pri SVAKOJ izmjeni

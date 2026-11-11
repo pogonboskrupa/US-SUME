@@ -194,7 +194,7 @@ console.log('\nMrtav kod — uklonjeni preteče koje ništa ne zove:');
 
 t('žive zamjene su i dalje ožičene na dugmad', () => {
   ['fabSnimTrag()', 'fabLokacija()'].forEach(f => {
-    assert.ok(HTML.includes('onclick="' + f + '"'),
+    assert.ok(HTML.includes('onclick="' + f + '"') || HTML.includes('onclick="if(_pratiKlik())' + f + '"'),
       f + ' više nije ožičen ni na jedno dugme — uklonjeno je previše');
   });
 });
