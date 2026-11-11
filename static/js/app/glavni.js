@@ -15704,14 +15704,16 @@ function _togCompassSwitch() {
   _updGpsSwitch();
 }
 function toggleGPS() {
-  if (!gpsOn) startGPS(); else stopGPS();
+  if (!gpsOn) { startGPS(); _pratiUkljuciZadano(); } else stopGPS();
+}
+// "Prati me" je zadano uključeno kad KORISNIK upali lokaciju (prekidač, Centriraj). Namjerno nije u
+// startGPS(): njega zovu i unutrašnje funkcije (kompas, navođenje, dijeljenje) pa bi karta skakala sama.
+function _pratiUkljuciZadano() {
+  try { if (typeof _pratiPostavi === 'function') { _userPannedAway = false; _pratiPostavi(true); } } catch (e) {}
 }
 function startGPS() {
   if (!navigator.geolocation) { showToast('⚠ Uređaj ne podržava GPS!'); return; }
   gpsOn = true;
-  // "Prati me" je podrazumijevano uključeno čim se lokacija upali; isključuje ga povlačenje karte,
-  // dug dodir na Centriraj ili gašenje lokacije (stopGPS).
-  try { _pratiPostavi(true); } catch (e) {}
   document.getElementById('gps-info').textContent = 'Tražim signal…';
   if (!_compassConeOn) togCompassCone();
   _updGpsSwitch();
@@ -18031,6 +18033,7 @@ function fabLokacija() {
   } else {
     showToast('⏳ Pokretanje GPS-a...');
     startGPS();
+    _pratiUkljuciZadano();
     const wait = setInterval(() => {
       if (lastP) { clearInterval(wait); map.setView([lastP.la, lastP.lo], 16); }
     }, 500);

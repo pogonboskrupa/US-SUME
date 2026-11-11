@@ -24,7 +24,8 @@ assert(html.includes('class="prati-tog"'),'prekidač je unutar dugmeta');
 // drugi dug dodir isključuje
 api._pratiToggle();assert.equal(api.on,false);assert(!els['ab-centar'].classList.s.has('prati'));
 // Podrazumijevano uključeno čim se lokacija upali; slobodan pogled tokom snimanja ga ne gazi
-const sg=src.slice(src.indexOf('function startGPS'),src.indexOf('function stopGPS'));
-assert(/_pratiPostavi\(true\)/.test(sg),'startGPS uključuje Prati me');
+const sg=src.slice(src.indexOf('function toggleGPS'),src.indexOf('function startGPS'));
+assert(/_pratiUkljuciZadano\(\)/.test(sg)&&/_pratiPostavi\(true\)/.test(sg),'ručno paljenje lokacije uključuje Prati me');
+assert(!/_pratiPostavi\(true\)/.test(src.slice(src.indexOf('function startGPS'),src.indexOf('function stopGPS'))),'startGPS sam ne uključuje praćenje');
 assert(/_pratiMe && !_userPannedAway && !_recFreeView\) map\.panTo/.test(src),'slobodan pogled snimanja ima prednost');
 console.log('OK prati me');
