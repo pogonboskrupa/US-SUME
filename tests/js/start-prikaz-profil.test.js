@@ -25,7 +25,7 @@ const fn = n => { let a = src.indexOf('async function ' + n + '('); if (a < 0) a
     return { f, st }; };
   let t = mk({ id: 'u', kes: 1 }, 60); await t.f(); assert.strictEqual(t.st.sbProfile.kes, 1, 'istek → keš'); assert.strictEqual(t.st.ui, 1);
   t = mk(null, 30); await t.f(); assert.strictEqual(t.st.sbProfile.svjez, 1, 'bez keša čeka server');
-  assert(/await _sbLoadProfileRok\(\);\s*showApp\(\);/.test(fn('doLogin')), 'doLogin koristi rok');
+  assert(/await _sbLoadProfileRok\(\);[\s\S]{0,1200}showApp\(\);/.test(fn('doLogin')), 'doLogin koristi rok');
   // 5) meni: dok profil ne stigne "Učitavam profil…", ime se iscrta odmah pri ulazu
   assert(/'Učitavam profil…'/.test(fn('_menuIdentityRender')) && /_revealApp\(\);\n  \/\/ Meni odmah nosi ime[^\n]*\n  try \{ if \(typeof _menuIdentityRender/.test(src));
   console.log('start-prikaz-profil: ok');

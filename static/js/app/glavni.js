@@ -1502,9 +1502,9 @@ async function initAuth() {
       const emailPromise = sb.rpc('get_login_email', { p_ime: saved.ime, p_prezime: saved.prezime });
       const { data: email } = await (_tmo ? Promise.race([emailPromise, _tmo]) : emailPromise);
       if (!email) { goOfflineOrLogin(); return; }
-      const { error } = await sb.auth.signInWithPassword({ email, password: saved.pin.padEnd(6, '0') });
-      if (error) { goOfflineOrLogin(); return; }
-      sbUser = (await sb.auth.getUser()).data.user;
+      const { data: sd, error } = await sb.auth.signInWithPassword({ email, password: saved.pin.padEnd(6, '0') });
+      if (error || !sd?.user) { goOfflineOrLogin(); return; }
+      sbUser = sd.user;   // bez getUser(): još jedan mrežni poziv koji na slabom signalu zna pasti
       if (_appEntered) { await _upgradeToOnlineSession(); }
       else { await sbLoadProfile(); showApp(); }
     } catch(e) {
@@ -2101,25 +2101,45 @@ async function doLogin() {
   }
   if(!email){showAuthErr('Korisnik nije pronađen. Provjeri ime i prezime.');return;}
 
-  const { error } = await sb.auth.signInWithPassword({ email, password: pin.padEnd(6, '0') });
+  let error, prijavljen = null;
+  try {
+    const r = await sb.auth.signInWithPassword({ email, password: pin.padEnd(6, '0') });
+    error = r.error; prijavljen = r.data?.user || null;
+  } catch (e) { error = e; }
   if (error) {
     // D2-K: ne prikazuj "Pogrešan PIN" za mrežnu/server grešku — samo za stvarno
     // pogrešne kredencijale (Supabase invalid_grant, status 400).
     const wrongPin = error.status === 400 || /invalid.*(login|credential|grant)/i.test(error.message || '');
+    // Mreža pala IZMEĐU provjere imena i prijave (slab signal): isti korisnik sa sačuvanim
+    // profilom ulazi offline, kao i kad padne prvi korak.
+    if (!wrongPin && _isNetworkErr(error) && await prijavaIzKesa()) return;
     showAuthErr(wrongPin?'Pogrešan PIN: '+error.message:_isNetworkErr(error)?'Veza sa serverom je prekinuta. Provjeri internet i ponovi prijavu.':'Greška prijave: '+error.message);
     return;
   }
 
   // Zapamti korisnika ako je checkbox čekiran
-  await _offCredSpremi(ime, prezime, pin, (await sb.auth.getUser().catch(()=>({data:{}}))).data?.user?.id);
+  // Korisnik dolazi iz odgovora prijave: getUser() je JOŠ JEDAN mrežni poziv, a na slabom signalu
+  // njegov pad je ostavljao sbUser praznim (ulaz u app bez korisnika) i offline prijavu nesačuvanom.
+  if (!prijavljen) { try { prijavljen = (await sb.auth.getSession()).data?.session?.user || null; } catch (e) {} }
+  if (!prijavljen) { showAuthErr('Prijava nije dovršena — veza je prekinuta. Pokušaj ponovo.'); return; }
+  await _offCredSpremi(ime, prezime, pin, prijavljen.id);
   if (document.getElementById('auth-zapamti').checked) {
     localStorage.setItem(_SAVED_USER_KEY, JSON.stringify({ ime, prezime, pin }));
   } else {
     _clearSavedUser();
   }
 
-  sbUser = (await sb.auth.getUser()).data.user;
+  sbUser = prijavljen;
   await _sbLoadProfileRok();
+  // Bez profila (ni sa servera ni iz keša) se NE ulazi: app bi radila bez uloge i šumarije, a pri
+  // sljedećem pokretanju BEZ signala ne bi bilo sačuvanog profila pa ni ulaza (prvi teren poslije
+  // prijave na slabom signalu). Još dva pokušaja, pa jasna poruka.
+  for (let n = 0; n < 2 && !sbProfile; n++) {
+    showAuthErr('Učitavam profil… (slaba veza)');
+    await new Promise(r => setTimeout(r, 1200));
+    await _sbLoadProfileRok(12000);
+  }
+  if (!sbProfile) { showAuthErr('Prijava je uspjela, ali profil nije učitan (slaba veza). Ostani gdje ima signala i pritisni Prijava ponovo.'); return; }
   showApp();
   } catch(e) { showAuthErr('Greška: ' + e.message); }
   finally {
@@ -2885,9 +2905,9 @@ async function _sesijaPinom(pitaj) {
     try {
       const { data: email } = await _withTimeout(sb.rpc('get_login_email', { p_ime: sbProfile.ime, p_prezime: sbProfile.prezime }), 8000);
       if (!email) return false;
-      const { error } = await _withTimeout(sb.auth.signInWithPassword({ email, password: String(pin).padEnd(6, '0') }), 10000);
+      const { data: sd, error } = await _withTimeout(sb.auth.signInWithPassword({ email, password: String(pin).padEnd(6, '0') }), 10000);
       if (error) return false;
-      const u = (await sb.auth.getUser()).data.user;
+      const u = sd?.user;
       if (!u || (uid && u.id !== uid)) return false;
       sbUser = u;
       try { await _upgradeToOnlineSession(); } catch (e) {}
@@ -3774,6 +3794,20 @@ function _projektiVratiNeposlane(rows) {
   return out;
 }
 
+// Članovi SVIH projekata u jednom upitu po 100 projekata (ranije jedan upit po projektu, redom —
+// na slabom signalu desetine zahtjeva). Vraća false ako ijedan upit padne: pozivalac tada ide na
+// keš umjesto da projekte kolega ostavi bez članova (filter članstva bi ih izbacio).
+async function _projClanoviUcitaj(lista) {
+  const po = {};
+  for (let i = 0; i < lista.length; i += 100) {
+    const ids = lista.slice(i, i + 100).map(p => p.id);
+    const { data, error } = await sb.from('projekt_clanovi').select('projekt_id, korisnik_id, added_by').in('projekt_id', ids);
+    if (error) return false;
+    (data || []).forEach(c => { (po[c.projekt_id] = po[c.projekt_id] || []).push({ korisnik_id: c.korisnik_id, added_by: c.added_by }); });
+  }
+  lista.forEach(p => { p.clanovi = po[p.id] || []; });
+  return true;
+}
 async function sbLoadProjekti() {
   if (!sbUser) return;
   // ŠPD terenski korisnik nema projekte — preskoči učitavanje
@@ -3781,6 +3815,7 @@ async function sbLoadProjekti() {
   // Vodeći učitava svoje i dijeljene projekte istim putem kao kolege.
   // Zbirni izvještaj šumarije ima zaseban RPC i nikad ne prepisuje radni spisak.
   const myGen = ++_projLoadGen;
+  let pouzdano = true;
   try {
     // Admin (SPD USSUME) — nadzorni pregled: vidi SVE projekte (read-only)
     if (isAdmin()) {
@@ -3788,13 +3823,9 @@ async function sbLoadProjekti() {
         .select('*').order('datum', { ascending: false });
       if (error) throw error;
       if (myGen !== _projLoadGen) return;
-      _projekti = (data || []).filter(p => !_deletedProjektIds.has(p.id));
-      for (const p of _projekti) {
-        const { data: cl } = await sb.from('projekt_clanovi')
-          .select('korisnik_id, added_by').eq('projekt_id', p.id);
-        if (myGen !== _projLoadGen) return;
-        p.clanovi = cl || [];
-      }
+      const novi = (data || []).filter(p => !_deletedProjektIds.has(p.id));
+      if (!await _projClanoviUcitaj(novi) || myGen !== _projLoadGen) { if (myGen !== _projLoadGen) return; throw new Error('clanovi'); }
+      _projekti = novi;
       _OL.save(_OL.PROJEKTI, _projekti);
     } else {
     // Load my projects
@@ -3804,27 +3835,28 @@ async function sbLoadProjekti() {
     if (myGen !== _projLoadGen) return;
 
     // Load projects I'm a member of
-    const { data: clanstva } = await sb.from('projekt_clanovi')
+    // Supabase mrežnu grešku VRAĆA ({error}), ne baca. Ranije se greška ovih upita čitala kao
+    // "nema dijeljenih projekata / nema članova", pa je na slabom signalu (prvi upit prođe, drugi
+    // padne) keš prepisan BEZ projekata kolega i aktivni projekat obrisan — na terenu bez signala
+    // ga više nije bilo. Svaka greška sada vodi na sačuvani keš (catch ispod).
+    const { data: clanstva, error: e2 } = await sb.from('projekt_clanovi')
       .select('projekt_id').eq('korisnik_id', sbUser.id);
+    if (e2) throw e2;
     if (myGen !== _projLoadGen) return;
     let dijeljeni = [];
     if (clanstva && clanstva.length > 0) {
       const ids = clanstva.map(c => c.projekt_id);
-      const { data } = await sb.from('projekti').select('*').in('id', ids)
+      const { data, error: e3 } = await sb.from('projekti').select('*').in('id', ids)
         .neq('korisnik_id', sbUser.id).order('datum', { ascending: false });
+      if (e3) throw e3;
       if (myGen !== _projLoadGen) return;
       dijeljeni = data || [];
     }
     // Nikad ne vraćaj lokalno obrisane projekte (DB propagacija može kasniti)
-    _projekti = [...(moji || []), ...dijeljeni].filter(p => !_deletedProjektIds.has(p.id));
-
-    // Load clanovi for each project
-    for (const p of _projekti) {
-      const { data: cl } = await sb.from('projekt_clanovi')
-        .select('korisnik_id, added_by').eq('projekt_id', p.id);
-      if (myGen !== _projLoadGen) return;
-      p.clanovi = cl || [];
-    }
+    const novi = [...(moji || []), ...dijeljeni].filter(p => !_deletedProjektIds.has(p.id));
+    if (!await _projClanoviUcitaj(novi)) throw new Error('clanovi');
+    if (myGen !== _projLoadGen) return;
+    _projekti = novi;
 
     _OL.save(_OL.PROJEKTI, _projekti); // Keširaj za offline
     } // close else (non-ŠPD)
@@ -3834,7 +3866,7 @@ async function sbLoadProjekti() {
     const cached = _OL.load(_OL.PROJEKTI);
     if (cached) {
       _projekti = cached.filter(p => !_deletedProjektIds.has(p.id));
-    }
+    } else pouzdano = false;   // ni server ni keš: ne zaključuj ništa o aktivnom projektu
   }
   if (myGen !== _projLoadGen) return;
 
@@ -3845,7 +3877,7 @@ async function sbLoadProjekti() {
   _OL.save(_OL.PROJEKTI, _projekti);
 
   // Validate _aktivniProjektId still exists
-  if (_aktivniProjektId && !_projekti.find(p => p.id === _aktivniProjektId)) {
+  if (pouzdano && _aktivniProjektId && !_projekti.find(p => p.id === _aktivniProjektId)) {
     _aktivniProjektId = null;
     localStorage.removeItem('tvlake_akt_proj');
   }
@@ -37667,7 +37699,7 @@ async function _primljeniSync(force) {
           continue;
         }
         const stavka = await _primljeniSnimiLokalno(lista, row.id, row.vrsta, row.naziv, row.from_id,
-          (kolegeMap && kolegeMap[row.from_id]?.ime) || 'Kolega', Date.parse(row.created_at) || sad, row.sadrzaj);
+          (kolegeMap && kolegeMap[row.from_id]?.ime) || (_kontaktiLokalno().find(k => k.id === row.from_id) || {}).ime || 'Kolega', Date.parse(row.created_at) || sad, row.sadrzaj);
         if (!stavka) continue;                                    // nije sačuvano lokalno → ne briši sa servera
         novi.push(stavka); spremljen = true;
       }
@@ -37736,8 +37768,15 @@ async function _kontaktiOsvjezi(force) {
     return nova;
   } catch (e) { return prije; }
 }
-async function _kontaktiPozovi() {
+// RPC-i kolega traže PRAVU sesiju: poslije offline ulaza (sačuvan profil) sesije nema, pa je poziv
+// padao sa nejasnom greškom servera. Isti korak kao kod slanja.
+async function _kontaktiSesija() {
   if (typeof _mrezaSila === 'function') _mrezaSila(30000);
+  if (sbUser && sbUser._cachedStub && !(await _sesijaPinom(true))) { showToast('Treba veza sa serverom — pokušaj kad imaš signal'); return false; }
+  return true;
+}
+async function _kontaktiPozovi() {
+  if (!await _kontaktiSesija()) return;
   try {
     const r = await _withTimeout(sb.rpc('kontakt_poziv_napravi'), 20000);
     if (r.error) throw r.error;
@@ -37761,7 +37800,7 @@ async function _kontaktiPrihvati() {
   if (unos == null) return;
   const kod = String(unos).replace(/[^0-9]/g, '');
   if (kod.length !== 5) { showToast('Kod ima 5 cifara'); return; }
-  if (typeof _mrezaSila === 'function') _mrezaSila(30000);
+  if (!await _kontaktiSesija()) return;
   try {
     const r = await _withTimeout(sb.rpc('kontakt_poziv_prihvati', { p_kod: kod }), 20000);
     if (r.error) throw r.error;
@@ -37782,12 +37821,13 @@ async function _kontaktiUkloniDlg() {
   const i = await _dlgActions('Koga ukloniti iz kolega? (Ukloni i njega kod tebe)', lista.map(k => ({ label: '✕ ' + _escHtml(k.ime || 'Kolega'), danger: true })).concat([{ label: 'Odustani' }]));
   if (i == null || i >= lista.length) return;
   const k = lista[i];
+  if (!await _kontaktiSesija()) return;
   try {
     const r = await _withTimeout(sb.rpc('kontakt_ukloni', { p_id: k.id }), 15000);
     if (r.error) throw r.error;
     _kontaktiSpremi(lista.filter(x => x.id !== k.id));
     showToast('Kolega uklonjen: ' + (k.ime || ''));
-  } catch (e) { showToast('⚠ Nema veze — ukloni kad imaš signal'); }
+  } catch (e) { showToast((typeof _isNetworkErr === 'function' && _isNetworkErr(e)) ? '⚠ Nema veze — ukloni kad imaš signal' : '⚠ ' + String(e?.message || e)); }
 }
 // Glavni izbornik "Kolege": poziv, prihvatanje, uklanjanje. Vraća se kad se nešto promijeni.
 async function kontaktiDodaj() {
@@ -38118,20 +38158,11 @@ async function _primljeniPreimenuj(id) {
   _primljeniSpremi(lista); _primljeniRender();
 }
 async function _primljeniDalje(id) {
-  const lista = _primljeniUcitaj(), x = lista.find(a => a.id === id);
+  const x = _primljeniUcitaj().find(a => a.id === id);
   if (!x) return;
-  // Već uvezen (i nije obrisan sa uređaja): samo ga prikaži. Ranije je svaki klik pravio NOVU
-  // kopiju sloja ("… (2).kml", "… (3).kml").
-  const vec = x.lokalno && kmlLs.find(k => !k._key && (k._origName || k.name) === x.lokalno);
-  if (vec) {
-    const i = kmlLs.indexOf(vec);
-    if (vec.vis === false && typeof togK === 'function') togK(i);
-    else if (!map.hasLayer(vec.grp)) vec.grp.addTo(map);
-    _primljeniZatvori(); switchTab('karta');
-    try { const b = vec.grp.getBounds(); if (b.isValid()) map.fitBounds(b, { padding: [20, 20] }); } catch (e) {}
-    showToast('✓ Već je na karti: ' + vec.name);
-    return;
-  }
+  // Prosljeđuje se sačuvani sadržaj, bez obzira je li podatak već stavljen na kartu. Ranije je ovdje
+  // stajao prekopiran blok iz "Na karti", pa je "Pošalji dalje" za podatak koji je već na karti
+  // samo otvarao kartu i ništa nije slao.
   const sadrzaj = await _kmlcGet('primljeno:' + id);
   if (typeof sadrzaj !== 'string') { showToast('Sadržaj nije pronađen na telefonu'); return; }
   podaciPosalji(x.vrsta, x.naziv, sadrzaj);
