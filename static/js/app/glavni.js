@@ -12556,12 +12556,24 @@ async function _mapFavMenu(i) {
   if (!fav) return;
   const a = await _dlgActions(fav.name, [
     { label: '✏ Preimenuj', danger: false },
-    { label: '✕ Obriši', danger: true }
+    { label: '▲ Pomjeri gore' },
+    { label: '▼ Pomjeri dolje' },
+    { label: '✕ Ukloni iz omiljenih', danger: true }
   ]);
   if (a === 0) mapFavRename(i);
-  else if (a === 1) { _mapFavs.splice(i, 1); _mapFavSave(); _mapFavRender(); }
+  else if (a === 1 || a === 2) _mapFavPomjeri(i, a === 1 ? -1 : 1);
+  else if (a === 3) { _mapFavs.splice(i, 1); _mapFavSave(); _mapFavRender(); }
 }
 
+// Ručni redoslijed: kartica se mijenja sa susjednom i dobija oznaku `rucno`, pa je automatsko
+// uređivanje (_mapFavUredi) više ne vraća na staro mjesto.
+function _mapFavPomjeri(i, d) {
+  const j = i + d;
+  if (j < 0 || j >= _mapFavs.length) return;
+  const a = _mapFavs[i]; _mapFavs[i] = _mapFavs[j]; _mapFavs[j] = a;
+  _mapFavs.forEach(f => { f.rucno = 1; });
+  _mapFavSave(); _mapFavRender();
+}
 function openMapFavs() {
   _mapFavRender();
   if (typeof _mapFavMigrirajServer === 'function') _mapFavMigrirajServer().then(p => { if (p) _mapFavRender(); }).catch(() => {});
@@ -12644,15 +12656,24 @@ function _mapFavDodajAuto(fav) {
   _mapFavs.push(Object.assign({ id: 'fav_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6) }, fav));
   return true;
 }
-// Stabilno uredi: server karta, Google satelit, ostalo (korisnikov redoslijed ostaje).
+// Stabilno uredi: zadnja skinuta server karta, Google satelit, server karta + nagib / ekspozicija,
+// pa korisnikove karte. Kad je korisnik sam mijenjao redoslijed (`rucno`), ništa se ne dira.
 function _mapFavUredi() {
-  const rang = f => (f.auto === 'srv' && !f.ovl) ? 0 : (f.type === 'tl' && f.tlKey === '📡 Google') ? 1 : 2;
+  if (_mapFavs.some(f => f.rucno)) return;
+  const rang = f => (f.auto === 'srv' && !f.ovl) ? 0 : (f.type === 'tl' && f.tlKey === '📡 Google') ? 1
+    : (f.auto === 'srv' && f.ovl === 'slope') ? 2 : (f.auto === 'srv' && f.ovl === 'ekspo') ? 3 : 4;
   const sa = _mapFavs.map((f, i) => ({ f, i, r: rang(f) }));
   sa.sort((x, y) => x.r - y.r || x.i - y.i);
   _mapFavs.splice(0, _mapFavs.length, ...sa.map(x => x.f));
 }
+// Automatske stavke prate ZADNJU skinutu server kartu: jedna karta + nagib + ekspozicija. Ranije je
+// svaka skinuta karta dodavala svoje tri stavke, pa se spisak punio kombinacijama starih karata.
 function _mapFavServerKarta(ime) {
-  let nov = _mapFavDodajAuto({ name: ime, type: 'sqlite', sqliteId: ime, auto: 'srv' });
+  const prije = _mapFavs.length;
+  const ostaje = _mapFavs.filter(f => !(f.auto === 'srv' && f.sqliteId !== ime));
+  if (ostaje.length !== prije) _mapFavs.splice(0, prije, ...ostaje);
+  let nov = ostaje.length !== prije;
+  nov = _mapFavDodajAuto({ name: ime, type: 'sqlite', sqliteId: ime, auto: 'srv' }) || nov;
   nov = _mapFavDodajAuto({ name: ime + ' + Nagib', type: 'sqlite', sqliteId: ime, ovl: 'slope', auto: 'srv' }) || nov;
   nov = _mapFavDodajAuto({ name: ime + ' + Ekspozicija', type: 'sqlite', sqliteId: ime, ovl: 'ekspo', auto: 'srv' }) || nov;
   _mapFavUredi(); _mapFavSave();
@@ -12672,12 +12693,22 @@ async function _mapFavMigrirajServer() {
   try { const r = await _sqlWCall({ type: 'list' }); rows = (r && r.rows) || []; } catch (e) { return false; }
   let obradjene = [];
   try { obradjene = JSON.parse(localStorage.getItem('tvlake_mapfav_srv_v1') || '[]'); } catch (e) {}
+  const naTelefonu = rows.filter(m => m?.meta?._nativeId && m.name).map(m => m.name);
   let promjena = false;
-  for (const m of rows) {
-    if (!m?.meta?._nativeId || !m.name || obradjene.includes(m.name)) continue;
-    _mapFavServerKarta(m.name); obradjene.push(m.name); promjena = true;
+  for (const ime of naTelefonu) {
+    if (obradjene.includes(ime)) continue;
+    _mapFavServerKarta(ime); obradjene.push(ime); promjena = true;
   }
   if (promjena) { try { localStorage.setItem('tvlake_mapfav_srv_v1', JSON.stringify(obradjene)); } catch (e) {} }
+  // Stari spiskovi (do v4.0.8) nose po tri stavke za SVAKU skinutu kartu: ostaje samo zadnja skinuta
+  // koja je još na telefonu. Automatske stavke karte koje više nema na telefonu se sklanjaju.
+  const auto = _mapFavs.filter(f => f.auto === 'srv');
+  if (auto.length) {
+    const zadnja = [...obradjene].reverse().find(n => naTelefonu.includes(n) && auto.some(f => f.sqliteId === n));
+    const n0 = _mapFavs.length;
+    const ostaje = _mapFavs.filter(f => f.auto !== 'srv' || (zadnja && f.sqliteId === zadnja));
+    if (ostaje.length !== n0) { _mapFavs.splice(0, n0, ...ostaje); _mapFavUredi(); _mapFavSave(); promjena = true; }
+  }
   return promjena;
 }
 function _mapFavPodrazumijevani() {

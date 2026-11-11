@@ -1424,3 +1424,15 @@ html[data-field-theme=day] #primljeni-panel .prm-tabovi button[aria-selected=tru
 .mfav-preview[data-ovl=slope]::after{background:linear-gradient(135deg,#22c55e,#eab308 50%,#ef4444)}
 .mfav-preview[data-ovl=ekspo]::after{background:conic-gradient(#38bdf8,#22c55e,#eab308,#ef4444,#a855f7,#38bdf8)}
 .mfav-card.active{box-shadow:0 0 0 2px #22c55e66}
+
+/* v4.0.9 Omiljene karte: sekcije, oznaka vrste na svakoj kartici, jasnija aktivna i nedostupna karta */
+.mfav-sek{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin:6px 2px 0;font:inherit}
+.mfav-sek b{font:800 12px/1.5 system-ui,sans-serif;letter-spacing:.05em;text-transform:uppercase;color:var(--field-ink)}
+.mfav-sek span{font:11px/1.5 system-ui,sans-serif;color:var(--field-muted)}
+.mfav-preview{position:relative}
+html .mfav-card.active{background:#16a34a14;box-shadow:0 0 0 1px #16a34a55}
+html .mfav-card.nedostupna{opacity:.75;border-style:dashed}
+.mfav-preview[data-kind=sat] .mfav-tag{background:#1e3a8ad9}
+.mfav-preview[data-kind=off]:not([data-ovl]) .mfav-tag{background:#166534d9}
+.mfav-preview[data-ovl=slope] .mfav-tag{background:#b45309d9}.mfav-preview[data-ovl=ekspo] .mfav-tag{background:#6d28d9d9}
+.mfav-copy b{font-size:15px}

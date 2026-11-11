@@ -50,10 +50,18 @@
   function renderFavorites(){
     const el=document.getElementById('mapfav-grid');if(!el)return;
     const count=document.getElementById('mapfav-count');if(count)count.textContent=_mapFavs.length+' sačuvanih karata';
-    el.innerHTML=(_mapFavs.length?_mapFavs.map(fav=>{
+    const kind=fav=>fav.type==='tl'&&fav.tlKey==='📡 Google'?'sat':fav.type==='sqlite'?'off':'tl';
+    const tag=fav=>fav.ovl==='slope'?'NAGIB':fav.ovl==='ekspo'?'EKSPOZ.':kind(fav)==='sat'?'SATELIT':kind(fav)==='off'?'OFFLINE':'ONLINE';
+    const card=fav=>{
       const s=favoriteState(fav),key=esc(identity(fav));
-      return '<article class="mfav-card'+(s.active?' active':'')+'"><button type="button" class="mfav-activate" data-fav-action="open" data-fav-key="'+key+'" '+(!s.available?'disabled':'')+' aria-label="'+esc('Otvori '+fav.name)+'" aria-pressed="'+s.active+'"><span class="mfav-preview" data-kind="'+(fav.type==='tl'&&fav.tlKey==='📡 Google'?'sat':fav.type==='sqlite'?'off':'tl')+'"'+(fav.ovl?' data-ovl="'+fav.ovl+'"':'')+'>'+_mapFavThumbHtml(fav)+(fav.ovl?'<i class="mfav-tag">'+(fav.ovl==='slope'?'NAGIB':'EKSPOZ.')+'</i>':'')+'</span><span class="mfav-copy"><span class="catalog-status">'+(s.active?'✓ Aktivna karta':esc(s.label))+'</span><b>'+esc(fav.name)+'</b><small>'+esc(s.subtitle)+'</small></span></button><button type="button" class="mfav-edit-btn" data-fav-action="edit" data-fav-key="'+key+'" aria-label="'+esc('Uredi '+fav.name)+'">⋮</button></article>';
-    }).join(''):'<div class="catalog-empty"><b>Tvoje najčešće karte na jednom mjestu</b><p>Aktiviraj kartu pa je dodaj ovdje za brži pristup.</p></div>')+'<button type="button" class="mfav-add-card" onclick="mapFavAddCurrent()"><span>＋</span><span>Dodaj trenutnu kartu</span></button>';
+      return '<article class="mfav-card'+(s.active?' active':'')+(!s.available?' nedostupna':'')+'"><button type="button" class="mfav-activate" data-fav-action="open" data-fav-key="'+key+'" '+(!s.available?'disabled':'')+' aria-label="'+esc('Otvori '+fav.name)+'" aria-pressed="'+s.active+'"><span class="mfav-preview" data-kind="'+kind(fav)+'"'+(fav.ovl?' data-ovl="'+fav.ovl+'"':'')+'>'+_mapFavThumbHtml(fav)+'<i class="mfav-tag">'+tag(fav)+'</i></span><span class="mfav-copy"><span class="catalog-status">'+(s.active?'✓ Aktivna karta':esc(s.label))+'</span><b>'+esc(fav.name)+'</b><small>'+esc(s.subtitle)+'</small></span></button><button type="button" class="mfav-edit-btn" data-fav-action="edit" data-fav-key="'+key+'" aria-label="'+esc('Uredi '+fav.name)+'">⋮</button></article>';
+    };
+    // Brzi izbor = zadnja skinuta karta sa servera, Google satelit i kombinacije sa nagibom/ekspozicijom;
+    // ostalo su karte koje je korisnik sam dodao. Kad je redoslijed ručno mijenjan, ide jedan spisak.
+    const brza=fav=>fav.auto==='srv'||(fav.type==='tl'&&fav.tlKey==='📡 Google');
+    const rucno=_mapFavs.some(fav=>fav.rucno),brze=rucno?[]:_mapFavs.filter(brza),moje=rucno?_mapFavs:_mapFavs.filter(fav=>!brza(fav));
+    const sek=(naslov,opis,lista)=>lista.length?'<h4 class="mfav-sek"><b>'+naslov+'</b><span>'+opis+'</span></h4>'+lista.map(card).join(''):'';
+    el.innerHTML=(_mapFavs.length?sek('Brzi izbor','karta sa servera · satelit · nagib · ekspozicija',brze)+sek(rucno?'Moj redoslijed':'Moje karte',rucno?'⋮ na kartici: preimenuj, pomjeri, ukloni':'dodane ručno',moje):'<div class="catalog-empty"><b>Tvoje najčešće karte na jednom mjestu</b><p>Aktiviraj kartu pa je dodaj ovdje za brži pristup.</p></div>')+'<button type="button" class="mfav-add-card" onclick="mapFavAddCurrent()"><span>＋</span><span>Dodaj trenutnu kartu</span></button>';
     if(typeof _loadmapThumb==='function')for(const fav of _mapFavs)if(fav.type==='sqlite')_loadmapThumb(fav.sqliteId);
   }
   async function favoriteAction(action,key){

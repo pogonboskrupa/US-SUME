@@ -26,4 +26,12 @@ const imena=favs.map(f=>f.name);
 assert.deepEqual(imena.slice(0,2),['Karta A','Google satelit']);
 assert(imena.includes('Karta A + Nagib')&&imena.includes('Karta A + Ekspozicija'));
 assert.equal(favs.length,5);
+// v4.0.9: automatske stavke prate ZADNJU skinutu kartu (jedna grupa), redoslijed karta, Google, nagib, ekspozicija
+assert(api._mapFavServerKarta('Karta B')===true);
+assert.deepEqual(favs.map(f=>f.name),['Karta B','Google satelit','Karta B + Nagib','Karta B + Ekspozicija','Moja'],'stara karta se zamjenjuje, korisnikova ostaje');
+// ručni redoslijed se ne prepisuje
+favs.forEach(f=>{f.rucno=1;});favs.reverse();const prije=favs.map(f=>f.name).join('|');api._mapFavUredi();
+assert.equal(favs.map(f=>f.name).join('|'),prije,'ručni redoslijed ostaje');
+assert(/function _mapFavPomjeri/.test(src)&&/Pomjeri gore/.test(src)&&/Pomjeri dolje/.test(src),'uređivanje: pomjeranje');
+assert(/mfav-sek/.test(cat)&&/Brzi izbor/.test(cat),'sekcije u prikazu');
 console.log('OK omiljene auto + puls');

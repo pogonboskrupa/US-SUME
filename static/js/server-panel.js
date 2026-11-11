@@ -217,11 +217,11 @@
   }
   function pendingGroups() {
     const uid=currentUid(),groups=new Map(),q=_OL.loadQueue().filter(o=>(!o._uid||o._uid===uid)&&!_SERVER_SAMO_LOKALNO.has(o.type));
-    const add=(op,text,nm,uRedu)=>{const d=destination(op);if(!groups.has(d.key))groups.set(d.key,{...d,items:[],redN:0});const g=groups.get(d.key);g.items.push({text,nm:nm||null});if(uRedu)g.redN++;};
+    const add=(op,text,nm,uRedu,m)=>{const d=destination(op);if(!groups.has(d.key))groups.set(d.key,{...d,items:[],redN:0,vlaka:0,m:0,blok:0});const g=groups.get(d.key);g.items.push({text,nm:nm||null,blok:!!op._blocked,err:op._blocked&&op._lastErr?errorHint(op._lastErr):''});if(uRedu)g.redN++;if(op._blocked)g.blok++;if(m!=null){g.vlaka++;g.m+=m||0;}};
     const labels={upsert_vlaka:'Vlaka',delete_vlaka:'Brisanje vlake',insert_projekt:'Novi projekat',upsert_odjel:'Podaci odjela',insert_doz_project:'Novi odjel doznake',insert_doz_marking:'Nacrtana zona / oznaka doznake',delete_doz_marking:'Brisanje zone doznake',upsert_doz_status:'Status doznake',insert_pozari_arhiva:'Arhiva požara'};
-    for(const op of q){const r=op.payload||{};add(op,(labels[op.type]||op.type)+(r.nm?' · '+r.nm:'')+(op.type==='upsert_vlaka'?' · '+metres(length(r.pts)):'')+(op._blocked?' · odbijeno, ponovni pokušaj':''),op.type==='upsert_vlaka'&&length(r.pts)!=null?r.nm:null,true);}
+    for(const op of q){const r=op.payload||{};add(op,(labels[op.type]||op.type)+(r.nm?' · '+r.nm:'')+(op.type==='upsert_vlaka'?' · '+metres(length(r.pts)):'')+(op._blocked?' · odbijeno, ponovni pokušaj':''),op.type==='upsert_vlaka'&&length(r.pts)!=null?r.nm:null,true,op.type==='upsert_vlaka'?length(r.pts):null);}
     (vlake||[]).forEach((v,i)=>{if(v._deleted||!v.projektId||v.sbId&&!(typeof _vlakaSaveTimers!=='undefined'&&_vlakaSaveTimers[i]))return;
-      if(!q.some(o=>o.type==='upsert_vlaka'&&o.payload?.nm===v.nm&&o.payload?.projekt_id===v.projektId))add({payload:{projekt_id:v.projektId,korisnik_id:uid}},'Vlaka · '+v.nm+' · '+metres(length(v.pts)),length(v.pts)!=null?v.nm:null);});
+      if(!q.some(o=>o.type==='upsert_vlaka'&&o.payload?.nm===v.nm&&o.payload?.projekt_id===v.projektId))add({payload:{projekt_id:v.projektId,korisnik_id:uid}},'Vlaka · '+v.nm+' · '+metres(length(v.pts)),length(v.pts)!=null?v.nm:null,false,length(v.pts));});
     let points=[];
     try {points=typeof FieldStore!=='undefined'&&FieldStore.ready?FieldStore.view(uid):JSON.parse(localStorage.getItem(_DOZ_TRACK_BUF_KEY)||'[]').filter(p=>p.user_id===uid);}catch(e){}
     const gps=new Map();for(const p of points){const id=p.project_id;gps.set(id,(gps.get(id)||0)+1);}
@@ -233,8 +233,11 @@
     const groups=pendingGroups();
     const loading=typeof FieldStore!=='undefined'&&!FieldStore.ready;
     const total=groups.reduce((n,g)=>n+g.items.length,0);
-    const item=(g,s)=>s.nm&&g.key.startsWith('project:')?'<li><button type="button" class="sp-item-map" data-project="'+esc(g.key.slice(8))+'" data-nm="'+esc(s.nm)+'" onclick="_serverPendingMap(this.dataset.project,this.dataset.nm)">'+esc(s.text)+' ↗</button></li>':'<li>'+esc(s.text)+'</li>';
-    el.innerHTML='<h3 class="sp-section-heading">Šta će biti poslano'+(total?' <span class="sp-count">'+stavke(total)+'</span>':'')+'</h3>'+(loading?'<p class="sp-note">Učitavanje lokalnog GPS dnevnika…</p>':'')+(groups.length?groups.map(g=>'<details class="sp-send-group"'+(groups.length===1?' open':'')+'><summary><b>'+esc(g.label)+'</b> · '+stavke(g.items.length)+'</summary><span>Šalje: '+esc(name(g.uid))+'</span><ul>'+g.items.slice(0,40).map(s=>item(g,s)).join('')+'</ul>'+(g.redN?'<button type="button" class="sp-odbaci" data-key="'+esc(g.key)+'" onclick="_serverOdbaci(this.dataset.key)">Odbaci ('+g.redN+')</button>':'')+(g.items.length>40?'<span>Još '+stavke(g.items.length-40)+' — pregledaj Za slanje.</span>':'')+'</details>').join(''):loading?'':'<div class="sp-empty sp-all-sent"><i aria-hidden="true">✓</i><b>Sve je poslano</b><span>Na telefonu nema izmjena koje čekaju server.</span></div>')+'<p class="sp-note">Fotografije, obični tragovi, dnevnik i tekstualne oznake ostaju na telefonu.</p>';
+    const greska=s=>s.err?'<small class="sp-item-err">'+esc(s.err)+'</small>':'';
+    const item=(g,s)=>'<li'+(s.blok?' class="sp-item-blok"':'')+'>'+(s.nm&&g.key.startsWith('project:')?'<button type="button" class="sp-item-map" data-project="'+esc(g.key.slice(8))+'" data-nm="'+esc(s.nm)+'" onclick="_serverPendingMap(this.dataset.project,this.dataset.nm)">'+esc(s.text)+' ↗</button>':esc(s.text))+greska(s)+'</li>';
+    const km=m=>m>=1000?(m/1000).toFixed(1).replace('.',',')+' km':Math.round(m)+' m';
+    const meta=g=>'<span class="sp-group-meta"><span>Šalje: '+esc(name(g.uid))+'</span>'+(g.vlaka?'<i>'+g.vlaka+' vlak'+(g.vlaka===1?'a':g.vlaka<5?'e':'a')+' · '+km(g.m)+'</i>':'')+(g.blok?'<i class="sp-chip-blok">'+g.blok+' odbijeno</i>':'')+'</span>';
+    el.innerHTML='<h3 class="sp-section-heading">Šta će biti poslano'+(total?' <span class="sp-count">'+stavke(total)+'</span>':'')+'</h3>'+(loading?'<p class="sp-note">Učitavanje lokalnog GPS dnevnika…</p>':'')+(groups.length?groups.map(g=>'<details class="sp-send-group'+(g.blok?' sp-ima-blok':'')+'"'+(groups.length===1||g.blok?' open':'')+'><summary><b>'+esc(g.label)+'</b> · '+stavke(g.items.length)+'</summary>'+meta(g)+'<ul>'+g.items.slice(0,40).map(s=>item(g,s)).join('')+'</ul>'+(g.redN?'<button type="button" class="sp-odbaci" data-key="'+esc(g.key)+'" onclick="_serverOdbaci(this.dataset.key)">Odbaci ('+g.redN+')</button>':'')+(g.items.length>40?'<span>Još '+stavke(g.items.length-40)+' — pregledaj Za slanje.</span>':'')+'</details>').join(''):loading?'':'<div class="sp-empty sp-all-sent"><i aria-hidden="true">✓</i><b>Sve je poslano</b><span>Na telefonu nema izmjena koje čekaju server.</span></div>')+'<p class="sp-note">Fotografije, obični tragovi, dnevnik i tekstualne oznake ostaju na telefonu.</p>';
   }
   let exchange=null;
   function errorHint(error){
@@ -347,7 +350,11 @@
   }
   Object.assign(window,{
     _serverOdbaci:odbaci,_serverRazmjena:exchangeData,_serverRazmjenaStatus:renderExchange,
-    _serverPanelSazetak(n,st){renderPending();renderExchange();return '<div class="sp-transfer"><span><b>'+n.stavki+'</b> za slanje'+(n.blok?' · '+n.blok+' odbijeno':'')+(_serverSaljem?' · Šaljem…':serverPosalji._priprema?' · Pripremam…':'')+'</span><span>'+esc(st==='nema'?'Bez veze':st==='slaba'?'Slab signal':'Veza: '+(st==='dobra'?'u redu':'nije izmjerena'))+'</span></div>';},
+    _serverPanelSazetak(n,st,z){renderPending();renderExchange();
+      const stanje=_serverSaljem?'Šaljem…':serverPosalji._priprema?'Pripremam…':'';
+      const veza=st==='nema'?'Bez veze':st==='slaba'?'Slab signal':'Veza: '+(st==='dobra'?'u redu':'nije izmjerena');
+      const zadnje=z&&typeof _fmtAgo==='function'?String(_fmtAgo(z)).toLowerCase():'nikad';
+      return '<div class="sp-transfer sp-hero" data-stanje="'+(n.stavki?(n.blok?'blok':'ceka'):'prazno')+'"><div class="sp-hero-n"><b>'+n.stavki+'</b><span>'+(n.stavki?'za slanje':'sve poslano')+'</span></div><div class="sp-hero-meta"><span class="sp-veza" data-st="'+esc(st||'')+'">'+esc(veza)+'</span><small>Zadnje slanje: '+esc(zadnje)+'</small>'+(n.blok?'<small class="sp-hero-blok">'+n.blok+' odbijeno — otvori grupu za razlog</small>':'')+(stanje?'<small class="sp-hero-rad">'+stanje+'</small>':'')+'</div></div>';},
     _serverTransferConfirmed:confirmed,_serverPendingGroups:pendingGroups,_serverTransfers:transfers,_serverDozReceived:dozReceived,
     _serverTransferGroups:grouped,_serverTransferCount:direction=>grouped(direction).reduce((n,g)=>n+g.rows.length,0),_serverTransferMap:transferMap,_serverPendingMap:pendingMap,
     _serverTransferGroup(value){groupMode=value==='day'?'day':'project';groupOwner=currentUid();renderTransfers();},

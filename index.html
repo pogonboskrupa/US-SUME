@@ -6029,7 +6029,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.0.8';
+const APP_VER = 'v4.0.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7567,7 +7567,7 @@ function _loadLocalVlake() {
       <span><b>Omiljene karte</b><small id="mapfav-count"></small></span>
       <button onclick="closeMapFavs()" style="background:none;border:none;color:#475569;font-size:18px;cursor:pointer;padding:0;line-height:1;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
     </h3>
-    <p class="catalog-intro">Tvoje podloge za brzi prelazak. Lokalni fajlovi i online karte jasno su označeni.</p><div id="mapfav-grid"></div>
+    <p class="catalog-intro">Dodir otvara kartu. Na ⋮ je preimenovanje, pomjeranje i uklanjanje. Karta skinuta sa servera se dodaje sama, sa nagibom i ekspozicijom.</p><div id="mapfav-grid"></div>
     <div style="padding:8px 10px;flex-shrink:0;">
       <button onclick="closeMapFavs()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:8px;padding:10px;font-size:13px;cursor:pointer;">Zatvori</button>
     </div>
