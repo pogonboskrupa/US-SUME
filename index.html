@@ -4969,138 +4969,6 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         </div>
       </details>
 
-      <!-- REFERENTNA KARTA -->
-      <details class="sec reference-card workflow-group" id="reference-card">
-        <summary><b>Referentna karta · 1:10.000</b><small>Slika papirne karte, poravnanje i prepoznavanje vlaka</small></summary>
-        <input type="file" id="refkarta-file" accept="image/*" style="display:none" onchange="refKartaLoad(event)">
-        <button class="btn g" style="width:100%;margin-bottom:6px;" onclick="document.getElementById('refkarta-file').click()">
-          <svg class="ic"><use href="#ic-kamera"/></svg> Učitaj sliku karte
-        </button>
-        <!-- Kontrole (vidljive tek nakon učitavanja) -->
-        <div id="refkarta-ctrl" style="display:none;">
-          <div style="display:flex;gap:6px;margin-bottom:6px;">
-            <button class="btn" style="flex:1;font-size:11px;" onclick="refKartaFitView()" title="Postavi sliku na trenutni prikaz mape"><svg class="ic"><use href="#ic-uglomjer"/></svg> Fituj u prikaz</button>
-            <button class="btn" style="flex:1;font-size:11px;" onclick="refKartaFitOdjel()" title="Postavi sliku na učitani KML odjel"><svg class="ic"><use href="#ic-uglomjer"/></svg> Fituj u odjel</button>
-          </div>
-          <div style="display:flex;gap:6px;margin-bottom:6px;">
-            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#cbd5e1;cursor:pointer;flex:1;">
-              <input type="checkbox" id="refkarta-clip" onchange="_refToggleClip(this.checked)" style="width:14px;height:14px;accent-color:#38bdf8;">
-              ✂ Isijeci po odjelu
-            </label>
-            <button class="btn" id="refkarta-manfit-btn" style="flex:1;font-size:11px;background:#1e293b;color:#94a3b8;border:1px solid #334155;"
-                    onclick="_refToggleManualFit()" title="Ručno razvuci sliku po uglovima i stranama"><svg class="ic"><use href="#ic-rucno"/></svg> Ručno fitovanje</button>
-          </div>
-          <button class="btn g" id="refkarta-align-btn" style="width:100%;margin-bottom:6px;font-size:12px;"
-                  onclick="refKartaAlign()" title="Pronađi granicu odjela u slici i precizno poravnaj na KML poligon">
-            <svg class="ic"><use href="#ic-meta"/></svg> Precizno poravnaj na granicu odjela
-          </button>
-          <button class="btn" id="refkarta-calib-btn" style="width:100%;margin-bottom:6px;font-size:12px;background:#1e3a5f;color:#38bdf8;"
-                  onclick="_refCalibToggle()" title="Postavi kontrolne tačke (klik na slici → klik gdje treba)">
-            <svg class="ic"><use href="#ic-meta"/></svg> Kalibriraj (kontrolne tačke)
-          </button>
-          <div id="refkarta-calib-hint" style="display:none;font-size:11px;color:#94a3b8;line-height:1.5;background:#0f172a;border:1px solid #1e3a5f;border-radius:6px;padding:6px 8px;margin-bottom:6px;"></div>
-          <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:#cbd5e1;margin-bottom:6px;cursor:pointer;">
-            <input type="checkbox" id="refkarta-calib-snap" checked onchange="_refCalibSnapChanged(this.checked)" style="width:14px;height:14px;accent-color:#22c55e;">
-            <span>📍 Veži na <b>broj odjela</b> (snap na centar)</span>
-          </label>
-          <div style="font-size:11px;color:#64748b;margin-bottom:3px;">Providnost slike:</div>
-          <input type="range" id="refkarta-opa" min="5" max="95" value="55" style="width:100%;margin-bottom:6px;accent-color:#38bdf8;"
-                 oninput="refKartaSetOpacity(this.value)">
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#cbd5e1;margin-bottom:8px;cursor:pointer;">
-            <input type="checkbox" id="refkarta-vis" checked onchange="refKartaSetVisible(this.checked)" style="width:15px;height:15px;accent-color:#38bdf8;">
-            Prikaži sliku karte
-          </label>
-          <!-- Detekcija linija -->
-          <div style="border-top:1px solid #1e293b;padding-top:8px;margin-top:4px;">
-            <h4 class="ref-heading">Vlake označene na papiru</h4><p class="ref-note">U obzir ulaze samo linije uz oznaku <b>T + broj</b>, npr. T12. Granice i izohipse bez takve oznake se odbacuju. Nejasnu vezu oznake i linije provjeri prije uvoza.</p><div class="ref-presets"><button type="button" onclick="ReferenceVlakePreset('dark')">Crne vlake</button><button type="button" onclick="ReferenceVlakePreset('blue')">Plave vlake</button></div>
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-              <span style="font-size:11px;color:#64748b;white-space:nowrap;">Detektuj po:</span>
-              <select id="refkarta-detect-mode" style="flex:1;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:2px 4px;font-size:11px;"
-                      onchange="_refDetModeChanged()">
-                <option value="dark">Tama (tamni pikseli)</option>
-                <option value="color">Boja (izoliraj boju vlake)</option>
-              </select>
-            </div>
-            <div id="refkarta-dark-opts">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-                <span style="font-size:11px;color:#64748b;white-space:nowrap;">Prag tame:</span>
-                <input type="range" id="refkarta-thr" min="30" max="220" value="110" style="flex:1;accent-color:#f97316;"
-                       oninput="document.getElementById('refkarta-thr-val').textContent=this.value">
-                <span id="refkarta-thr-val" style="font-size:11px;color:#f97316;min-width:24px;text-align:right;">110</span>
-              </div>
-            </div>
-            <div id="refkarta-color-opts" style="display:none;">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-                <span style="font-size:11px;color:#64748b;white-space:nowrap;">Boja vlake:</span>
-                <input type="color" id="refkarta-detect-color" value="#1e40af" style="width:32px;height:22px;border:1px solid #334155;border-radius:3px;cursor:pointer;padding:0;">
-                <button onclick="_refPickColorFromMap()" style="padding:2px 6px;background:#1e3a5f;color:#38bdf8;border:none;border-radius:4px;font-size:10px;cursor:pointer;" title="Uzmi boju sa slike"><svg class="ic"><use href="#ic-pipeta"/></svg> Uzmi</button>
-              </div>
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-                <span style="font-size:11px;color:#64748b;white-space:nowrap;">Tolerancija:</span>
-                <input type="range" id="refkarta-color-tol" min="20" max="140" value="70" style="flex:1;accent-color:#a855f7;"
-                       oninput="document.getElementById('refkarta-color-tol-val').textContent=this.value">
-                <span id="refkarta-color-tol-val" style="font-size:11px;color:#a855f7;min-width:24px;text-align:right;">70</span>
-              </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-              <span style="font-size:11px;color:#64748b;white-space:nowrap;">Min. dužina:</span>
-              <input type="range" id="refkarta-minlen" min="8" max="120" value="25" style="flex:1;accent-color:#f97316;"
-                     oninput="document.getElementById('refkarta-minlen-val').textContent=this.value+'px'">
-              <span id="refkarta-minlen-val" style="font-size:11px;color:#f97316;min-width:28px;text-align:right;">25px</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-              <span style="font-size:11px;color:#64748b;white-space:nowrap;" title="Zadrži samo deblje (olovkom) crtane linije — izbaci tanke štampane izohipse i tekst.">Debljina olovke:</span>
-              <input type="range" id="refkarta-bold" min="0" max="3" value="0" style="flex:1;accent-color:#22c55e;"
-                     oninput="document.getElementById('refkarta-bold-val').textContent=this.value==0?'sve':this.value">
-              <span id="refkarta-bold-val" style="font-size:11px;color:#22c55e;min-width:24px;text-align:right;">sve</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-              <span style="font-size:11px;color:#64748b;white-space:nowrap;" title="Spoji krajeve linija koji su blizu i približno u istom smjeru — vlaka prekinuta na presjeku postaje jedna.">Spoji prekide:</span>
-              <input type="range" id="refkarta-join" min="0" max="40" value="14" style="flex:1;accent-color:#38bdf8;"
-                     oninput="document.getElementById('refkarta-join-val').textContent=this.value==0?'ne':this.value+'px'">
-              <span id="refkarta-join-val" style="font-size:11px;color:#38bdf8;min-width:28px;text-align:right;">14px</span>
-            </div>
-            <button class="btn g" style="width:100%;font-size:12px;" id="refkarta-detect-btn"
-                    onclick="refKartaRunDetect()"><svg class="ic"><use href="#ic-trazi"/></svg> Detektuj vlake uz T + broj</button>
-            <button class="btn ref-manual-label" type="button" onclick="ReferenceVlake.addLabel()">Označi natpis T + broj ručno</button>
-            <p id="refkarta-detect-status" class="ref-note" role="status" aria-live="polite">Prepoznavanje radi uz internet, na uređaju bez slanja fotografije. Za nečitljiv rukopis označi natpis ručno.</p>
-            <div style="border-top:1px dashed #1e293b;margin:8px 0 6px;padding-top:8px;">
-              <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:#cbd5e1;margin-bottom:6px;cursor:pointer;">
-                <input type="checkbox" id="refkarta-chain" checked style="width:14px;height:14px;accent-color:#c084fc;">
-                <span>🔗 Lančano trasiranje (auto sljedeća vlaka)</span>
-              </label>
-              <button class="btn" style="width:100%;font-size:12px;background:#1e293b;color:#c084fc;border:1px solid #6b21a8;"
-                      onclick="_refStartTrace()" title="Tapaj tačke duž vlake preko slike; dupli tap = kraj i (ako je lančano) odmah počni sljedeću."><svg class="ic"><use href="#ic-crtaj"/></svg> Trasiraj vlake preko slike</button>
-            </div>
-          </div>
-          <button id="refkarta-save-btn" class="btn" style="display:none;width:100%;margin-top:6px;background:#164e63;color:#38bdf8;border:1px solid #0e7490;font-size:12px;"
-                  onclick="refKartaSaveToServer()"><svg class="ic"><use href="#ic-server"/></svg> Sačuvaj na server</button>
-          <button class="btn" style="width:100%;margin-top:6px;background:#2d0a0a;color:#f87171;border:1px solid #7f1d1d;font-size:12px;"
-                  onclick="refKartaRemove()"><svg class="ic"><use href="#ic-obrisi"/></svg> Ukloni kartu</button>
-        </div>
-        <!-- Detektovane vlake toggle -->
-        <div id="refkarta-imp-ctrl" style="display:none;margin-top:6px;border-top:1px solid #1e293b;padding-top:8px;">
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#cbd5e1;cursor:pointer;">
-            <input type="checkbox" id="refkarta-imp-vis" checked onchange="refKartaImportedVisible(this.checked)" style="width:15px;height:15px;accent-color:#f97316;">
-            <span>Prikaži detektovane vlake <b id="refkarta-imp-count" style="color:#f97316;"></b></span>
-          </label>
-          <div id="refkarta-results" class="ref-results"></div>
-          <button class="btn" style="width:100%;margin-top:5px;font-size:12px;background:#14532d;color:#4ade80;border:1px solid #166534;"
-                  id="refkarta-import-btn" onclick="refKartaImportDetected()"><svg class="ic"><use href="#ic-dodaj"/></svg> Pretvori u vlake</button>
-          <button class="btn" style="width:100%;margin-top:5px;font-size:11px;background:#1c0c02;color:#fb923c;border:1px solid #7c2d12;"
-                  onclick="refKartaClearImported()"><svg class="ic"><use href="#ic-obrisi"/></svg> Briši detektovane</button>
-        </div>
-        <!-- Repozitorij -->
-        <div style="margin-top:10px;border-top:1px solid #1e293b;padding-top:10px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-            <span style="font-size:12px;font-weight:700;color:#94a3b8;">☁ Repozitorij slika</span>
-            <button onclick="_refRepoLoad()" style="padding:2px 8px;background:#1e3a5f;color:#38bdf8;border:none;border-radius:5px;font-size:11px;cursor:pointer;"><svg class="ic"><use href="#ic-osvjezi"/></svg> Osvježi</button>
-          </div>
-          <div id="refkarta-repo-list" style="max-height:220px;overflow-y:auto;">
-            <div style="font-size:11px;color:#475569;">Klikni ↺ Osvježi za prikaz.</div>
-          </div>
-        </div>
-      </details>
 
     </div><!-- /panel -->
 
@@ -6033,7 +5901,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.2.5';
+const APP_VER = 'v4.2.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6292,6 +6160,7 @@ function _loadLocalVlake() {
   <button type="button" class="mdrop-item" id="menu-school-report" hidden onclick="closeMenuDropdown();showProjectManagement(true)"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-report"/></svg></span><span>Izvještaj šumarije<small>Projektanti i projekti</small></span><span class="mdrop-arrow" aria-hidden="true">›</span></button>
   <button type="button" class="mdrop-item" id="mdrop-izvjestaji" style="display:none;" onclick="closeMenuDropdown();showIzvjestaji()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-calendar"/></svg></span>Sedmični / mjesečni izvještaji</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-printer"/></svg></span>Print / štampanje</button>
+  <button type="button" class="mdrop-item" id="menu-refkarta" onclick="closeMenuDropdown();openRefKartaPanel()"><span class="mdrop-ico" aria-hidden="true"><svg class="ic"><use href="#ic-kamera"/></svg></span>Referentna karta</button>
   </section><section class="mdrop-section">
   <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-users"/></svg>Račun i pomoć</div>
   <button type="button" class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-users"/></svg></span>Admin — korisnici</button>
@@ -6681,7 +6550,7 @@ function _loadLocalVlake() {
 </div></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Prenesi vlake s papirne karte</button><div class="help-sec-body">
 <ol class="help-steps">
-<li data-n="1.">U <b>Vlake → Referentna karta</b> učitaj fotografiju ili sken karte.</li>
+<li data-n="1.">U <b>Meni → Referentna karta</b> učitaj fotografiju ili sken karte.</li>
 <li data-n="2.">Poravnaj sliku s odjelom. Za kontrolne tačke biraj isto prepoznatljivo mjesto na slici i digitalnoj karti.</li>
 <li data-n="3.">Uz internet pokreni prepoznavanje. Traže se crne/plave linije uz natpis <b>T + broj</b> da se razlikuju od granica.</li>
 <li data-n="4.">Pregledaj svaki prijedlog prije uvoza. Nečitljiv T natpis možeš označiti ručno.</li>
@@ -7088,6 +6957,144 @@ function _loadLocalVlake() {
       <button class="btn gr" style="color:#f87171;border-color:#7f1d1d;" onclick="_mapMgrClearAll()"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši sve</button>
       <button class="btn gr" onclick="closeMapManager()">Zatvori</button>
     </div>
+  </div>
+</div>
+
+<!-- ═══ REFERENTNA KARTA (Meni → ispod Print) ═══ -->
+<div id="refkarta-modal" role="dialog" aria-modal="true" aria-labelledby="refkarta-title">
+  <header class="rk-hdr"><div><small>PAPIRNA KARTA 1:10.000</small><h2 id="refkarta-title">Referentna karta</h2></div><button type="button" class="rk-close" onclick="closeRefKartaPanel()" aria-label="Zatvori referentnu kartu"><svg class="ic"><use href="#ic-zatvori"/></svg></button></header>
+  <ol class="rk-steps" aria-label="Koraci"><li><b>1</b> Učitaj sliku</li><li><b>2</b> Poravnaj</li><li><b>3</b> Prepoznaj vlake</li></ol>
+  <div class="rk-body">
+      <div class="sec reference-card" id="reference-card">
+        <input type="file" id="refkarta-file" accept="image/*" style="display:none" onchange="refKartaLoad(event)">
+        <button class="btn g" style="width:100%;margin-bottom:6px;" onclick="document.getElementById('refkarta-file').click()">
+          <svg class="ic"><use href="#ic-kamera"/></svg> Učitaj sliku karte
+        </button>
+        <!-- Kontrole (vidljive tek nakon učitavanja) -->
+        <div id="refkarta-ctrl" style="display:none;">
+          <div style="display:flex;gap:6px;margin-bottom:6px;">
+            <button class="btn" style="flex:1;font-size:11px;" onclick="refKartaFitView()" title="Postavi sliku na trenutni prikaz mape"><svg class="ic"><use href="#ic-uglomjer"/></svg> Fituj u prikaz</button>
+            <button class="btn" style="flex:1;font-size:11px;" onclick="refKartaFitOdjel()" title="Postavi sliku na učitani KML odjel"><svg class="ic"><use href="#ic-uglomjer"/></svg> Fituj u odjel</button>
+          </div>
+          <div style="display:flex;gap:6px;margin-bottom:6px;">
+            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#cbd5e1;cursor:pointer;flex:1;">
+              <input type="checkbox" id="refkarta-clip" onchange="_refToggleClip(this.checked)" style="width:14px;height:14px;accent-color:#38bdf8;">
+              ✂ Isijeci po odjelu
+            </label>
+            <button class="btn" id="refkarta-manfit-btn" style="flex:1;font-size:11px;background:#1e293b;color:#94a3b8;border:1px solid #334155;"
+                    onclick="_refToggleManualFit()" title="Ručno razvuci sliku po uglovima i stranama"><svg class="ic"><use href="#ic-rucno"/></svg> Ručno fitovanje</button>
+          </div>
+          <button class="btn g" id="refkarta-align-btn" style="width:100%;margin-bottom:6px;font-size:12px;"
+                  onclick="refKartaAlign()" title="Pronađi granicu odjela u slici i precizno poravnaj na KML poligon">
+            <svg class="ic"><use href="#ic-meta"/></svg> Precizno poravnaj na granicu odjela
+          </button>
+          <button class="btn" id="refkarta-calib-btn" style="width:100%;margin-bottom:6px;font-size:12px;background:#1e3a5f;color:#38bdf8;"
+                  onclick="_refCalibToggle()" title="Postavi kontrolne tačke (klik na slici → klik gdje treba)">
+            <svg class="ic"><use href="#ic-meta"/></svg> Kalibriraj (kontrolne tačke)
+          </button>
+          <div id="refkarta-calib-hint" style="display:none;font-size:11px;color:#94a3b8;line-height:1.5;background:#0f172a;border:1px solid #1e3a5f;border-radius:6px;padding:6px 8px;margin-bottom:6px;"></div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:#cbd5e1;margin-bottom:6px;cursor:pointer;">
+            <input type="checkbox" id="refkarta-calib-snap" checked onchange="_refCalibSnapChanged(this.checked)" style="width:14px;height:14px;accent-color:#22c55e;">
+            <span>📍 Veži na <b>broj odjela</b> (snap na centar)</span>
+          </label>
+          <div style="font-size:11px;color:#64748b;margin-bottom:3px;">Providnost slike:</div>
+          <input type="range" id="refkarta-opa" min="5" max="95" value="55" style="width:100%;margin-bottom:6px;accent-color:#38bdf8;"
+                 oninput="refKartaSetOpacity(this.value)">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#cbd5e1;margin-bottom:8px;cursor:pointer;">
+            <input type="checkbox" id="refkarta-vis" checked onchange="refKartaSetVisible(this.checked)" style="width:15px;height:15px;accent-color:#38bdf8;">
+            Prikaži sliku karte
+          </label>
+          <!-- Detekcija linija -->
+          <div style="border-top:1px solid #1e293b;padding-top:8px;margin-top:4px;">
+            <h4 class="ref-heading">Vlake označene na papiru</h4><p class="ref-note">U obzir ulaze samo linije uz oznaku <b>T + broj</b>, npr. T12. Granice i izohipse bez takve oznake se odbacuju. Nejasnu vezu oznake i linije provjeri prije uvoza.</p><div class="ref-presets"><button type="button" onclick="ReferenceVlakePreset('dark')">Crne vlake</button><button type="button" onclick="ReferenceVlakePreset('blue')">Plave vlake</button></div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+              <span style="font-size:11px;color:#64748b;white-space:nowrap;">Detektuj po:</span>
+              <select id="refkarta-detect-mode" style="flex:1;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:2px 4px;font-size:11px;"
+                      onchange="_refDetModeChanged()">
+                <option value="dark">Tama (tamni pikseli)</option>
+                <option value="color">Boja (izoliraj boju vlake)</option>
+              </select>
+            </div>
+            <div id="refkarta-dark-opts">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                <span style="font-size:11px;color:#64748b;white-space:nowrap;">Prag tame:</span>
+                <input type="range" id="refkarta-thr" min="30" max="220" value="110" style="flex:1;accent-color:#f97316;"
+                       oninput="document.getElementById('refkarta-thr-val').textContent=this.value">
+                <span id="refkarta-thr-val" style="font-size:11px;color:#f97316;min-width:24px;text-align:right;">110</span>
+              </div>
+            </div>
+            <div id="refkarta-color-opts" style="display:none;">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                <span style="font-size:11px;color:#64748b;white-space:nowrap;">Boja vlake:</span>
+                <input type="color" id="refkarta-detect-color" value="#1e40af" style="width:32px;height:22px;border:1px solid #334155;border-radius:3px;cursor:pointer;padding:0;">
+                <button onclick="_refPickColorFromMap()" style="padding:2px 6px;background:#1e3a5f;color:#38bdf8;border:none;border-radius:4px;font-size:10px;cursor:pointer;" title="Uzmi boju sa slike"><svg class="ic"><use href="#ic-pipeta"/></svg> Uzmi</button>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                <span style="font-size:11px;color:#64748b;white-space:nowrap;">Tolerancija:</span>
+                <input type="range" id="refkarta-color-tol" min="20" max="140" value="70" style="flex:1;accent-color:#a855f7;"
+                       oninput="document.getElementById('refkarta-color-tol-val').textContent=this.value">
+                <span id="refkarta-color-tol-val" style="font-size:11px;color:#a855f7;min-width:24px;text-align:right;">70</span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+              <span style="font-size:11px;color:#64748b;white-space:nowrap;">Min. dužina:</span>
+              <input type="range" id="refkarta-minlen" min="8" max="120" value="25" style="flex:1;accent-color:#f97316;"
+                     oninput="document.getElementById('refkarta-minlen-val').textContent=this.value+'px'">
+              <span id="refkarta-minlen-val" style="font-size:11px;color:#f97316;min-width:28px;text-align:right;">25px</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+              <span style="font-size:11px;color:#64748b;white-space:nowrap;" title="Zadrži samo deblje (olovkom) crtane linije — izbaci tanke štampane izohipse i tekst.">Debljina olovke:</span>
+              <input type="range" id="refkarta-bold" min="0" max="3" value="0" style="flex:1;accent-color:#22c55e;"
+                     oninput="document.getElementById('refkarta-bold-val').textContent=this.value==0?'sve':this.value">
+              <span id="refkarta-bold-val" style="font-size:11px;color:#22c55e;min-width:24px;text-align:right;">sve</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+              <span style="font-size:11px;color:#64748b;white-space:nowrap;" title="Spoji krajeve linija koji su blizu i približno u istom smjeru — vlaka prekinuta na presjeku postaje jedna.">Spoji prekide:</span>
+              <input type="range" id="refkarta-join" min="0" max="40" value="14" style="flex:1;accent-color:#38bdf8;"
+                     oninput="document.getElementById('refkarta-join-val').textContent=this.value==0?'ne':this.value+'px'">
+              <span id="refkarta-join-val" style="font-size:11px;color:#38bdf8;min-width:28px;text-align:right;">14px</span>
+            </div>
+            <button class="btn g" style="width:100%;font-size:12px;" id="refkarta-detect-btn"
+                    onclick="refKartaRunDetect()"><svg class="ic"><use href="#ic-trazi"/></svg> Detektuj vlake uz T + broj</button>
+            <button class="btn ref-manual-label" type="button" onclick="ReferenceVlake.addLabel()">Označi natpis T + broj ručno</button>
+            <p id="refkarta-detect-status" class="ref-note" role="status" aria-live="polite">Prepoznavanje radi uz internet, na uređaju bez slanja fotografije. Za nečitljiv rukopis označi natpis ručno.</p>
+            <div style="border-top:1px dashed #1e293b;margin:8px 0 6px;padding-top:8px;">
+              <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:#cbd5e1;margin-bottom:6px;cursor:pointer;">
+                <input type="checkbox" id="refkarta-chain" checked style="width:14px;height:14px;accent-color:#c084fc;">
+                <span>🔗 Lančano trasiranje (auto sljedeća vlaka)</span>
+              </label>
+              <button class="btn" style="width:100%;font-size:12px;background:#1e293b;color:#c084fc;border:1px solid #6b21a8;"
+                      onclick="_refStartTrace()" title="Tapaj tačke duž vlake preko slike; dupli tap = kraj i (ako je lančano) odmah počni sljedeću."><svg class="ic"><use href="#ic-crtaj"/></svg> Trasiraj vlake preko slike</button>
+            </div>
+          </div>
+          <button id="refkarta-save-btn" class="btn" style="display:none;width:100%;margin-top:6px;background:#164e63;color:#38bdf8;border:1px solid #0e7490;font-size:12px;"
+                  onclick="refKartaSaveToServer()"><svg class="ic"><use href="#ic-server"/></svg> Sačuvaj na server</button>
+          <button class="btn" style="width:100%;margin-top:6px;background:#2d0a0a;color:#f87171;border:1px solid #7f1d1d;font-size:12px;"
+                  onclick="refKartaRemove()"><svg class="ic"><use href="#ic-obrisi"/></svg> Ukloni kartu</button>
+        </div>
+        <!-- Detektovane vlake toggle -->
+        <div id="refkarta-imp-ctrl" style="display:none;margin-top:6px;border-top:1px solid #1e293b;padding-top:8px;">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#cbd5e1;cursor:pointer;">
+            <input type="checkbox" id="refkarta-imp-vis" checked onchange="refKartaImportedVisible(this.checked)" style="width:15px;height:15px;accent-color:#f97316;">
+            <span>Prikaži detektovane vlake <b id="refkarta-imp-count" style="color:#f97316;"></b></span>
+          </label>
+          <div id="refkarta-results" class="ref-results"></div>
+          <button class="btn" style="width:100%;margin-top:5px;font-size:12px;background:#14532d;color:#4ade80;border:1px solid #166534;"
+                  id="refkarta-import-btn" onclick="refKartaImportDetected()"><svg class="ic"><use href="#ic-dodaj"/></svg> Pretvori u vlake</button>
+          <button class="btn" style="width:100%;margin-top:5px;font-size:11px;background:#1c0c02;color:#fb923c;border:1px solid #7c2d12;"
+                  onclick="refKartaClearImported()"><svg class="ic"><use href="#ic-obrisi"/></svg> Briši detektovane</button>
+        </div>
+        <!-- Repozitorij -->
+        <div style="margin-top:10px;border-top:1px solid #1e293b;padding-top:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <span style="font-size:12px;font-weight:700;color:#94a3b8;">☁ Repozitorij slika</span>
+            <button onclick="_refRepoLoad()" style="padding:2px 8px;background:#1e3a5f;color:#38bdf8;border:none;border-radius:5px;font-size:11px;cursor:pointer;"><svg class="ic"><use href="#ic-osvjezi"/></svg> Osvježi</button>
+          </div>
+          <div id="refkarta-repo-list" style="max-height:220px;overflow-y:auto;">
+            <div style="font-size:11px;color:#475569;">Klikni ↺ Osvježi za prikaz.</div>
+          </div>
+        </div>
+      </div>
   </div>
 </div>
 

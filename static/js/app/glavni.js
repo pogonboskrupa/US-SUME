@@ -3428,6 +3428,10 @@ function _admKarticaHtml(u, saSumarijom) {
             style="width:15px;height:15px;accent-color:#a78bfa;cursor:pointer;">
           👁 Vodeći projektant — nadzorni pregled cijele šumarije
         </label>
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+          <button onclick="adminUrediIme('${uid}')"
+            style="flex:1;padding:7px 11px;background:#1e3a5f;border:1px solid #475569;border-radius:6px;color:#cbd5e1;font-size:12px;cursor:pointer;white-space:nowrap;"><svg class="ic"><use href="#ic-crtaj"/></svg> Uredi ime i prezime</button>
+        </div>
         <div style="display:flex;gap:6px;align-items:center;">
           <button onclick="adminResetPin('${uid}','${nmJs}')"
             style="flex:1;padding:7px 11px;background:#1e3a5f;border:1px solid #475569;border-radius:6px;color:#cbd5e1;font-size:12px;cursor:pointer;white-space:nowrap;"><svg class="ic"><use href="#ic-kljuc"/></svg> Reset PIN</button>
@@ -3500,6 +3504,32 @@ async function adminSetVodeci(userId, vodeci, name) {
   }
   showToast(vodeci ? `👁 "${name}" je sad vodeći projektant` : `"${name}" više nije vodeći`);
   adminLoadUsers();
+}
+
+// --- Admin: uredi ime i prezime korisnika ---
+// Prijava ide preko ime+prezime (login_email se ne mijenja), pa PIN važi i dalje, ali se korisnik od sada
+// prijavljuje NOVIM imenom — admin ga treba obavijestiti.
+async function adminUrediIme(userId) {
+  if (!sbProfile?.is_admin) return;
+  const u = (_adminUsers || []).find(x => x.id === userId);
+  if (!u) return;
+  const ime = await _dlgPrompt('Ime korisnika:', u.ime || '', { title: '✏ Uredi ime', okLabel: 'Dalje' });
+  if (ime === null) return;
+  const prezime = await _dlgPrompt('Prezime korisnika:', u.prezime || '', { title: '✏ Uredi prezime', okLabel: 'Sačuvaj' });
+  if (prezime === null) return;
+  const i = String(ime).trim(), p = String(prezime).trim();
+  if (i.length < 2) { showToast('Ime mora imati bar 2 znaka'); return; }
+  if (i === (u.ime || '') && p === (u.prezime || '')) return;
+  if (typeof _kontaktiSesija === 'function' && !(await _kontaktiSesija())) return;
+  try {
+    const r = await _withTimeout(sb.rpc('admin_promijeni_ime', { p_user: userId, p_ime: i, p_prezime: p }), 15000);
+    if (r.error) throw r.error;
+    showToast('✓ Ime promijenjeno: ' + [i, p].filter(Boolean).join(' ') + ' — korisnik se prijavljuje novim imenom');
+    adminLoadUsers();
+  } catch (e) {
+    const m = String(e?.message || e);
+    showToast(/admin_promijeni_ime|PGRST202|does not exist/i.test(m) ? '⚠ Server još nema ovu mogućnost — pokreni migraciju 20261118_admin_promijeni_ime.sql' : (typeof _isNetworkErr === 'function' && _isNetworkErr(e)) ? '⚠ Nema veze — pokušaj kad imaš signal' : '⚠ ' + m);
+  }
 }
 
 // --- Admin: reset PIN-a (zaboravljen PIN) ---
@@ -27486,6 +27516,28 @@ function stampaOtvori() {
 }
 // Ulaz iz Menija (naziv zadržan — "🖨 Print / štampanje").
 function showPrintModal() { stampaOtvori(); }
+// Referentna karta: donji list preko karte (karta ostaje vidljiva radi poravnanja). Radnje koje traže dodir
+// na karti (kalibracija, trasiranje, ručno fitovanje, ručna oznaka) sklanjaju list same.
+function openRefKartaPanel() {
+  const m = document.getElementById('refkarta-modal'); if (!m) return;
+  if (typeof switchTab === 'function' && typeof _activeTab !== 'undefined' && _activeTab !== 'karta') switchTab('karta');
+  m.classList.add('show'); _refKartaPanelSync();
+}
+function closeRefKartaPanel() {
+  const m = document.getElementById('refkarta-modal'); if (m) m.classList.remove('show');
+}
+function _refKartaPanelSync() {
+  const m = document.getElementById('refkarta-modal'); if (!m) return;
+  const ima = !!(typeof _refImg !== 'undefined' && _refImg);
+  m.classList.toggle('rk-ima', ima);
+  const li = m.querySelectorAll('.rk-steps li');
+  li.forEach((e, i) => e.classList.toggle('done', ima && i === 0));
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('#refkarta-modal [data-rk-sakrij], #refkarta-calib-btn, #refkarta-manfit-btn, .ref-manual-label, #refkarta-modal button[onclick*="_refStartTrace"]');
+  if (b) setTimeout(closeRefKartaPanel, 0);
+  else if (e.target.closest && e.target.closest('#refkarta-modal')) setTimeout(_refKartaPanelSync, 400);
+}, true);
 
 function _stpZatvoriInterno() {
   if (!_stp) return;
