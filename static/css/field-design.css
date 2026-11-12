@@ -1445,3 +1445,12 @@ html .mfav-card.nedostupna{opacity:.75;border-style:dashed}
 #primljeni-panel .skr-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:baseline}
 #primljeni-panel .prm-tabovi button{font-size:12px;padding-left:4px;padding-right:4px}
 .le-pop2 .le-foto{display:block;width:100%;max-height:220px;object-fit:cover;border-radius:10px;margin:0 0 8px}
+/* v4.2.0: grupe kolega (samo admin) u tabu Kolege */
+#primljeni-panel .prm-grupe{margin:0 0 14px;padding:12px;border:1px solid var(--field-border,#334155);border-radius:14px;background:var(--field-bg,#0f172a)}
+#primljeni-panel .prm-grupe-h b{display:block;font-size:15px}
+#primljeni-panel .prm-grupe-h small{display:block;margin:3px 0 10px;font-size:12px;line-height:1.5;color:var(--field-muted,#94a3b8)}
+#primljeni-panel .prm-grupe-greska{margin:0 0 8px;font-size:12px;color:#fbbf24}
+#primljeni-panel .prm-grupa{display:block;width:100%;text-align:left;min-height:52px;margin-bottom:8px;padding:10px 12px;border-radius:12px;border:1px solid var(--field-border,#334155);border-left:4px solid #3b82f6;background:var(--field-card,#14201a);color:var(--field-ink,#e2e8f0)}
+#primljeni-panel .prm-grupa b{display:block;font-size:14px}
+#primljeni-panel .prm-grupa small{display:block;font-size:12px;color:var(--field-muted,#94a3b8)}
+#primljeni-panel .prm-grupa-nova{margin:4px 0 0;min-height:48px;background:#1d4ed8;border-color:#3b82f6}

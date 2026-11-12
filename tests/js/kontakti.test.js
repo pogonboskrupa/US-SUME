@@ -40,7 +40,7 @@ const mk=(ls,rpc)=>{const store=Object.assign({},ls),toasts=[];
  // v4.1.2: tab Kolege — projektanti iz šumarije automatski + kolege iz šifre; terenski samo šifra
  {
   const a=src.indexOf('function _primKolege()'),b=src.indexOf('async function _kontaktiUkloniJednog');
-  const mk2=(teren,sh,lok)=>new Function('S','with(S){'+src.slice(a,b)+';return _primKolege();}')({isSpdField:()=>teren,isAdmin:()=>false,_shareKolege:()=>sh,kolegeMap:{a:{sumarija:'KRUPA'}},_kontaktiLokalno:()=>lok,_bojaZaId:()=>'#123'});
+  const mk2=(teren,sh,lok)=>new Function('S','with(S){'+src.slice(a,b)+';return _primKolege();}')({isSpdField:()=>teren,isAdmin:()=>false,_shareKolege:()=>sh,kolegeMap:{a:{sumarija:'KRUPA'}},_kontaktiLokalno:()=>lok,_grupeLokalno:()=>[],_bojaZaId:()=>'#123'});
   const sh=[{id:'a',ime:'Ana',color:'#1'}],lok=[{id:'a',ime:'Ana'},{id:'z',ime:'Zoran',sumarija:'ŠPD'}];
   let r=mk2(false,sh,lok);assert.deepEqual(r.map(k=>k.ime),['Ana','Zoran']);assert.equal(r[0].izvor,'sumarija');assert.equal(r[0].sifra,true,'ista osoba iz šumarije i šifre je jedan red');assert.equal(r[1].izvor,'sifra');
   r=mk2(true,sh,lok);assert.deepEqual(r.map(k=>k.ime),['Ana','Zoran'],'terenski: samo iz šifre');assert(r.every(k=>k.izvor==='sifra'));

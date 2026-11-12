@@ -37831,8 +37831,17 @@ function _kontaktiLokalno() {
 }
 function _kontaktiSpremi(lista) { try { localStorage.setItem(_kontaktiKljuc(), JSON.stringify(lista)); } catch (e) {} }
 // Spisak za izbor primaoca: oblik kao _shareKolege() ({id, ime, sumarija, color})
+// Kolege iz GRUPA koje pravi admin. Korisnik grupe ne vidi — samo kolege iz svih svojih grupa kao prijedlog
+// za slanje. Lokalni keš radi i bez mreže.
+const _GRUPE_KOLEGE_PREF = 'tvlake_grupe_kolege_v1:';
+function _grupeLokalno() {
+  try { const a = JSON.parse(localStorage.getItem(_GRUPE_KOLEGE_PREF + (sbUser?.id || 'x')) || '[]'); return Array.isArray(a) ? a.filter(k => k && k.id) : []; } catch (e) { return []; }
+}
+// Spisak za izbor primaoca: kolege iz šifre + kolege iz grupa (bez duplikata)
 function _kontaktiLista() {
-  return _kontaktiLokalno().map(k => ({ id: k.id, ime: k.ime || 'Kolega', sumarija: k.sumarija || '', color: (typeof _bojaZaId === 'function' ? _bojaZaId(k.id) : '#64748b') }));
+  const po = new Map();
+  [..._kontaktiLokalno(), ..._grupeLokalno()].forEach(k => { if (!po.has(k.id)) po.set(k.id, k); });
+  return [...po.values()].map(k => ({ id: k.id, ime: k.ime || 'Kolega', sumarija: k.sumarija || '', color: (typeof _bojaZaId === 'function' ? _bojaZaId(k.id) : '#64748b') }));
 }
 // Poziv je dvosmjeran na serveru, ali pozivalac o prihvatanju saznaje tek kad osvježi spisak. Ranije
 // je to bilo najviše jednom u 10 min, pa je kod onoga ko je pozvao kolega "nedostajao" (izgledalo
@@ -37862,6 +37871,11 @@ async function _kontaktiOsvjezi(force) {
     _kontaktiSpremi(nova);
     const ids = new Set(prije.map(k => k.id));
     nova.filter(k => !ids.has(k.id)).forEach(k => { if (prije.length || force || _kontaktiPozivAktivan()) showToast('👥 ' + (k.ime || 'Kolega') + ' je dodan u tvoje kolege'); });
+    // Kolege iz grupa (admin): zasebno, da server bez migracije grupa ne ruši osvježavanje kontakata
+    try {
+      const gr = await _withTimeout(sb.rpc('kolege_iz_grupa'), 15000);
+      if (!gr.error && Array.isArray(gr.data)) localStorage.setItem(_GRUPE_KOLEGE_PREF + sbUser.id, JSON.stringify(gr.data.map(k => ({ id: k.id, ime: k.ime, sumarija: k.sumarija }))));
+    } catch (e) {}
     return nova;
   } catch (e) { return prije; }
 }
@@ -38189,6 +38203,110 @@ function _primTabPostavi(t) {
   _primTab = t === 's' ? 's' : t === 'k' ? 'k' : 'p'; _primljeniRender(_primTab === 'p');
   if (_primTab === 'k') _kontaktiOsvjezi(true).then(() => { if (_primTab === 'k') _primljeniRender(); }).catch(() => {});
 }
+// ── GRUPE KOLEGA (samo admin) ──────────────────────────────────────────────────
+// Admin povezuje korisnike u grupe (terenski, projektanti, projektanti iz bilo koje šumarije); korisnik može
+// biti u više grupa. Korisnici grupe ne vide: svako dobija samo kolege iz svojih grupa kao prijedlog za slanje.
+// Server: supabase/migrations/20261115_grupe_kolega.sql (ručno u SQL Editoru).
+const _GRUPE_ADMIN_KEY = 'tvlake_grupe_admin_v1';
+let _grupeAdmin = null, _grupeAdminGreska = '';
+function _grupeAdminKes() { try { const a = JSON.parse(localStorage.getItem(_GRUPE_ADMIN_KEY) || 'null'); return Array.isArray(a) ? a : null; } catch (e) { return null; } }
+async function _grupeAdminUcitaj(force) {
+  if (!isAdmin()) return [];
+  if (_grupeAdmin && !force) return _grupeAdmin;
+  _grupeAdmin = _grupeAdminKes() || [];
+  if (!sb || !sbUser || sbUser._cachedStub || (typeof _mrezaProbaj === 'function' && !_mrezaProbaj())) { _grupeAdminGreska = 'Nema veze — prikazane su zadnje učitane grupe'; return _grupeAdmin; }
+  try {
+    const r = await _withTimeout(sb.rpc('admin_grupe_lista'), 15000);
+    if (r.error) throw r.error;
+    _grupeAdmin = r.data || []; _grupeAdminGreska = '';
+    try { localStorage.setItem(_GRUPE_ADMIN_KEY, JSON.stringify(_grupeAdmin)); } catch (e) {}
+  } catch (e) {
+    const m = String(e?.message || e);
+    _grupeAdminGreska = /PGRST202|does not exist|admin_grupe_lista/i.test(m) ? 'Server još nema grupe — pokreni migraciju 20261115_grupe_kolega.sql' : (typeof _isNetworkErr === 'function' && _isNetworkErr(e)) ? 'Nema veze — prikazane su zadnje učitane grupe' : m;
+  }
+  return _grupeAdmin;
+}
+function _grupeAdminHtml() {
+  const lista = _grupeAdmin || _grupeAdminKes() || [];
+  if (!_grupeAdmin) _grupeAdminUcitaj().then(() => { if (_primTab === 'k') _primljeniRender(); }).catch(() => {});
+  return '<div class="prm-grupe"><div class="prm-grupe-h"><b>👥 Grupe kolega</b><small>Samo admin vidi grupe. Korisnik dobija samo kolege iz svojih grupa kao prijedlog za slanje; može biti u više grupa.</small></div>' +
+    (_grupeAdminGreska ? '<p class="prm-grupe-greska">' + _escHtml(_grupeAdminGreska) + '</p>' : '') +
+    lista.map(gr => {
+      const cl = Array.isArray(gr.clanovi) ? gr.clanovi : [];
+      return '<button type="button" class="prm-grupa" onclick="_grupaUredi(\'' + _jsAttr(gr.id) + '\')"><b>' + _escHtml(gr.naziv) + '</b><small>' + cl.length + ' ' + (cl.length === 1 ? 'član' : 'članova') + (cl.length ? ' · ' + _escHtml(cl.slice(0, 3).map(c => c.ime).join(', ') + (cl.length > 3 ? '…' : '')) : '') + '</small></button>';
+    }).join('') +
+    '<button type="button" class="prm-sifra prm-grupa-nova" onclick="_grupaUredi(null)">➕ Nova grupa</button></div>';
+}
+// Uređivač grupe: naziv + pretraga + izbor članova (svi korisnici, filter po šumariji/terenskim)
+async function _grupaUredi(id) {
+  if (!isAdmin()) return;
+  if (!(await _kontaktiSesija())) return;
+  const gr = id ? (_grupeAdmin || _grupeAdminKes() || []).find(x => x.id === id) : null;
+  if (id && !gr) return;
+  const svi = await _primaociSvi();
+  const izabrani = new Set((gr?.clanovi || []).map(c => c.id));
+  // Članovi grupe koji nisu u spisku (npr. neodobreni) ostaju sačuvani
+  const poznati = new Set(svi.map(k => k.id)), ostali = [...izabrani].filter(x => !poznati.has(x));
+  return new Promise(res => {
+    const bg = document.createElement('div');
+    bg.id = 'grupa-uredi';
+    bg.style.cssText = 'position:fixed;inset:0;z-index:999960;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:var(--bg2,#14201a);color:var(--text,#e8f0ea);width:100%;max-width:520px;max-height:90vh;display:flex;flex-direction:column;border-radius:16px 16px 0 0;padding:14px';
+    const polje = 'font-size:16px;padding:10px;border-radius:10px;border:1px solid #476;background:rgba(255,255,255,.07);color:inherit;margin-bottom:8px';
+    const dugme = 'padding:10px 12px;border-radius:10px;border:1px solid #476;background:transparent;color:inherit;min-height:44px';
+    const sumarije = [...new Set(svi.map(k => k.sumarija || 'Bez šumarije'))].sort((a, b) => a.localeCompare(b, 'bs'));
+    box.innerHTML = '<div style="font-weight:700;margin-bottom:8px">' + (gr ? '✏ Uredi grupu' : '➕ Nova grupa') + '</div>' +
+      '<input id="gr-naziv" maxlength="80" placeholder="Naziv grupe (npr. Ekipa Cazin)" style="' + polje + '" value="' + _escHtml(gr?.naziv || '') + '">' +
+      '<input id="gr-trazi" type="search" autocomplete="off" placeholder="Traži korisnika (ime ili šumarija)" style="' + polje + '">' +
+      '<select id="gr-sum" style="' + polje + '"><option value="">Sve šumarije</option>' + sumarije.map(s => '<option>' + _escHtml(s) + '</option>').join('') + '</select>' +
+      '<div style="display:flex;gap:8px;margin-bottom:6px"><button type="button" id="gr-sve" style="flex:1;' + dugme + '">Dodaj sve prikazane</button><button type="button" id="gr-ukloni" style="flex:1;' + dugme + '">Ukloni sve prikazane</button></div>' +
+      '<div id="gr-lista" style="overflow-y:auto;flex:1;min-height:140px"></div>' +
+      '<button type="button" id="gr-spremi" style="margin-top:8px;padding:12px;border-radius:10px;border:0;background:#2f7d4f;color:#fff;font-weight:700;min-height:46px"></button>' +
+      (gr ? '<button type="button" id="gr-obrisi" style="margin-top:6px;' + dugme + ';border-color:#b91c1c;color:#fca5a5">🗑 Obriši grupu</button>' : '') +
+      '<button type="button" id="gr-x" style="margin-top:4px;padding:10px;border:0;background:transparent;color:inherit;opacity:.7">Odustani</button>';
+    bg.appendChild(box); document.body.appendChild(bg);
+    const q = s => box.querySelector(s), kraj = v => { bg.remove(); res(v); };
+    const vidljivi = () => {
+      const t = q('#gr-trazi').value.trim().toLowerCase(), s = q('#gr-sum').value;
+      return svi.filter(k => (!s || (k.sumarija || 'Bez šumarije') === s) && (!t || (k.ime + ' ' + (k.sumarija || '')).toLowerCase().includes(t)));
+    };
+    const crtaj = () => {
+      q('#gr-lista').innerHTML = vidljivi().map(k => {
+        const on = izabrani.has(k.id);
+        return '<button type="button" data-i="' + _escHtml(k.id) + '" aria-pressed="' + on + '" style="display:block;width:100%;text-align:left;padding:12px;margin:2px 0;border-radius:10px;border:0;background:' + (on ? 'rgba(47,125,79,.45)' : 'rgba(255,255,255,.06)') + ';color:inherit;min-height:44px">' + (on ? '☑ ' : '☐ ') + _escHtml(k.ime) + ' <small style="opacity:.6">· ' + _escHtml(k.sumarija || 'Bez šumarije') + '</small></button>';
+      }).join('') || '<div style="opacity:.6;padding:14px">Nema rezultata</div>';
+      q('#gr-spremi').textContent = '💾 Spremi (' + izabrani.size + ' ' + (izabrani.size === 1 ? 'član' : 'članova') + ')';
+    };
+    q('#gr-trazi').addEventListener('input', crtaj); q('#gr-sum').addEventListener('change', crtaj);
+    q('#gr-sve').addEventListener('click', () => { vidljivi().forEach(k => izabrani.add(k.id)); crtaj(); });
+    q('#gr-ukloni').addEventListener('click', () => { vidljivi().forEach(k => izabrani.delete(k.id)); crtaj(); });
+    q('#gr-lista').addEventListener('click', e => { const b = e.target.closest('button[data-i]'); if (!b) return; const k = b.dataset.i; izabrani.has(k) ? izabrani.delete(k) : izabrani.add(k); crtaj(); });
+    q('#gr-x').addEventListener('click', () => kraj(null));
+    bg.addEventListener('click', e => { if (e.target === bg) kraj(null); });
+    const poruka = e => { const m = String(e?.message || e); return /PGRST202|does not exist|admin_grupa/i.test(m) ? '⚠ Server još nema grupe — pokreni migraciju 20261115_grupe_kolega.sql' : (typeof _isNetworkErr === 'function' && _isNetworkErr(e)) ? '⚠ Nema veze — pokušaj kad imaš signal' : '⚠ ' + m; };
+    q('#gr-spremi').addEventListener('click', async () => {
+      const naziv = q('#gr-naziv').value.trim();
+      if (!naziv) { showToast('Upiši naziv grupe'); q('#gr-naziv').focus(); return; }
+      try {
+        const r = await _withTimeout(sb.rpc('admin_grupa_spremi', { p_id: id || null, p_naziv: naziv, p_clanovi: [...izabrani, ...ostali.filter(x => izabrani.has(x))] }), 20000);
+        if (r.error) throw r.error;
+        showToast('✓ Grupa sačuvana: ' + naziv); kraj(true);
+        await _grupeAdminUcitaj(true); if (_primTab === 'k') _primljeniRender();
+      } catch (e) { showToast(poruka(e)); }
+    });
+    q('#gr-obrisi')?.addEventListener('click', async () => {
+      if (!await _dlgConfirm('Obrisati grupu „' + (gr?.naziv || '') + '“? Članovi ostaju korisnici, samo gube prijedloge iz ove grupe.', { title: 'Obriši grupu', okLabel: 'Obriši', danger: true })) return;
+      try {
+        const r = await _withTimeout(sb.rpc('admin_grupa_obrisi', { p_id: id }), 15000);
+        if (r.error) throw r.error;
+        showToast('Grupa obrisana'); kraj(true);
+        await _grupeAdminUcitaj(true); if (_primTab === 'k') _primljeniRender();
+      } catch (e) { showToast(poruka(e)); }
+    });
+    crtaj();
+  });
+}
 // Kolege kojima šalješ: projektanti iz tvoje šumarije su automatski tu; svako ko ti je dao šifru poziva (ili je
 // uzeo tvoju) dodan je u oba smjera. Terenski nalog nema šumariju, pa ima samo kolege iz šifre.
 function _primKolege() {
@@ -38197,6 +38315,11 @@ function _primKolege() {
   _kontaktiLokalno().forEach(k => {
     if (po.has(k.id)) { po.get(k.id).sifra = true; return; }
     po.set(k.id, { id: k.id, ime: k.ime || 'Kolega', sumarija: k.sumarija || '', color: (typeof _bojaZaId === 'function' ? _bojaZaId(k.id) : '#64748b'), izvor: 'sifra', sifra: true });
+  });
+  // Iz grupa koje je pravio admin (naziv grupe se korisniku ne prikazuje)
+  _grupeLokalno().forEach(k => {
+    if (po.has(k.id)) { po.get(k.id).grupa = true; return; }
+    po.set(k.id, { id: k.id, ime: k.ime || 'Kolega', sumarija: k.sumarija || '', color: (typeof _bojaZaId === 'function' ? _bojaZaId(k.id) : '#64748b'), izvor: 'grupa', grupa: true });
   });
   return [...po.values()].sort((a, b) => a.ime.localeCompare(b.ime, 'bs'));
 }
@@ -38231,10 +38354,11 @@ function _primljeniRender(oznaciVidjeno) {
       ? 'Kolegu dodaješ <b>šifrom</b>: pozoveš ga i daš mu kod od 5 cifara (isti kod može unijeti više ljudi), ili ti on da svoj kod. Ko unese kod, vidi tebe i ti njega.'
       : 'Projektanti iz tvoje šumarije su <b>dodani automatski</b>. Kolegu iz druge šumarije ili terenskog radnika dodaješ <b>šifrom</b> — oba smjera, jedan kod za više ljudi.') + '</p>';
     h += '<div class="prm-kol-akcije"><button type="button" class="prm-sifra" onclick="_kontaktiPozovi().then(()=>_primljeniRender())">📨 Pozovi kolegu (daj šifru)</button><button type="button" class="prm-sifra" onclick="_kontaktiPrihvati().then(()=>_primljeniRender())">🔢 Unesi šifru koju sam dobio</button></div>';
+    if (isAdmin()) h += _grupeAdminHtml();
     if (!kol.length) h += '<p class="prm-prazno">Još nema kolega. Pozovi nekoga šifrom ili unesi šifru koju si dobio.</p>';
     kol.forEach(k => {
       h += '<div class="prm-red prm-kolega"><div class="prm-info"><b><span class="skr-dot" style="background:' + _escHtml(k.color || '#64748b') + '"></span> ' + _escHtml(k.ime) + '</b>' +
-        '<small>' + _escHtml([k.sumarija, k.izvor === 'sumarija' ? 'iz tvoje šumarije' : '', k.sifra ? 'dodan šifrom' : ''].filter(Boolean).join(' · ')) + '</small></div>' +
+        '<small>' + _escHtml([k.sumarija, k.izvor === 'sumarija' ? 'iz tvoje šumarije' : '', k.sifra ? 'dodan šifrom' : '', k.grupa && !k.sifra && k.izvor !== 'sumarija' ? 'predložen' : ''].filter(Boolean).join(' · ')) + '</small></div>' +
         (k.sifra ? '<div class="prm-akcije"><button type="button" class="opa" onclick="_kontaktiUkloniJednog(\'' + _jsAttr(k.id) + '\')">Ukloni</button></div>' : '') + '</div>';
     });
     h += '</div>';
