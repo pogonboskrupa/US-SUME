@@ -5,7 +5,7 @@ const html = fs.readFileSync(__dirname + '/../../index.html', 'utf8');
 const tw = fs.readFileSync(__dirname + '/../../static/js/terrain-workspace.js', 'utf8');
 const ex = fs.readFileSync(__dirname + '/../../static/js/explorer-navigation.js', 'utf8');
 const css = fs.readFileSync(__dirname + '/../../static/css/field-design.css', 'utf8');
-assert(/id="menu-explorer-mod"[\s\S]{0,700}<span>Explorer mode - 3D prikaz<small>/.test(html), 'meni: Explorer mode - 3D prikaz');
+assert(/id="menu-explorer-mod"[\s\S]{0,700}<span>Explorer mode - 3D prikaz<\/span>/.test(html), 'meni: Explorer mode - 3D prikaz bez opisa');
 assert(/<h3>Explorer mode - 3D prikaz<\/h3>/.test(html), 'Teren kartica preimenovana');
 assert(!/>Explorer mod</.test(html), 'nema starog naziva u prikazu');
 // Meni nudi: 3D prikaz bez odredišta, navigaciju do odredišta i isključivanje

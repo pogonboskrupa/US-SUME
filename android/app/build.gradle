@@ -11,8 +11,8 @@ android {
         minSdk 24
         targetSdk 34
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        versionCode 797
-        versionName "4.2.4"
+        versionCode 798
+        versionName "4.2.5"
     }
 
     // Koristi ISKLJUČIVO postojeći release ključ; nikad ne generiši zamjenski.

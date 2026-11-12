@@ -38332,13 +38332,13 @@ function _grupePanelRender() {
         '<div class="grp-akcije"><button type="button" onclick="_zadaneUredi(\'' + _jsAttr(z.korisnik_id) + '\')">✏ Uredi</button><button type="button" class="opa" onclick="_zadaneObrisi(\'' + _jsAttr(z.korisnik_id) + '\')">🗑 Ukloni sve</button></div></article>';
     }).join('') + '</div>';
 }
-function _zadanePoruka(e) { const m = String(e?.message || e); return /PGRST202|does not exist|admin_zadane/i.test(m) ? '⚠ Server još nema zadane kolege — pokreni migraciju 20261116_zadane_kolege.sql' : (typeof _isNetworkErr === 'function' && _isNetworkErr(e)) ? '⚠ Nema veze — pokušaj kad imaš signal' : '⚠ ' + m; }
+function _zadanePoruka(e) { const m = String(e?.message || e); return /PGRST202|does not exist|admin_zadane/i.test(m) ? '⚠ Server nema zadane kolege (dvosmjerno) — pokreni migracije 20261116 i 20261117' : (typeof _isNetworkErr === 'function' && _isNetworkErr(e)) ? '⚠ Nema veze — pokušaj kad imaš signal' : '⚠ ' + m; }
 async function _zadaneObrisi(korisnikId) {
   const z = (_zadaneAdmin || _zadaneAdminKes() || []).find(x => x.korisnik_id === korisnikId);
   if (!z || !await _dlgConfirm('Ukloniti sve zadane kolege za „' + z.korisnik + '“? Kolege koje je sam dodao šifrom ostaju.', { title: 'Ukloni zadane kolege', okLabel: 'Ukloni', danger: true })) return;
   if (!(await _kontaktiSesija())) return;
   try {
-    const r = await _withTimeout(sb.rpc('admin_zadane_spremi', { p_korisnik: korisnikId, p_kolege: [] }), 15000);
+    const r = await _withTimeout(sb.rpc('admin_zadane_spremi', { p_korisnik: korisnikId, p_kolege: [], p_dvosmjerno: false }), 15000);
     if (r.error) throw r.error;
     showToast('Zadane kolege uklonjene'); await _zadaneAdminUcitaj(true); _grupeRefreshUI();
   } catch (e) { showToast(_zadanePoruka(e)); }
@@ -38370,6 +38370,7 @@ async function _zadaneUredi(korisnikId) {
       '<select id="zd-sum" style="' + polje + '"><option value="">Sve šumarije</option>' + sumarije.map(s => '<option>' + _escHtml(s) + '</option>').join('') + '</select>' +
       '<div style="display:flex;gap:8px;margin-bottom:6px"><button type="button" id="zd-sve" style="flex:1;' + dugme + '">Dodaj sve prikazane</button><button type="button" id="zd-ukloni" style="flex:1;' + dugme + '">Ukloni sve prikazane</button></div>' +
       '<div id="zd-lista" style="overflow-y:auto;flex:1;min-height:140px"></div>' +
+      '<label style="display:flex;gap:10px;align-items:flex-start;margin-top:8px;padding:10px;border:1px solid #476;border-radius:10px;font-size:13px;line-height:1.4"><input type="checkbox" id="zd-dvosmjerno" checked style="margin-top:3px;width:18px;height:18px"><span><b>Dvosmjerno</b> — izabrane kolege odmah dobijaju i ovog korisnika u svom spisku, pa mu mogu slati i odgovarati.</span></label>' +
       '<button type="button" id="zd-spremi" style="margin-top:8px;padding:12px;border-radius:10px;border:0;background:#2f7d4f;color:#fff;font-weight:700;min-height:46px"></button>' +
       '<button type="button" id="zd-x" style="margin-top:4px;padding:10px;border:0;background:transparent;color:inherit;opacity:.7">Odustani</button>';
     bg.appendChild(box); document.body.appendChild(bg);
@@ -38389,7 +38390,7 @@ async function _zadaneUredi(korisnikId) {
     bg.addEventListener('click', e => { if (e.target === bg) kraj(null); });
     q('#zd-spremi').addEventListener('click', async () => {
       try {
-        const r = await _withTimeout(sb.rpc('admin_zadane_spremi', { p_korisnik: kor.id, p_kolege: [...izabrani] }), 20000);
+        const r = await _withTimeout(sb.rpc('admin_zadane_spremi', { p_korisnik: kor.id, p_kolege: [...izabrani], p_dvosmjerno: !!q('#zd-dvosmjerno')?.checked }), 20000);
         if (r.error) throw r.error;
         showToast('✓ Zadane kolege sačuvane: ' + kor.ime); kraj(true);
         await _zadaneAdminUcitaj(true); _grupeRefreshUI();

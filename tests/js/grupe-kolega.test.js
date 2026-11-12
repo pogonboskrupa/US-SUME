@@ -62,4 +62,12 @@ console.log('OK grupe kolega');
   assert(/admin_zadane_spremi/.test(src) && /admin_zadane_lista/.test(src) && /Zadane kolege po korisniku/.test(src) && /_korisnikJedan\(svi/.test(src));
   assert(/_zadaneAdminUcitaj\(true\)\.then\(\(\) => _grupePanelRender\(\)\)/.test(src), 'panel učitava zadane');
 }
+{
+  const d = fs.readFileSync(__dirname + '/../../supabase/migrations/20261117_zadane_dvosmjerno.sql', 'utf8');
+  assert(/drop function if exists public\.admin_zadane_spremi\(uuid, uuid\[\]\)/.test(d), 'stari potpis se uklanja (bez dvosmislenog poziva)');
+  assert(/p_dvosmjerno boolean default false/.test(d) && /if not public\.je_admin\(\) then raise exception/.test(d), 'samo admin');
+  assert(/select k\.id, p_korisnik, auth\.uid\(\) from public\.korisnici k/.test(d), 'izabrane kolege dobijaju korisnika (povratna veza)');
+  assert(/z\.kolega_id = p_korisnik and z\.korisnik_id = any \(v_stari\)/.test(d), 'uklonjeni kolega gubi povratnu vezu');
+  assert(/id="zd-dvosmjerno" checked/.test(src) && /p_dvosmjerno: !!q\('#zd-dvosmjerno'\)\?\.checked/.test(src), 'klijent šalje izbor, zadano uključeno');
+}
 console.log('OK zadane kolege');
