@@ -128,5 +128,14 @@ t('nedostajući elementi (npr. popup nikad otvoren, DOM još nije parsiran) ne b
   assert.doesNotThrow(() => api._updGpsSwitch());
 });
 
+t('Moja lokacija: Uslikaj pored Tragova i Mjerenja zatvara popup i pokreće sliku', () => {
+  const html = fs.readFileSync(__dirname + '/../../index.html', 'utf8');
+  const lista = html.slice(html.indexOf('class="abp-chips abp-lista"'), html.indexOf('</div>', html.indexOf('class="abp-chips abp-lista"')));
+  assert(/ab-loc-tragovi/.test(lista) && /ab-loc-mjerenja/.test(lista) && /id="ab-loc-foto" onclick="_locPopupUslikaj\(\)"/.test(lista), 'tri radnje u istom redu');
+  let slikano = 0; const pop = { style: { display: 'block' } };
+  const f = new Function('document', 'startLocPhoto', extractFn('_locPopupUslikaj') + '\nreturn _locPopupUslikaj;')({ getElementById: () => pop }, () => { slikano++; });
+  f(); assert.equal(pop.style.display, 'none'); assert.equal(slikano, 1);
+});
+
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');
 process.exit(fail ? 1 : 0);

@@ -6033,7 +6033,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.2.1';
+const APP_VER = 'v4.2.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7802,6 +7802,7 @@ function _loadLocalVlake() {
       <div class="abp-chips abp-lista">
         <button type="button" class="abp-chip" id="ab-loc-tragovi" onclick="_locPopupTragovi('trg')" title="Lista tragova i snimanje">🥾 Tragovi</button>
         <button type="button" class="abp-chip" id="ab-loc-mjerenja" onclick="_locPopupTragovi('msr')" title="Sačuvana mjerenja">📏 Mjerenja</button>
+        <button type="button" class="abp-chip" id="ab-loc-foto" onclick="_locPopupUslikaj()" title="Uslikaj fotografiju na ovoj lokaciji">📷 Uslikaj</button>
       </div>
     </div>
   </div>

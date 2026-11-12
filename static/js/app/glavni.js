@@ -18143,6 +18143,13 @@ function _locPopupTragovi(tab) {
   try { _tragoviSetTab(tab === 'msr' ? 'msr' : 'trg'); } catch (e) {}
 }
 
+// Fotografija sa ove lokacije, pored Tragova i Mjerenja (isti tok kao dugme Uslikaj u traci: tačka dobija
+// odjel/GJ aktivnog projekta, a ako se snima trag slika pripada tragu).
+function _locPopupUslikaj() {
+  const pop = document.getElementById('ab-loc-popup');
+  if (pop) pop.style.display = 'none';
+  startLocPhoto();
+}
 function _locPopupSnimiTrag() {
   document.getElementById('ab-loc-popup').style.display = 'none';
   fabSnimTrag();
@@ -38261,6 +38268,27 @@ async function _grupeAdminUcitaj(force) {
 }
 // ── Zasebna admin sekcija "Grupe korisnika" (Korisnici → Grupe korisnika) ──
 const _GRUPE_TEREN = 'ŠPD US ŠUME';
+// Zadane kolege po korisniku: admin za JEDNOG korisnika određuje koga vidi po defaultu u spisku za slanje
+// (jednosmjerno; korisnik i dalje sam dodaje šifrom). Server: 20261116_zadane_kolege.sql.
+const _ZADANE_ADMIN_KEY = 'tvlake_zadane_admin_v1';
+let _zadaneAdmin = null, _zadaneGreska = '';
+function _zadaneAdminKes() { try { const a = JSON.parse(localStorage.getItem(_ZADANE_ADMIN_KEY) || 'null'); return Array.isArray(a) ? a : null; } catch (e) { return null; } }
+async function _zadaneAdminUcitaj(force) {
+  if (!isAdmin()) return [];
+  if (_zadaneAdmin && !force) return _zadaneAdmin;
+  _zadaneAdmin = _zadaneAdminKes() || [];
+  if (!sb || !sbUser || sbUser._cachedStub || (typeof _mrezaProbaj === 'function' && !_mrezaProbaj())) return _zadaneAdmin;
+  try {
+    const r = await _withTimeout(sb.rpc('admin_zadane_lista'), 15000);
+    if (r.error) throw r.error;
+    _zadaneAdmin = r.data || []; _zadaneGreska = '';
+    try { localStorage.setItem(_ZADANE_ADMIN_KEY, JSON.stringify(_zadaneAdmin)); } catch (e) {}
+  } catch (e) {
+    const m = String(e?.message || e);
+    _zadaneGreska = /PGRST202|does not exist|admin_zadane/i.test(m) ? 'Server još nema zadane kolege — pokreni migraciju 20261116_zadane_kolege.sql' : '';
+  }
+  return _zadaneAdmin;
+}
 function _grupeRefreshUI() {
   if (document.getElementById('grupe-panel')) _grupePanelRender();
   if (_primTab === 'k' && document.getElementById('primljeni-panel')) _primljeniRender();
@@ -38271,6 +38299,7 @@ function grupeAdminOtvori() {
   if (!el) { el = document.createElement('div'); el.id = 'grupe-panel'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); document.body.appendChild(el); }
   _grupePanelRender();
   _grupeAdminUcitaj(true).then(() => _grupePanelRender()).catch(() => {});
+  _zadaneAdminUcitaj(true).then(() => _grupePanelRender()).catch(() => {});
 }
 function grupeAdminZatvori() { document.getElementById('grupe-panel')?.remove(); }
 function _grupePanelRender() {
@@ -38292,7 +38321,102 @@ function _grupePanelRender() {
       return '<article class="grp-kartica"><header><b>' + _escHtml(gr.naziv) + '</b><span>' + cl.length + ' ' + (cl.length === 1 ? 'član' : 'članova') + '</span></header>' +
         (cl.length ? clanoviHtml(cl) : '<p class="grp-prazno">Grupa je prazna.</p>') +
         '<div class="grp-akcije"><button type="button" onclick="_grupaUredi(\'' + _jsAttr(gr.id) + '\')">✏ Uredi članove</button><button type="button" class="opa" onclick="_grupaObrisiDirektno(\'' + _jsAttr(gr.id) + '\')">🗑 Obriši</button></div></article>';
+    }).join('') +
+    // Zadane kolege po korisniku
+    '<h3 class="grp-sekcija">Zadane kolege po korisniku</h3><p class="grp-pomoc">Za jednog korisnika odabereš koga će vidjeti po defaultu u spisku za slanje. Korisnik i dalje sam dodaje kolege šifrom.</p>' +
+    (_zadaneGreska ? '<p class="grp-greska">' + _escHtml(_zadaneGreska) + '</p>' : '') +
+    '<button type="button" class="grp-nova" onclick="_zadaneUredi(null)">➕ Zadaj kolege korisniku</button>' +
+    (_zadaneAdmin || _zadaneAdminKes() || []).map(z => { const cl = Array.isArray(z.kolege) ? z.kolege : [];
+      return '<article class="grp-kartica grp-zadane"><header><b>' + _escHtml(z.korisnik) + '</b><span>' + cl.length + ' ' + (cl.length === 1 ? 'kolega' : 'kolega') + '</span></header>' +
+        '<div class="grp-red">' + cl.map(c => '<span class="grp-chip">' + _escHtml(c.ime || 'Korisnik') + '</span>').join('') + '</div>' +
+        '<div class="grp-akcije"><button type="button" onclick="_zadaneUredi(\'' + _jsAttr(z.korisnik_id) + '\')">✏ Uredi</button><button type="button" class="opa" onclick="_zadaneObrisi(\'' + _jsAttr(z.korisnik_id) + '\')">🗑 Ukloni sve</button></div></article>';
     }).join('') + '</div>';
+}
+function _zadanePoruka(e) { const m = String(e?.message || e); return /PGRST202|does not exist|admin_zadane/i.test(m) ? '⚠ Server još nema zadane kolege — pokreni migraciju 20261116_zadane_kolege.sql' : (typeof _isNetworkErr === 'function' && _isNetworkErr(e)) ? '⚠ Nema veze — pokušaj kad imaš signal' : '⚠ ' + m; }
+async function _zadaneObrisi(korisnikId) {
+  const z = (_zadaneAdmin || _zadaneAdminKes() || []).find(x => x.korisnik_id === korisnikId);
+  if (!z || !await _dlgConfirm('Ukloniti sve zadane kolege za „' + z.korisnik + '“? Kolege koje je sam dodao šifrom ostaju.', { title: 'Ukloni zadane kolege', okLabel: 'Ukloni', danger: true })) return;
+  if (!(await _kontaktiSesija())) return;
+  try {
+    const r = await _withTimeout(sb.rpc('admin_zadane_spremi', { p_korisnik: korisnikId, p_kolege: [] }), 15000);
+    if (r.error) throw r.error;
+    showToast('Zadane kolege uklonjene'); await _zadaneAdminUcitaj(true); _grupeRefreshUI();
+  } catch (e) { showToast(_zadanePoruka(e)); }
+}
+// Uređivanje: prvo izbor korisnika (ako nije zadan), pa izbor njegovih zadanih kolega
+async function _zadaneUredi(korisnikId) {
+  if (!isAdmin()) return;
+  if (!(await _kontaktiSesija())) return;
+  const svi = await _primaociSvi();
+  let kor = korisnikId ? svi.find(k => k.id === korisnikId) : null;
+  if (!kor && korisnikId) { const z = (_zadaneAdmin || _zadaneAdminKes() || []).find(x => x.korisnik_id === korisnikId); if (z) kor = { id: korisnikId, ime: z.korisnik, sumarija: z.sumarija }; }
+  if (!kor) kor = await _korisnikJedan(svi, 'Za kojeg korisnika zadaješ kolege?');
+  if (!kor) return;
+  const postojece = (_zadaneAdmin || _zadaneAdminKes() || []).find(x => x.korisnik_id === kor.id);
+  const izabrani = new Set((postojece?.kolege || []).map(c => c.id));
+  const kandidati = svi.filter(k => k.id !== kor.id);
+  const poznati = new Set(kandidati.map(k => k.id)), ostali = [...izabrani].filter(x => !poznati.has(x));
+  return new Promise(res => {
+    const bg = document.createElement('div');
+    bg.id = 'zadane-uredi';
+    bg.style.cssText = 'position:fixed;inset:0;z-index:999960;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:var(--bg2,#14201a);color:var(--text,#e8f0ea);width:100%;max-width:520px;max-height:90vh;display:flex;flex-direction:column;border-radius:16px 16px 0 0;padding:14px';
+    const polje = 'font-size:16px;padding:10px;border-radius:10px;border:1px solid #476;background:rgba(255,255,255,.07);color:inherit;margin-bottom:8px';
+    const dugme = 'padding:10px 12px;border-radius:10px;border:1px solid #476;background:transparent;color:inherit;min-height:44px';
+    const sumarije = [...new Set(kandidati.map(k => k.sumarija || 'Bez šumarije'))].sort((a, b) => a.localeCompare(b, 'bs'));
+    box.innerHTML = '<div style="font-weight:700;margin-bottom:2px">👤 ' + _escHtml(kor.ime) + '</div><div style="font-size:12px;opacity:.7;margin-bottom:8px">Ove kolege će mu biti prikazane po defaultu u spisku za slanje.</div>' +
+      '<input id="zd-trazi" type="search" autocomplete="off" placeholder="Traži kolegu (ime ili šumarija)" style="' + polje + '">' +
+      '<select id="zd-sum" style="' + polje + '"><option value="">Sve šumarije</option>' + sumarije.map(s => '<option>' + _escHtml(s) + '</option>').join('') + '</select>' +
+      '<div style="display:flex;gap:8px;margin-bottom:6px"><button type="button" id="zd-sve" style="flex:1;' + dugme + '">Dodaj sve prikazane</button><button type="button" id="zd-ukloni" style="flex:1;' + dugme + '">Ukloni sve prikazane</button></div>' +
+      '<div id="zd-lista" style="overflow-y:auto;flex:1;min-height:140px"></div>' +
+      '<button type="button" id="zd-spremi" style="margin-top:8px;padding:12px;border-radius:10px;border:0;background:#2f7d4f;color:#fff;font-weight:700;min-height:46px"></button>' +
+      '<button type="button" id="zd-x" style="margin-top:4px;padding:10px;border:0;background:transparent;color:inherit;opacity:.7">Odustani</button>';
+    bg.appendChild(box); document.body.appendChild(bg);
+    const q = s => box.querySelector(s), kraj = v => { bg.remove(); res(v); };
+    const vidljivi = () => { const t = q('#zd-trazi').value.trim().toLowerCase(), s = q('#zd-sum').value;
+      return kandidati.filter(k => (!s || (k.sumarija || 'Bez šumarije') === s) && (!t || (k.ime + ' ' + (k.sumarija || '')).toLowerCase().includes(t))); };
+    const crtaj = () => {
+      q('#zd-lista').innerHTML = vidljivi().map(k => { const on = izabrani.has(k.id);
+        return '<button type="button" data-i="' + _escHtml(k.id) + '" aria-pressed="' + on + '" style="display:block;width:100%;text-align:left;padding:12px;margin:2px 0;border-radius:10px;border:0;background:' + (on ? 'rgba(47,125,79,.45)' : 'rgba(255,255,255,.06)') + ';color:inherit;min-height:44px">' + (on ? '☑ ' : '☐ ') + _escHtml(k.ime) + ' <small style="opacity:.6">· ' + _escHtml(k.sumarija || 'Bez šumarije') + '</small></button>'; }).join('') || '<div style="opacity:.6;padding:14px">Nema rezultata</div>';
+      q('#zd-spremi').textContent = '💾 Spremi (' + izabrani.size + ' ' + (izabrani.size === 1 ? 'kolega' : 'kolega') + ')';
+    };
+    q('#zd-trazi').addEventListener('input', crtaj); q('#zd-sum').addEventListener('change', crtaj);
+    q('#zd-sve').addEventListener('click', () => { vidljivi().forEach(k => izabrani.add(k.id)); crtaj(); });
+    q('#zd-ukloni').addEventListener('click', () => { vidljivi().forEach(k => izabrani.delete(k.id)); crtaj(); });
+    q('#zd-lista').addEventListener('click', e => { const b = e.target.closest('button[data-i]'); if (!b) return; const k = b.dataset.i; izabrani.has(k) ? izabrani.delete(k) : izabrani.add(k); crtaj(); });
+    q('#zd-x').addEventListener('click', () => kraj(null));
+    bg.addEventListener('click', e => { if (e.target === bg) kraj(null); });
+    q('#zd-spremi').addEventListener('click', async () => {
+      try {
+        const r = await _withTimeout(sb.rpc('admin_zadane_spremi', { p_korisnik: kor.id, p_kolege: [...izabrani] }), 20000);
+        if (r.error) throw r.error;
+        showToast('✓ Zadane kolege sačuvane: ' + kor.ime); kraj(true);
+        await _zadaneAdminUcitaj(true); _grupeRefreshUI();
+      } catch (e) { showToast(_zadanePoruka(e)); }
+    });
+    crtaj();
+  });
+}
+// Jednostruki izbor korisnika (pretraga + filter po šumariji); vraća objekt korisnika ili null
+function _korisnikJedan(svi, naslov) {
+  return new Promise(res => {
+    const bg = document.createElement('div');
+    bg.style.cssText = 'position:fixed;inset:0;z-index:999965;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:var(--bg2,#14201a);color:var(--text,#e8f0ea);width:100%;max-width:520px;max-height:85vh;display:flex;flex-direction:column;border-radius:16px 16px 0 0;padding:14px';
+    const polje = 'font-size:16px;padding:10px;border-radius:10px;border:1px solid #476;background:rgba(255,255,255,.07);color:inherit;margin-bottom:8px';
+    box.innerHTML = '<div style="font-weight:700;margin-bottom:8px">' + _escHtml(naslov) + '</div><input id="kj-trazi" type="search" autocomplete="off" placeholder="Traži korisnika" style="' + polje + '"><div id="kj-lista" style="overflow-y:auto;flex:1;min-height:160px"></div><button type="button" id="kj-x" style="margin-top:6px;padding:10px;border:0;background:transparent;color:inherit;opacity:.7">Odustani</button>';
+    bg.appendChild(box); document.body.appendChild(bg);
+    const kraj = v => { bg.remove(); res(v); };
+    const crtaj = () => { const t = box.querySelector('#kj-trazi').value.trim().toLowerCase();
+      box.querySelector('#kj-lista').innerHTML = svi.filter(k => !t || (k.ime + ' ' + (k.sumarija || '')).toLowerCase().includes(t)).map(k => '<button type="button" data-i="' + _escHtml(k.id) + '" style="display:block;width:100%;text-align:left;padding:12px;margin:2px 0;border-radius:10px;border:0;background:rgba(255,255,255,.06);color:inherit;min-height:44px">' + _escHtml(k.ime) + ' <small style="opacity:.6">· ' + _escHtml(k.sumarija || 'Bez šumarije') + '</small></button>').join('') || '<div style="opacity:.6;padding:14px">Nema rezultata</div>'; };
+    box.querySelector('#kj-trazi').addEventListener('input', crtaj);
+    box.querySelector('#kj-lista').addEventListener('click', e => { const b = e.target.closest('button[data-i]'); if (b) kraj(svi.find(k => k.id === b.dataset.i) || null); });
+    box.querySelector('#kj-x').addEventListener('click', () => kraj(null));
+    bg.addEventListener('click', e => { if (e.target === bg) kraj(null); });
+    crtaj();
+  });
 }
 async function _grupaObrisiDirektno(id) {
   const gr = (_grupeAdmin || _grupeAdminKes() || []).find(x => x.id === id);

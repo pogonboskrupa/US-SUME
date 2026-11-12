@@ -1264,7 +1264,7 @@ html #ls-basemap-grid .layer-opt .lopt-sub {font-size:10px;line-height:1.3;}
 #share-pozivnica button{min-height:44px;border-radius:10px;border:none;font:700 13px system-ui;cursor:pointer;}
 #share-pozivnica .shr-pz-go{padding:0 14px;background:#22c55e;color:#052e16;}
 #share-pozivnica .shr-pz-x{width:44px;background:rgba(255,255,255,.1);color:#cbd5e1;}
-html .abp-chips.abp-lista{margin-top:8px;grid-template-columns:1fr 1fr}
+html .abp-chips.abp-lista{margin-top:8px;grid-template-columns:1fr 1fr 1fr}
 html .abp-lista .abp-chip{min-height:44px}
 /* Liste tragova i mjerenja ne trebaju GPS — vidljive i kad je lokacija isključena */
 html #ab-loc-popup.gps-off .abp-chips.abp-lista{display:grid;}
@@ -1478,3 +1478,5 @@ html .mfav-card.nedostupna{opacity:.75;border-style:dashed}
 #primljeni-panel .prm-filter-v{display:flex;gap:6px;overflow-x:auto;padding:8px 0 0}
 #primljeni-panel .prm-filter-v button{flex:0 0 auto;min-height:40px;padding:6px 12px;border-radius:99px;border:1px solid var(--field-border,#334155);background:transparent;color:inherit;font:600 12px system-ui}
 #primljeni-panel .prm-filter-v button[aria-pressed=true]{background:#1d4ed8;border-color:#60a5fa;color:#fff}
+#grupe-panel .grp-sekcija{margin:20px 0 4px;font:800 15px system-ui}
+#grupe-panel .grp-zadane{border-left-color:#3b82f6}

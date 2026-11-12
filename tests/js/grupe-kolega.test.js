@@ -47,3 +47,19 @@ assert(/async function _grupaUredi\(id\)\s*\{\s*if \(!isAdmin\(\)\) return;/.tes
 assert(/admin_grupa_spremi/.test(src) && /admin_grupa_obrisi/.test(src) && /id="gr-sum"/.test(src), 'spremanje, brisanje, filter po šumariji');
 assert(/k\.grupa && !k\.sifra && k\.izvor !== 'sumarija' \? 'predložen'/.test(src), 'korisnik vidi "predložen", ne naziv grupe');
 console.log('OK grupe kolega');
+// v4.2.2: zadane kolege po korisniku (jednosmjerno; korisnik i dalje dodaje šifrom)
+{
+  const z = fs.readFileSync(__dirname + '/../../supabase/migrations/20261116_zadane_kolege.sql', 'utf8');
+  for (const f of ['admin_zadane_lista', 'admin_zadane_spremi']) {
+    const i = z.indexOf('function public.' + f);
+    assert(/if not public\.je_admin\(\) then raise exception/.test(z.slice(i, z.indexOf('end; $$;', i))), f + ' samo admin');
+  }
+  assert(/primary key \(korisnik_id, kolega_id\)/.test(z) && /enable row level security/.test(z) && !/create policy/.test(z));
+  const kig = z.slice(z.indexOf('function public.kolege_iz_grupa'), z.indexOf('create or replace function public.posalji_podatke'));
+  assert(/kolege_grupe_clanovi/.test(kig) && /from public\.kolege_zadane z join public\.korisnici k on k\.id = z\.kolega_id/.test(kig) && /where z\.korisnik_id = auth\.uid\(\)/.test(kig), 'meni se vraćaju grupe + zadane (jednosmjerno)');
+  assert(/from public\.kolege_zadane z where z\.korisnik_id = auth\.uid\(\) and z\.kolega_id = p_to/.test(z), 'slanje dozvoljeno zadanim kolegama');
+  assert(/function _zadaneUredi/.test(src) && /async function _zadaneUredi\(korisnikId\)\s*\{\s*if \(!isAdmin\(\)\) return;/.test(src), 'uređivanje samo admin');
+  assert(/admin_zadane_spremi/.test(src) && /admin_zadane_lista/.test(src) && /Zadane kolege po korisniku/.test(src) && /_korisnikJedan\(svi/.test(src));
+  assert(/_zadaneAdminUcitaj\(true\)\.then\(\(\) => _grupePanelRender\(\)\)/.test(src), 'panel učitava zadane');
+}
+console.log('OK zadane kolege');
