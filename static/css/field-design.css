@@ -1483,3 +1483,12 @@ html .mfav-card.nedostupna{opacity:.75;border-style:dashed}
 
 /* v4.2.3: Explorer mode - 3D prikaz bez odredišta: nema cilja, udaljenosti ni dugmeta Pregled */
 body.explorer-free :is(.ex-target,.ex-guidance,#ex-overview,#tnp-road,#tnp-elev){display:none!important}
+/* v4.2.4 Tematska karta: filter klasa u legendi na karti, brza tema u panelu */
+.tem-leg-row.kl{cursor:pointer;min-height:24px;padding:3px 0;border-radius:6px}
+.tem-leg-row.kl b{margin-left:auto;padding-left:8px;font:600 10px system-ui;color:#94a3b8}
+.tem-leg-row.kl.skr{opacity:.4}.tem-leg-row.kl.skr span{text-decoration:line-through}
+.tem-leg-row.sve{cursor:pointer;color:#93c5fd;font-weight:700;padding:4px 0 1px}
+.tem-brze{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}
+.tem-brze button{min-height:40px;padding:6px 12px;border-radius:99px;border:1px solid var(--field-border,#334155);background:transparent;color:inherit;font:600 12.5px system-ui;cursor:pointer}
+.tem-brze button[aria-pressed=true]{background:#166534;border-color:#22c55e;color:#fff}
+html[data-field-theme=day] .tem-leg-row.sve{color:#1d4ed8}

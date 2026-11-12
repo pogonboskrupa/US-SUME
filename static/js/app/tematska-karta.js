@@ -592,6 +592,7 @@ function _temApplyTheme(id, col) {
   const entry = _temById(id);
   if (!entry) return;
   if (_temEdOpenId !== id) delete _temEdDraft[id];
+  entry._skrKlase = null;   // filter klasa važi samo za temu na kojoj je postavljen
   if (!col) {
     entry.theme = null;
     entry._cls = null;
@@ -641,9 +642,11 @@ function _temOboji(entry) {
   const fo = Number.isFinite(entry.opacity) ? entry.opacity : 0.55;
   const bezTeme = { color: '#94a3b8', fillColor: '#94a3b8', fillOpacity: 0.08, weight: 1 };
   const bezPodatka = { color: '#64748b', fillColor: '#64748b', fillOpacity: Math.min(0.1, fo * 0.15), weight: 0.8 };
+  const skr = entry._skrKlase;
   entry.features.forEach(f => {
     const c = cls ? _temBojaZa(cls, f.attrs[cls.col]) : null;
-    const st = !cls ? {...bezTeme,stroke:true,fill:true,interactive:true} : c
+    const sakrij = cls && skr && skr.size && skr.has(_temKlasaIdx(cls, f.attrs[cls.col]));
+    const st = sakrij ? {stroke:false,fill:false,fillOpacity:0,weight:0,interactive:false} : !cls ? {...bezTeme,stroke:true,fill:true,interactive:true} : c
       ? {color:c,fillColor:c,fillOpacity:fo,weight:cls.ranges && cls.outline===false ? 0 : 1,stroke:!(cls.ranges && cls.outline===false),fill:true,interactive:true}
       : cls.hideMissing ? {stroke:false,fill:false,fillOpacity:0,weight:0,interactive:false} : {...bezPodatka,stroke:true,fill:true,interactive:true};
     f.polys.forEach(p => p.setStyle(st));
@@ -691,10 +694,23 @@ function _temLegendUpd() {
     const naslov = `<div class="tem-leg-hd"><span>${_escHtml(_temColLabel(m, m._cls.col))}</span><span class="car">${skup ? '▸' : '▾'}</span></div>`;
     if (skup) return naslov + `<div class="tem-leg-strip">${opis.map(k => `<i style="background:${k.boja};"></i>`).join('')}</div>`;
     const imaBez = m.features.some(f => _temKlasaIdx(m._cls, f.attrs[m._cls.col]) < 0);
-    const rows = opis.map(k => `<div class="tem-leg-row"><i style="background:${k.boja};"></i><span>${_escHtml(k.lbl)}</span></div>`).join('')
+    const jid = _jsAttr(m.id), skr = m._skrKlase || new Set(), broj = new Map();
+    m.features.forEach(f => { const ki = _temKlasaIdx(m._cls, f.attrs[m._cls.col]); if (ki >= 0) broj.set(ki, (broj.get(ki) || 0) + 1); });
+    const rows = opis.map(k => `<div class="tem-leg-row kl${skr.has(k.i) ? ' skr' : ''}" role="button" tabindex="0" aria-pressed="${!skr.has(k.i)}" title="Dodir sakriva / prikazuje ovu klasu" onclick="event.stopPropagation();_temKlasaSkrij('${jid}',${k.i})"><i style="background:${k.boja};"></i><span>${_escHtml(k.lbl)}</span><b>${broj.get(k.i) || 0}</b></div>`).join('')
+      + (skr.size ? `<div class="tem-leg-row sve" role="button" tabindex="0" onclick="event.stopPropagation();_temKlasaSkrij('${jid}',-1)">↺ Prikaži sve klase (${skr.size} sakriveno)</div>` : '')
       + (imaBez ? `<div class="tem-leg-row bez"><i></i><span>${m._cls.hideMissing ? 'bez prikazane ocjene · sakriveno' : 'bez podatka'}</span></div>` : '');
     return naslov + rows;
   }).join('<div style="height:7px;"></div>');
+}
+
+// Filter klasa iz legende na karti: dodir sakriva/prikazuje odsjeke te klase (npr. samo najviša zaliha);
+// -1 vraća sve. Vrijedi dok je ista tema (promjena teme ga briše), ne pamti se trajno.
+function _temKlasaSkrij(id, i) {
+  const entry = _temById(id);
+  if (!entry || !entry._cls) return;
+  if (i < 0) entry._skrKlase = null;
+  else { const s = entry._skrKlase || (entry._skrKlase = new Set()); s.has(i) ? s.delete(i) : s.add(i); if (!s.size) entry._skrKlase = null; }
+  _temOboji(entry); _temLegendUpd();
 }
 
 // Vidljivost jedne karte (toggle u panelu)
@@ -1340,6 +1356,7 @@ function _temModalRender(preserveDraft = false) {
         <label class="tem-file-check"><input type="checkbox" ${m.visible ? 'checked' : ''} onchange="_temSetVisible('${jid}',this.checked)" aria-label="Prikaži ${_escHtml(m.name)}"><span>Prikaži</span></label>
       </div>
       ${sadnja ? `<div class="tem-lbl">Odaberi vrstu drveta</div><div class="tem-sadnja-species" role="group" aria-label="Vrste za procjenu sadnje">${_TEM_SADNJA_VRSTE.filter(c => m.cols.includes(c)).map(c => `<button data-sadnja-species="${c}" aria-pressed="${c === m.theme}" class="${c === m.theme ? 'active' : ''}" onclick="_temSadnjaTheme('${jid}','${c}')">${_escHtml(_temColLabel(m,c))}</button>`).join('')}</div>` : `<div class="tem-lbl">Tema (boji odsjeke po atributu)</div>
+      ${(() => { const sve = [...(m.catCols || []), ...m.cols]; return sve.length > 1 ? `<div class="tem-lbl">Brza tema</div><div class="tem-brze" role="group" aria-label="Brza tema">${(() => { const pr = sve.slice(0, 6); if (m.theme && !pr.includes(m.theme)) pr[5] = m.theme; return pr; })().map(c => `<button type="button" aria-pressed="${c === m.theme}" onclick="_temApplyTheme('${jid}', ${c === m.theme ? 'null' : "'" + _jsAttr(c) + "'"});_temModalRender()">${_escHtml(_temColLabel(m, c))}</button>`).join('')}</div>` : ''; })()}
       <div class="tem-row">
         <select class="tem-sel" onchange="_temApplyTheme('${jid}', this.value || null);_temModalRender()">${opts}</select>
         <button class="tem-ib" onclick="_temRenameCol('${jid}')" ${m.theme ? '' : 'disabled'} title="Preimenuj naziv atributa"><svg class="ic"><use href="#ic-crtaj"/></svg></button>
