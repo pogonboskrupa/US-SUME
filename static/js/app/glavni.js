@@ -30779,6 +30779,8 @@ function _mainTileFlush() {
 let _wTileActive = 0;
 const _wTileStack = [];                 // red čekanja — bira se po _tileUzmiSljedeci
 let _W_TILE_MAX_INFLIGHT = typeof _renderCfg!=='undefined'?_renderCfg.workerTileConcurrency:5;
+// Native karta (Java čita fajl, bez radnika) — više istovremenih <img> zahtjeva (vidi _wTileSlot).
+let _W_TILE_NATIVE_MAX = (typeof _renderCfg!=='undefined' && _renderCfg.lite) ? 6 : 10;
 
 // ── Pločice offline karte dok se karta vuče (v1.8.9) ─────────────────────────
 // Terenska prijava: "dok skrolam nema tileova na perifernim mjestima". Izmjereno
@@ -30874,7 +30876,10 @@ function _wTileSlot(pri) {
       resolve(() => { if (pusteno) return; pusteno = true; _wTileActive--; const next = _tileUzmiSljedeci(_wTileStack); if (next) next(); });
     };
     run._pri = pri; run._odustani = () => resolve(null);
-    if (_wTileActive < _W_TILE_MAX_INFLIGHT) run(); else _wTileStack.push(run);
+    // Native čitanje (Java, bez radnika) podnosi više istovremenih zahtjeva: izvještaj sa terena je
+    // pokazao čekanje u redu ~107 ms naspram čitanja ~25 ms.
+    const lim = Math.max(_W_TILE_MAX_INFLIGHT, _W_TILE_NATIVE_MAX);
+    if (_wTileActive < lim) run(); else _wTileStack.push(run);
   });
 }
 function _wTileScheduleCall(msg, pri) {
@@ -31303,6 +31308,7 @@ function _renderRecover(releaseMemory=false) {
       _SQL_TILE_BMP_MAX = Math.min(_SQL_TILE_BMP_MAX, cfg.sqlCache);
       _MAIN_TILE_MAX_INFLIGHT = Math.min(_MAIN_TILE_MAX_INFLIGHT, cfg.mainTileConcurrency);
       _W_TILE_MAX_INFLIGHT = Math.min(_W_TILE_MAX_INFLIGHT, cfg.workerTileConcurrency);
+      if (cfg.lite) _W_TILE_NATIVE_MAX = Math.min(_W_TILE_NATIVE_MAX, 6);
       // Bez close() (vidi D1-16: pločica može upravo crtati bitmapu iz keša) i
       // bez pražnjenja redova — red drži VIDLJIVE pločice; _odustani bi ih
       // razriješio sa null i ostale bi prazne do sljedećeg pomaka karte.
@@ -31654,7 +31660,11 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
           if (res && res.error === 'timeout' && tries < 3) { _tryRead(tries + 1); return; }
           if (res && res.error === 'timeout') _tileProf.timeout++; else _tileProf.nullData++;
           if (res && res.error === 'timeout') { _doneP(); return; }
-          // Nema pločice na ovom zumu → uvećan roditelj (umjesto sive rupe).
+          _roditelj();
+        }).catch(() => { if (tries < 3) _tryRead(tries + 1); else { _tileProf.err++; _doneP(); } });
+      };
+      // Nema pločice na ovom zumu → uvećan roditelj (umjesto sive rupe).
+      const _roditelj = () => {
           _sqlTileRoditelj((zz, xx, yy) => _wTileScheduleCall({type:'tile', name, z:zz, x:xx, y:yy}, _pri).then(r => (r && r.data) || null), z, x, y, minNative).then(blob => {
             if (!blob) { _doneP(); return; }
             const url2 = URL.createObjectURL(blob);
@@ -31662,7 +31672,6 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
             img.onerror = () => { URL.revokeObjectURL(url2); _doneP(); };
             img.src = url2;
           }).catch(() => _doneP());
-        }).catch(() => { if (tries < 3) _tryRead(tries + 1); else { _tileProf.err++; _doneP(); } });
       };
       // Native karta (Java čita fajl): pločica ide DIREKTNO u <img src> — bez fetch → arrayBuffer →
       // Blob → objectURL na glavnoj niti (izvještaj uređaja: "Response.arrayBuffer.then 154 ms").
@@ -31681,7 +31690,16 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
             const dt = _now() - rt0; _tileProf.reads++; _tileProf.readSum += dt; if (dt > _tileProf.readMax) _tileProf.readMax = dt;
             _doneP();
           };
-          img.onerror = () => { if (!kraj()) return; img.onerror = null; img.removeAttribute('src'); _tryRead(0); };
+          // Greška native <img> je skoro uvijek 404 (pločice nema — rijetko pokrivena karta: ~23 % čitanja
+          // na terenu). Ranije se ista pločica tražila još jednom (fetch) samo da se potvrdi "nema", pa tek
+          // onda roditelj — dvostruko mjesto u redu za svaku praznu pločicu. Sad odmah roditelj + negativni keš.
+          img.onerror = () => {
+            if (!kraj()) return; img.onerror = null; img.removeAttribute('src');
+            _tileProf.nullData++;
+            if (_sqlTileNeg.size >= _SQL_TILE_NEG_MAX) _sqlTileNeg.clear();
+            _sqlTileNeg.add(name + '/' + z + '/' + x + '/' + y);
+            _roditelj();
+          };
           img.src = nUrl + '/' + z + '/' + x + '/' + y;
         });
         return img;
