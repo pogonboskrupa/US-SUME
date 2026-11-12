@@ -5611,6 +5611,7 @@ function _vsdRender() {
         <span class="meta${x.pts.length >= 2 ? '' : ' war'}">${x.pts.length >= 2 ? fmtL(calcL(x.pts)) : 'prazna'}</span></button>`;
     }).join('') : '<div class="vsd-empty">Odjel još nema vlaka.<br>Pritisni <b>＋ Nova</b> (N) i ' + (dodir ? 'dodiruj' : 'klikaj') + ' po karti.</div>'}</div>
     <div class="vsd-sec vsd-extra"><span>Alati</span></div>
+    <div class="vsd-extra vsd-ref"><button type="button" class="vsd-rb" onclick="openRefKartaPanel()" title="Referentna karta — papirna karta s rasporedom vlaka; pomjerljiva i sklopljiva">🗺 Referentna karta</button></div>
     <div class="vsd-baf vsd-extra">
       <button type="button" class="vsd-b${_vsdBuf ? ' ok' : ''}" onclick="_vsdBufToggle()" title="Bafer oko vlaka (B) — crveno su preklapanja">🛡 Bafer ±${bufRadius} m<kbd>B</kbd></button>
       <div class="vsd-chips">${_VSD_BUF_BRZI.map(m => `<button type="button" class="vsd-chip${bufRadius === m ? ' act' : ''}" onclick="_vsdBufRadijus(${m})">${m}</button>`).join('')}<button type="button" class="vsd-chip${_VSD_BUF_BRZI.includes(bufRadius) ? '' : ' act'}" onclick="_vsdBufRadijus(null)" title="Upiši svoj broj metara po strani">✎</button></div>
@@ -25693,6 +25694,7 @@ function switchTab(tab) {
   if(tab==='postavke')tab='teren'; // stari sačuvani odabir Obavještenja otvara Teren
   if(tab!=='karta'&&typeof VlakaDirection!=='undefined')VlakaDirection.cancelPick();
   if(tab!=='karta'&&typeof VlakaLager!=='undefined')VlakaLager.cancelPick();
+  if (tab !== 'karta' && typeof closeRefKartaPanel === 'function') closeRefKartaPanel();
   if (tab === 'debug' && !sbProfile?.is_admin) return;
   const prev = _activeTab;
   if (typeof _tabRemember === 'function') _tabRemember(prev);
@@ -27516,12 +27518,32 @@ function stampaOtvori() {
 }
 // Ulaz iz Menija (naziv zadržan — "🖨 Print / štampanje").
 function showPrintModal() { stampaOtvori(); }
-// Referentna karta: donji list preko karte (karta ostaje vidljiva radi poravnanja). Radnje koje traže dodir
-// na karti (kalibracija, trasiranje, ručno fitovanje, ručna oznaka) sklanjaju list same.
+// Referentna karta: plutajući prozor preko karte — može se povući (zaglavlje), minimizirati i vratiti.
+// Služi i uz Studio vlaka (da se vidi raspored vlaka na papiru dok se crta). Položaj i minimizacija se pamte.
+const _RK_POS_KEY = 'tvlake_rk_pos_v1', _RK_MIN_KEY = 'tvlake_rk_min_v1'; // minimizacija se pamti samo za sesiju prozora
+function _rkPrimijeniPoziciju() {
+  const m = document.getElementById('refkarta-modal'); if (!m) return;
+  let p = null; try { p = JSON.parse(localStorage.getItem(_RK_POS_KEY) || 'null'); } catch (e) {}
+  if (!p || !isFinite(p.x) || !isFinite(p.y)) { m.style.left = m.style.top = ''; m.style.right = m.style.bottom = ''; return; }
+  const w = m.offsetWidth || 340, h = m.offsetHeight || 60;
+  const x = Math.min(Math.max(0, p.x), Math.max(0, innerWidth - Math.min(w, 80)));
+  const y = Math.min(Math.max(0, p.y), Math.max(0, innerHeight - 44));
+  m.style.left = x + 'px'; m.style.top = y + 'px'; m.style.right = 'auto'; m.style.bottom = 'auto';
+}
+function _rkMinimiziraj(on) {
+  const m = document.getElementById('refkarta-modal'); if (!m) return;
+  const v = (on === undefined) ? !m.classList.contains('rk-min') : !!on;
+  m.classList.toggle('rk-min', v);
+  const b = document.getElementById('rk-min-btn'); if (b) { b.setAttribute('aria-pressed', String(v)); b.setAttribute('aria-label', v ? 'Prikaži referentnu kartu' : 'Sakrij referentnu kartu'); b.textContent = v ? '▢' : '—'; }
+  try { localStorage.setItem(_RK_MIN_KEY, v ? '1' : '0'); } catch (e) {}
+  _rkPrimijeniPoziciju();
+}
 function openRefKartaPanel() {
   const m = document.getElementById('refkarta-modal'); if (!m) return;
   if (typeof switchTab === 'function' && typeof _activeTab !== 'undefined' && _activeTab !== 'karta') switchTab('karta');
-  m.classList.add('show'); _refKartaPanelSync();
+  m.classList.add('show');
+  _rkMinimiziraj(false); // otvaranje uvijek pokaže cijeli prozor
+  _rkPrimijeniPoziciju(); _refKartaPanelSync();
 }
 function closeRefKartaPanel() {
   const m = document.getElementById('refkarta-modal'); if (m) m.classList.remove('show');
@@ -27530,12 +27552,35 @@ function _refKartaPanelSync() {
   const m = document.getElementById('refkarta-modal'); if (!m) return;
   const ima = !!(typeof _refImg !== 'undefined' && _refImg);
   m.classList.toggle('rk-ima', ima);
-  const li = m.querySelectorAll('.rk-steps li');
-  li.forEach((e, i) => e.classList.toggle('done', ima && i === 0));
+  m.querySelectorAll('.rk-steps li').forEach((e, i) => e.classList.toggle('done', ima && i === 0));
 }
+(function _rkDrag() {
+  let d = null;
+  document.addEventListener('pointerdown', e => {
+    const h = e.target.closest && e.target.closest('#refkarta-modal .rk-hdr');
+    if (!h || e.target.closest('button')) return;
+    const m = document.getElementById('refkarta-modal'), r = m.getBoundingClientRect();
+    d = { dx: e.clientX - r.left, dy: e.clientY - r.top, id: e.pointerId };
+    try { h.setPointerCapture(e.pointerId); } catch (x) {}
+    e.preventDefault();
+  }, true);
+  document.addEventListener('pointermove', e => {
+    if (!d || e.pointerId !== d.id) return;
+    const m = document.getElementById('refkarta-modal');
+    const x = Math.min(Math.max(0, e.clientX - d.dx), innerWidth - 60), y = Math.min(Math.max(0, e.clientY - d.dy), innerHeight - 44);
+    m.style.left = x + 'px'; m.style.top = y + 'px'; m.style.right = 'auto'; m.style.bottom = 'auto';
+  }, true);
+  const kraj = e => {
+    if (!d) return; d = null;
+    const m = document.getElementById('refkarta-modal'), r = m.getBoundingClientRect();
+    try { localStorage.setItem(_RK_POS_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) })); } catch (x) {}
+  };
+  document.addEventListener('pointerup', kraj, true); document.addEventListener('pointercancel', kraj, true);
+})();
+// Radnje koje traže dodir na karti (kalibracija, trasiranje, ručno fitovanje, ručna oznaka) minimiziraju prozor.
 document.addEventListener('click', e => {
-  const b = e.target.closest && e.target.closest('#refkarta-modal [data-rk-sakrij], #refkarta-calib-btn, #refkarta-manfit-btn, .ref-manual-label, #refkarta-modal button[onclick*="_refStartTrace"]');
-  if (b) setTimeout(closeRefKartaPanel, 0);
+  const b = e.target.closest && e.target.closest('#refkarta-calib-btn, #refkarta-manfit-btn, .ref-manual-label, #refkarta-modal button[onclick*="_refStartTrace"]');
+  if (b) setTimeout(() => _rkMinimiziraj(true), 0);
   else if (e.target.closest && e.target.closest('#refkarta-modal')) setTimeout(_refKartaPanelSync, 400);
 }, true);
 

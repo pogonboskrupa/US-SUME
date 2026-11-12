@@ -1492,6 +1492,7 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
 #vsd-panel .vsd-x { border:none; background:#f1f5f9; color:#334155; border-radius:8px; width:30px; height:30px; cursor:pointer; font-size:14px; }
 .vsd-row { display:flex; gap:6px; flex-wrap:wrap; }
 .vsd-b { flex:1 1 0; min-width:0; overflow:hidden; text-overflow:clip; border:none; cursor:pointer; font-size:12px; font-weight:700; padding:9px 5px; border-radius:10px; background:#f1f5f9; color:#334155; white-space:nowrap; }
+.vsd-rb { display:block; width:100%; border:none; cursor:pointer; font-size:12px; font-weight:700; padding:9px 5px; border-radius:10px; background:#f1f5f9; color:#334155; margin-bottom:6px; }
 .vsd-b:hover:not(:disabled) { filter:brightness(0.96); }
 .vsd-b:disabled { opacity:0.4; cursor:default; }
 .vsd-b.pri { background:linear-gradient(135deg,#0369a1,#0ea5e9); color:#fff; }
@@ -5901,7 +5902,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.2.7';
+const APP_VER = 'v4.2.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6962,7 +6963,7 @@ function _loadLocalVlake() {
 
 <!-- ═══ REFERENTNA KARTA (Meni → ispod Print) ═══ -->
 <div id="refkarta-modal" role="dialog" aria-modal="true" aria-labelledby="refkarta-title">
-  <header class="rk-hdr"><div><small>PAPIRNA KARTA 1:10.000</small><h2 id="refkarta-title">Referentna karta</h2></div><button type="button" class="rk-close" onclick="closeRefKartaPanel()" aria-label="Zatvori referentnu kartu"><svg class="ic"><use href="#ic-zatvori"/></svg></button></header>
+  <header class="rk-hdr"><div><small>PAPIRNA KARTA 1:10.000</small><h2 id="refkarta-title">Referentna karta</h2></div><div class="rk-acts"><button type="button" id="rk-min-btn" class="rk-close" onclick="_rkMinimiziraj()" aria-label="Sakrij referentnu kartu" aria-pressed="false">—</button><button type="button" class="rk-close" onclick="closeRefKartaPanel()" aria-label="Zatvori referentnu kartu"><svg class="ic"><use href="#ic-zatvori"/></svg></button></div></header>
   <ol class="rk-steps" aria-label="Koraci"><li><b>1</b> Učitaj sliku</li><li><b>2</b> Poravnaj</li><li><b>3</b> Prepoznaj vlake</li></ol>
   <div class="rk-body">
       <div class="sec reference-card" id="reference-card">

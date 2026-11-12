@@ -1494,7 +1494,12 @@ body.explorer-free :is(.ex-target,.ex-guidance,#ex-overview,#tnp-road,#tnp-elev)
 html[data-field-theme=day] .tem-leg-row.sve{color:#1d4ed8}
 
 /* Referentna karta (Meni): donji list, karta iznad ostaje vidljiva */
-#refkarta-modal{display:none;position:fixed;left:0;right:0;bottom:0;max-height:64vh;z-index:9000;flex-direction:column;background:var(--field-bg);color:var(--field-ink);border-top:2px solid var(--field-accent,#38bdf8);border-radius:16px 16px 0 0;box-shadow:0 -8px 28px rgba(0,0,0,.45)}
+#refkarta-modal{display:none;position:fixed;right:8px;bottom:8px;width:min(380px,calc(100vw - 16px));max-height:min(62vh,560px);z-index:9000;flex-direction:column;background:var(--field-bg);color:var(--field-ink);border:2px solid var(--field-accent,#38bdf8);border-radius:16px;box-shadow:0 8px 28px rgba(0,0,0,.5)}
+#refkarta-modal .rk-hdr{cursor:grab;touch-action:none;user-select:none}
+#refkarta-modal .rk-acts{display:flex;gap:6px}
+#refkarta-modal.rk-min{max-height:none;width:min(260px,calc(100vw - 16px))}
+#refkarta-modal.rk-min .rk-steps,#refkarta-modal.rk-min .rk-body{display:none}
+#refkarta-modal.rk-min .rk-hdr{padding-bottom:10px}
 #refkarta-modal.show{display:flex}
 #refkarta-modal .rk-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 6px}
 #refkarta-modal .rk-hdr small{font-size:10px;letter-spacing:.08em;color:var(--field-muted)}

@@ -14,3 +14,10 @@ assert(html.indexOf('id="menu-refkarta"')>html.indexOf('showPrintModal()'));
 assert(!/<details[^>]*id="reference-card"/.test(html));
 assert(/function openRefKartaPanel\(/.test(src)&&/function closeRefKartaPanel\(/.test(src));
 console.log('ok');
+{
+  const g=izvor();
+  assert(/function _rkMinimiziraj\(/.test(g)&&/_RK_POS_KEY/.test(g),'ref. karta: minimizacija i pamćenje položaja');
+  assert(/onclick="openRefKartaPanel\(\)"/.test(g),'dugme Referentna karta u Studiju vlaka');
+  assert(html.includes('id="rk-min-btn"'));
+  console.log('ok ref plutajuci');
+}
