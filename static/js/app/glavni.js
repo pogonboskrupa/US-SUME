@@ -38404,10 +38404,14 @@ async function _zadaneUredi(korisnikId) {
   if (!kor && korisnikId) { const z = (_zadaneAdmin || _zadaneAdminKes() || []).find(x => x.korisnik_id === korisnikId); if (z) kor = { id: korisnikId, ime: z.korisnik, sumarija: z.sumarija }; }
   if (!kor) kor = await _korisnikJedan(svi, 'Za kojeg korisnika zadaješ kolege?');
   if (!kor) return;
+  // Uvijek svjež spisak sa servera: keš može biti star ili prazan pa uređivač ne bi pokazao šta je već zadano.
+  await _zadaneAdminUcitaj(true);
   const postojece = (_zadaneAdmin || _zadaneAdminKes() || []).find(x => x.korisnik_id === kor.id);
   const izabrani = new Set((postojece?.kolege || []).map(c => c.id));
+  const pocetni = new Set(izabrani);
   const kandidati = svi.filter(k => k.id !== kor.id);
-  const poznati = new Set(kandidati.map(k => k.id)), ostali = [...izabrani].filter(x => !poznati.has(x));
+  // Zadana kolegica koje nema u općem spisku primalaca ipak mora biti vidljiva (i uklonjiva).
+  (postojece?.kolege || []).forEach(c => { if (c.id !== kor.id && !kandidati.some(k => k.id === c.id)) kandidati.push({ id: c.id, ime: c.ime || 'Korisnik', sumarija: c.sumarija || '' }); });
   return new Promise(res => {
     const bg = document.createElement('div');
     bg.id = 'zadane-uredi';
@@ -38417,7 +38421,7 @@ async function _zadaneUredi(korisnikId) {
     const polje = 'font-size:16px;padding:10px;border-radius:10px;border:1px solid #476;background:rgba(255,255,255,.07);color:inherit;margin-bottom:8px';
     const dugme = 'padding:10px 12px;border-radius:10px;border:1px solid #476;background:transparent;color:inherit;min-height:44px';
     const sumarije = [...new Set(kandidati.map(k => k.sumarija || 'Bez šumarije'))].sort((a, b) => a.localeCompare(b, 'bs'));
-    box.innerHTML = '<div style="font-weight:700;margin-bottom:2px">👤 ' + _escHtml(kor.ime) + '</div><div style="font-size:12px;opacity:.7;margin-bottom:8px">Ove kolege će mu biti prikazane po defaultu u spisku za slanje.</div>' +
+    box.innerHTML = '<div style="font-weight:700;margin-bottom:2px">👤 ' + _escHtml(kor.ime) + '</div><div style="font-size:12px;opacity:.7;margin-bottom:8px">Trenutno zadano: <b>' + izabrani.size + '</b> (označene su na vrhu). Ove kolege će mu biti prikazane po defaultu u spisku za slanje.</div>' +
       '<input id="zd-trazi" type="search" autocomplete="off" placeholder="Traži kolegu (ime ili šumarija)" style="' + polje + '">' +
       '<select id="zd-sum" style="' + polje + '"><option value="">Sve šumarije</option>' + sumarije.map(s => '<option>' + _escHtml(s) + '</option>').join('') + '</select>' +
       '<div style="display:flex;gap:8px;margin-bottom:6px"><button type="button" id="zd-sve" style="flex:1;' + dugme + '">Dodaj sve prikazane</button><button type="button" id="zd-ukloni" style="flex:1;' + dugme + '">Ukloni sve prikazane</button></div>' +
@@ -38428,7 +38432,7 @@ async function _zadaneUredi(korisnikId) {
     bg.appendChild(box); document.body.appendChild(bg);
     const q = s => box.querySelector(s), kraj = v => { bg.remove(); res(v); };
     const vidljivi = () => { const t = q('#zd-trazi').value.trim().toLowerCase(), s = q('#zd-sum').value;
-      return kandidati.filter(k => (!s || (k.sumarija || 'Bez šumarije') === s) && (!t || (k.ime + ' ' + (k.sumarija || '')).toLowerCase().includes(t))); };
+      return kandidati.filter(k => (!s || (k.sumarija || 'Bez šumarije') === s) && (!t || (k.ime + ' ' + (k.sumarija || '')).toLowerCase().includes(t))).sort((x, y) => (pocetni.has(y.id) ? 1 : 0) - (pocetni.has(x.id) ? 1 : 0)); };
     const crtaj = () => {
       q('#zd-lista').innerHTML = vidljivi().map(k => { const on = izabrani.has(k.id);
         return '<button type="button" data-i="' + _escHtml(k.id) + '" aria-pressed="' + on + '" style="display:block;width:100%;text-align:left;padding:12px;margin:2px 0;border-radius:10px;border:0;background:' + (on ? 'rgba(47,125,79,.45)' : 'rgba(255,255,255,.06)') + ';color:inherit;min-height:44px">' + (on ? '☑ ' : '☐ ') + _escHtml(k.ime) + ' <small style="opacity:.6">· ' + _escHtml(k.sumarija || 'Bez šumarije') + '</small></button>'; }).join('') || '<div style="opacity:.6;padding:14px">Nema rezultata</div>';

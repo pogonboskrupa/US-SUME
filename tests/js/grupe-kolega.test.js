@@ -71,3 +71,13 @@ console.log('OK grupe kolega');
   assert(/id="zd-dvosmjerno" checked/.test(src) && /p_dvosmjerno: !!q\('#zd-dvosmjerno'\)\?\.checked/.test(src), 'klijent šalje izbor, zadano uključeno');
 }
 console.log('OK zadane kolege');
+
+// v4.2.7: uređivač zadanih kolega pokazuje trenutno zadane (svjež spisak, označeni na vrhu)
+{
+  const g=require('./_izvor').izvor();
+  const f=g.slice(g.indexOf('async function _zadaneUredi('));
+  const tijelo=f.slice(0,f.indexOf('\nasync function ',10)>0?f.indexOf('\nasync function ',10):4000);
+  assert(/await _zadaneAdminUcitaj\(true\)/.test(tijelo),'uređivač mora povući svježe zadane');
+  assert(/pocetni/.test(tijelo)&&/Trenutno zadano/.test(tijelo));
+  console.log('ok zadane prikaz');
+}
