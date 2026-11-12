@@ -5906,7 +5906,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.4.0';
+const APP_VER = 'v4.4.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -8154,8 +8154,8 @@ function _loadLocalVlake() {
     <div class="sp-project-context"><span class="sp-context-label">AKTIVNI PROJEKAT</span><b id="server-project-label"></b><div id="server-identity"></div></div>
     <div id="server-exchange-status" role="status" aria-live="polite" class="sp-exchange-status"></div>
     <div id="server-send-preview"></div>
-    <section id="data-server-received" class="sp-transfer-section"><h3>Primljeni podaci</h3><p class="sp-note">Posljednja 3 projekta. Dodirni projekat za stavke i projektante.</p><div class="sp-group-controls"><label for="server-group-mode">Pregled</label><select id="server-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-received-items"></div><div id="syncq-primljeno" hidden></div></section>
-    <section id="data-server-sent" class="sp-transfer-section" hidden><h3>Poslani podaci</h3><p class="sp-note">Potvrđeno slanje s ovog telefona za posljednja 3 projekta.</p><div class="sp-group-controls"><label for="server-sent-group-mode">Pregled</label><select id="server-sent-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-sent-items"></div></section>
+    <section id="data-server-received" class="sp-transfer-section"><h3>Primljeni podaci</h3><p class="sp-note">Posljednja 3 projekta · spisak zadnjih 7 dana (podaci ostaju na telefonu). Dodirni projekat za stavke i projektante.</p><div class="sp-group-controls"><label for="server-group-mode">Pregled</label><select id="server-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-received-items"></div><div id="syncq-primljeno" hidden></div></section>
+    <section id="data-server-sent" class="sp-transfer-section" hidden><h3>Poslani podaci</h3><p class="sp-note">Potvrđeno slanje s ovog telefona za posljednja 3 projekta · spisak zadnjih 7 dana (podaci ostaju na telefonu).</p><div class="sp-group-controls"><label for="server-sent-group-mode">Pregled</label><select id="server-sent-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-sent-items"></div></section>
     <details id="server-queue-details" class="sp-recovery"><summary>Detalji i greške slanja</summary>
     <div id="syncq-list" style="padding:4px 0;"></div><div id="data-server-empty" class="data-context"></div><div id="data-server-pager"></div>
     </details>

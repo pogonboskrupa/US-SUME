@@ -6,6 +6,10 @@
   const currentUid = () => sbUser?.id || '';
   // Na ekranu zadnjih 30 razmjena; čuva se više da broj ponavljanja ("poslano N×") ostane tačan.
   const TRANSFER_SHOW_MAX = 30, TRANSFER_STORE_MAX = 200;
+  // Spisak poslanih/primljenih stavki pamti samo zadnjih 7 dana (samo SPISAK — vlake, doznaka i fajlovi
+  // ostaju na uređaju; briše se samo zapis u ovoj sekciji).
+  const TRANSFER_DANA_MS = 7 * 86400000;
+  const svjez = r => r && Number.isFinite(r.ts) && r.ts >= Date.now() - TRANSFER_DANA_MS;
   // Sklonidba: 1 stavka, 2–4 stavke, 5+ stavki (11–14 uvijek "stavki").
   const broj = (n, jed, dva, mn) => { const d = n % 10, h = n % 100; return n + ' ' + (d === 1 && h !== 11 ? jed : d >= 2 && d <= 4 && (h < 12 || h > 14) ? dva : mn); };
   const stavke = n => broj(n, 'stavka', 'stavke', 'stavki'), tacke = n => broj(n, 'GPS tačka', 'GPS tačke', 'GPS tačaka');
@@ -113,13 +117,16 @@
   }
   function transfers(direction) {
     try {const raw=localStorage.getItem('tvlake_transfer_items_v1_'+currentUid()+'_'+direction);
-      if(raw===null&&direction==='received')return allowed().flatMap(p=>{const m=model(p.id);return m.rows.filter(r=>!r.pending&&!r.deleting&&!r.stale).map(r=>({projectKey:'project:'+p.id,project:label(p),uid:r.korisnik_id,author:r.ime,target:{kind:'vlaka',id:r.id,nm:r.nm},item:'Vlaka · '+r.nm,detail:metres(r.metres),ts:m.downloaded?.ts||0}));});
-      const rows=JSON.parse(raw||'[]');return Array.isArray(rows)?rows:[];}catch(e){return [];}
+      if(raw===null&&direction==='received')return allowed().flatMap(p=>{const m=model(p.id);return m.rows.filter(r=>!r.pending&&!r.deleting&&!r.stale).map(r=>({projectKey:'project:'+p.id,project:label(p),uid:r.korisnik_id,author:r.ime,target:{kind:'vlaka',id:r.id,nm:r.nm},item:'Vlaka · '+r.nm,detail:metres(r.metres),ts:m.downloaded?.ts||0}));}).filter(svjez);
+      const rows=JSON.parse(raw||'[]');if(!Array.isArray(rows))return [];
+      const ostaje=rows.filter(svjez);
+      if(ostaje.length!==rows.length)try{localStorage.setItem('tvlake_transfer_items_v1_'+currentUid()+'_'+direction,JSON.stringify(ostaje));}catch(e){}
+      return ostaje;}catch(e){return [];}
   }
   function saveTransfers(direction,rows,replaceProject) {
     const old=transfers(direction).filter(r=>!replaceProject||r.projectKey!==replaceProject);
     // Samo potvrde i mali opis, bez geometrije, fotografija ili GPS dnevnika.
-    try {localStorage.setItem('tvlake_transfer_items_v1_'+currentUid()+'_'+direction,JSON.stringify([...rows,...old].sort((a,b)=>b.ts-a.ts).slice(0,TRANSFER_STORE_MAX)));}
+    try {localStorage.setItem('tvlake_transfer_items_v1_'+currentUid()+'_'+direction,JSON.stringify([...rows,...old].filter(svjez).sort((a,b)=>b.ts-a.ts).slice(0,TRANSFER_STORE_MAX)));}
     catch(e){console.warn('Pregled razmjene nije sačuvan',e);}
   }
   function dozReceived(id,markings,tracks,members,owner) {
