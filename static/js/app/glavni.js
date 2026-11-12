@@ -7889,7 +7889,8 @@ async function openShareFotoDlg(tsKey) {
   kontakti.forEach(k => { if (k.id !== myId && !entries.some(([kid]) => kid === k.id)) entries.push([k.id, { ime: k.ime, color: k.color }]); });
   if (teren) projShareHtml = '';
   const dodajHtml = '<button type="button" onclick="_shareFotoDodajKolegu()" style="width:100%;margin:6px 0 10px;padding:9px;border-radius:8px;border:1px dashed #3b82f6;background:transparent;color:#93c5fd;font-weight:600;">➕ Dodaj kolegu (poziv)</button>';
-  if (teren && !kontakti.length) _kontaktiOsvjezi().then(l => { if (l.length && _shareFotoKey === tsKey) openShareFotoDlg(tsKey); }).catch(() => {});
+  // Spisak se uvijek osvježi u pozadini (kolega je mogao upravo prihvatiti poziv); dijalog se ponovo crta samo ako se promijenio.
+  _kontaktiOsvjezi(true).then(l => { if (l.length !== kontakti.length && _shareFotoKey === tsKey) openShareFotoDlg(tsKey); }).catch(() => {});
   if (!entries.length && !projShareHtml) {
     list.innerHTML = '<div style="text-align:center;padding:12px;color:#94a3b8;">Još nemaš dodanih kolega — dodaj ih pozivom.</div>' + dodajHtml;
     return;
@@ -37781,11 +37782,24 @@ function _kontaktiSpremi(lista) { try { localStorage.setItem(_kontaktiKljuc(), J
 function _kontaktiLista() {
   return _kontaktiLokalno().map(k => ({ id: k.id, ime: k.ime || 'Kolega', sumarija: k.sumarija || '', color: (typeof _bojaZaId === 'function' ? _bojaZaId(k.id) : '#64748b') }));
 }
+// Poziv je dvosmjeran na serveru, ali pozivalac o prihvatanju saznaje tek kad osvježi spisak. Ranije
+// je to bilo najviše jednom u 10 min, pa je kod onoga ko je pozvao kolega "nedostajao" (izgledalo
+// jednosmjerno). Dok je moj poziv aktivan (1 dan) spisak se osvježava na 20 s, inače na 2 min, a
+// prije svakog izbora primaoca se osvježi odmah.
 let _kontaktiZadnji = 0;
+const _KONTAKTI_POZIV_KEY = 'tvlake_kontakti_poziv_do:';
+function _kontaktiPozivAktivan() {
+  try { return Number(localStorage.getItem(_KONTAKTI_POZIV_KEY + (sbUser?.id || ''))) > Date.now(); } catch (e) { return false; }
+}
+// Osvježi spisak prije izbora primaoca, ali ne čekaj duže od 4 s (slab signal → lokalni spisak).
+async function _kontaktiSvjezi() {
+  try { await Promise.race([_kontaktiOsvjezi(true), new Promise(r => setTimeout(r, 4000))]); } catch (e) {}
+  return _kontaktiLista();
+}
 async function _kontaktiOsvjezi(force) {
   if (!sb || !sbUser || sbUser._cachedStub) return _kontaktiLokalno();
   const sad = Date.now();
-  if (!force && sad - _kontaktiZadnji < 600000) return _kontaktiLokalno();
+  if (!force && sad - _kontaktiZadnji < (_kontaktiPozivAktivan() ? 20000 : 120000)) return _kontaktiLokalno();
   if (typeof _mrezaProbaj === 'function' && !_mrezaProbaj()) return _kontaktiLokalno();
   _kontaktiZadnji = sad;
   const prije = _kontaktiLokalno();
@@ -37795,7 +37809,7 @@ async function _kontaktiOsvjezi(force) {
     const nova = (r.data || []).map(k => ({ id: k.id, ime: k.ime, sumarija: k.sumarija }));
     _kontaktiSpremi(nova);
     const ids = new Set(prije.map(k => k.id));
-    nova.filter(k => !ids.has(k.id)).forEach(k => { if (prije.length || force) showToast('👥 ' + (k.ime || 'Kolega') + ' je dodan u tvoje kolege'); });
+    nova.filter(k => !ids.has(k.id)).forEach(k => { if (prije.length || force || _kontaktiPozivAktivan()) showToast('👥 ' + (k.ime || 'Kolega') + ' je dodan u tvoje kolege'); });
     return nova;
   } catch (e) { return prije; }
 }
@@ -37812,8 +37826,9 @@ async function _kontaktiPozovi() {
     const r = await _withTimeout(sb.rpc('kontakt_poziv_napravi'), 20000);
     if (r.error) throw r.error;
     const kod = String(r.data);
-    const txt = 'Dendro Map — poziv za dijeljenje. Kod: ' + kod + ' (važi 1 dan). U aplikaciji: Meni → Primljeni podaci → Kolege → Unesi kod poziva.';
-    const i = await _dlgActions('👥 Kod poziva: ' + kod + '\nKolega ga unosi u Meni → Primljeni podaci → Kolege. Važi 1 dan i jednokratan je. Kad ga prihvati, pojavit će se u tvom spisku.', [
+    try { localStorage.setItem(_KONTAKTI_POZIV_KEY + (sbUser?.id || ''), String(Date.now() + 86400000)); } catch (e) {}
+    const txt = 'Dendro Map — poziv za dijeljenje. Kod: ' + kod + ' (važi 1 dan, može ga unijeti više kolega). U aplikaciji: Meni → Primljeni podaci → Kolege → Unesi kod koji sam dobio.';
+    const i = await _dlgActions('👥 Kod poziva: ' + kod + '\nIsti kod daj svim kolegama: unose ga u Meni → Primljeni podaci → Kolege. Važi 1 dan. Ko ga unese, vidi tebe i ti njega (oba smjera).', [
       { label: '📋 Kopiraj kod' }, { label: '📤 Podijeli porukom (Viber, WhatsApp…)' }, { label: 'Zatvori' }]);
     if (i === 0) { try { await navigator.clipboard.writeText(kod); showToast('📋 Kod kopiran: ' + kod); } catch (e) { showToast('Kod: ' + kod); } }
     else if (i === 1) {
@@ -37882,9 +37897,9 @@ async function podaciPosalji(vrsta, naziv, kml) {
   // Terenski profil ne vidi druge korisnike: bira iz SVOJIH kolega (dodanih pozivom) ili šalje šifrom.
   // Ostali vide svoju šumariju + kolege dodane pozivom (npr. iz druge šumarije).
   const teren = !admin && isSpdField();
-  let kolege = teren ? _kontaktiLista() : (admin ? await _primaociSvi() : _shareKolege());
-  if (!teren && !admin) { const ima = new Set(kolege.map(k => k.id)); _kontaktiLista().forEach(k => { if (!ima.has(k.id)) kolege.push(k); }); }
-  if (teren && !_kontaktiLokalno().length) _kontaktiOsvjezi().catch(() => {});
+  const moji = admin ? [] : await _kontaktiSvjezi();   // svjež spisak: kolega koji je upravo prihvatio poziv
+  let kolege = teren ? moji : (admin ? await _primaociSvi() : _shareKolege());
+  if (!teren && !admin) { const ima = new Set(kolege.map(k => k.id)); moji.forEach(k => { if (!ima.has(k.id)) kolege.push(k); }); }
   let i;
   if (admin || kolege.length > 8) {
     i = await _primaocBiraj(kolege, naziv, admin);

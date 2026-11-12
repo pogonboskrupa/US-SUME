@@ -28,5 +28,14 @@ const mk=(ls,rpc)=>{const store=Object.assign({},ls),toasts=[];
  assert(/async function kontaktiDodaj/.test(src)&&/id="prim-dodaj"/.test(src)&&/_shareFotoDodajKolegu/.test(src));
  assert(/const teren = isSpdField\(\) && !isAdmin\(\);[\s\S]*let entries = teren \? \[\]/.test(src),'terenski u dijalogu slike ne vidi sve korisnike');
  assert(/Kolege \(' \+ _kontaktiLokalno\(\)\.length/.test(src),'dugme Kolege u Primljenim podacima');
+ // v4.1.1: jedan kod za više ljudi, dvosmjerno; spisak se osvježava prije izbora primaoca
+ const sql=fs.readFileSync(__dirname+'/../../supabase/migrations/20261114_kontakt_poziv_vise.sql','utf8');
+ const prih=sql.slice(sql.indexOf('function public.kontakt_poziv_prihvati'));
+ assert(!/delete from public\.kontakt_pozivi where kod = v_k/.test(prih),'kod se ne briše pri prihvatanju');
+ assert(!/for update/.test(prih)&&/insert into public\.kontakti \(a, b\) values \(auth\.uid\(\), r\.from_id\)/.test(prih)&&/insert into public\.kontakti \(a, b\) values \(r\.from_id, auth\.uid\(\)\)/.test(prih),'veza u oba smjera');
+ assert(/where p\.from_id = auth\.uid\(\) order by p\.expires_at desc limit 1/.test(sql)&&!/>= 3 then/.test(sql),'isti važeći kod se dijeli');
+ assert(/async function _kontaktiSvjezi/.test(src)&&/const moji = admin \? \[\] : await _kontaktiSvjezi\(\)/.test(src),'spisak se osvježava prije izbora');
+ assert(/_kontaktiPozivAktivan\(\) \? 20000 : 120000/.test(src),'češće osvježavanje dok je poziv aktivan');
+ assert(/može ga unijeti više kolega|Isti kod daj svim kolegama/.test(src),'tekst poziva kaže da ga može unijeti više ljudi');
  console.log('OK kontakti');
 })().catch(e=>{console.error(e);process.exit(1);});

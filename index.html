@@ -6029,7 +6029,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.1.0';
+const APP_VER = 'v4.1.1';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6764,7 +6764,7 @@ function _loadLocalVlake() {
 <section class="help-start"><span class="help-eyebrow">Po profilima</span><h3>Slanje i primanje fajlova</h3><p>Vidi samo dio za svoj profil: <b>terenski</b> radnik šalje isključivo šifrom od 5 cifara, <b>projektant</b> šalje i izabranim kolegama.</p></section>
 <section class="help-sec" data-uloge="teren"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Terenski profil — slanje i primanje fajlova</button><div class="help-sec-body">
 <div class="help-row"><div class="help-txt"><b>Šta se može slati</b><span>KML fajl, trag, izmjerena linija ili poligon. Otvori <b>Preglednik KML oznaka</b> (dugme 📁 na karti) i uz fajl pritisni <b>Pošalji</b>, ili u popupu fajla na karti pritisni <b>Pošalji</b>. Trag i mjerenje šalješ iz njihovog popupa/kartice.</span></div></div>
-<div class="help-row"><div class="help-txt"><b>Slanje kolegi</b><span>Terenski profil ne vidi sve korisnike. <b>Pošalji</b> nudi tvoje <b>kolege</b> (izaberi jednog ili više) i <b>➕ Dodaj kolegu</b>. Kolegu dodaješ pozivom: pritisneš <b>Pozovi kolegu</b>, dobiješ <b>kod od 5 cifara</b> i pošalješ ga porukom; kolega ga unese u <b>Meni → Primljeni podaci → Kolege → Unesi kod</b>. Kad prihvati, ostaje u spisku za slanje KML-a, traga, mjerenja i fotografija.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Slanje kolegi</b><span>Terenski profil ne vidi sve korisnike. <b>Pošalji</b> nudi tvoje <b>kolege</b> (izaberi jednog ili više) i <b>➕ Dodaj kolegu</b>. Kolegu dodaješ pozivom: pritisneš <b>Pozovi kolegu</b>, dobiješ <b>kod od 5 cifara</b> i pošalješ ga porukom; kolega ga unese u <b>Meni → Primljeni podaci → Kolege → Unesi kod</b>. Isti kod (važi 1 dan) može unijeti više kolega. Ko ga unese, vidi tebe i ti njega, i ostajete jedno drugom u spisku za slanje KML-a, traga, mjerenja i fotografija.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Slanje šifrom</b><span>Za nekoga ko nije tvoj kolega izaberi <b>Pošalji šifrom</b>: dobiješ <b>šifru od 5 cifara</b> (npr. 48213) koju kopiraš ili podijeliš porukom.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Koliko šifra važi</b><span>Šifra važi <b>2 dana</b> i može je preuzeti <b>više ljudi</b> (cijela ekipa istom šifrom). Poslije isteka nestaje sa servera. Za slanje treba internet.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Primanje fajla</b><span>Dobio si šifru? <b>Meni → Primljeni podaci → Preuzmi šifrom</b>, ukucaj 5 cifara i pritisni <b>Preuzmi</b>. Fajl se sprema na telefon i poslije toga radi bez interneta. Preuzimanje traži internet.</span></div></div>
