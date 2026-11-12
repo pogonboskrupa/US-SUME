@@ -26,7 +26,23 @@ assert.deepEqual(mk([], []).lista(), []);
 ls['tvlake_grupe_kolege_v1:ja'] = '{pokvareno'; assert.deepEqual(mk([], []).grupe().length, 0);
 // Osvježavanje i UI
 assert(/sb\.rpc\('kolege_iz_grupa'\)/.test(src) && /_GRUPE_KOLEGE_PREF \+ sbUser\.id/.test(src), 'osvježavanje kolega iz grupa');
-assert(/if \(isAdmin\(\)\) h \+= _grupeAdminHtml\(\)/.test(src), 'grupe samo adminu u tabu Kolege');
+assert(/if \(isAdmin\(\)\) h \+= '<button[^']*grupeAdminOtvori\(\)/.test(src), 'dugme prema grupama samo adminu u tabu Kolege');
+const html = fs.readFileSync(__dirname + '/../../index.html', 'utf8');
+assert(/id="admin-grupe-btn" onclick="grupeAdminOtvori\(\)"/.test(html), 'zasebna sekcija u admin panelu (Korisnici)');
+assert(/function grupeAdminOtvori\(\) \{\s*if \(!isAdmin\(\)\)/.test(src), 'sekcija samo za admina');
+assert(/function _grupePanelRender/.test(src)&&/Terenski \(/.test(src)&&/Projektanti \(/.test(src)&&/Uredi članove/.test(src), 'panel: članovi podijeljeni na terenske i projektante, uređivanje');
+// Primljeno: pretraga i filter po vrsti
+{
+  const s0 = src.indexOf('function _primListaHtml'), s1 = src.indexOf('function _primFiltriraj');
+  const lst = [{id:'1',vrsta:'trag',naziv:'Trag Una',odIme:'Amir',t:1,kb:2},{id:'2',vrsta:'kml',naziv:'Granica',odIme:'Dino',t:1,kb:2},{id:'3',vrsta:'kml',naziv:'Foto 12.11.',odIme:'Amir',t:1,kb:2}];
+  const f = new Function('S', 'with(S){' + src.slice(s0, s1) + ';return _primListaHtml;}')({ _primFilter: { q: '', v: '' }, _primRedHtml: x => '[' + x.id + ']', _escHtml: x => x });
+  assert.equal(f(lst), '[1][2][3]');
+  const g2 = new Function('S', 'with(S){' + src.slice(s0, s1) + ';return _primListaHtml;}')({ _primFilter: { q: 'amir', v: 'kml' }, _primRedHtml: x => '[' + x.id + ']', _escHtml: x => x });
+  assert(/\[3\]/.test(g2(lst)) && !/\[1\]|\[2\]/.test(g2(lst)), 'pretraga po pošiljaocu + vrsta');
+  assert(/Nema rezultata/.test(new Function('S', 'with(S){' + src.slice(s0, s1) + ';return _primListaHtml;}')({ _primFilter: { q: 'zzz', v: '' }, _primRedHtml: () => '', _escHtml: x => x })(lst)));
+}
+// Admin picker: grupe kao prečice
+assert(/function _primaocBiraj\(lista, naziv, prikaziSumariju, grupe\)/.test(src)&&/id="prim-grupe"/.test(src)&&/const grupe = admin \?/.test(src), 'admin bira primaoce preko grupa');
 assert(/async function _grupaUredi\(id\)\s*\{\s*if \(!isAdmin\(\)\) return;/.test(src), 'uređivač samo za admina');
 assert(/admin_grupa_spremi/.test(src) && /admin_grupa_obrisi/.test(src) && /id="gr-sum"/.test(src), 'spremanje, brisanje, filter po šumariji');
 assert(/k\.grupa && !k\.sifra && k\.izvor !== 'sumarija' \? 'predložen'/.test(src), 'korisnik vidi "predložen", ne naziv grupe');

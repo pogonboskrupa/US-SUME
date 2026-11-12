@@ -37968,7 +37968,9 @@ async function podaciPosalji(vrsta, naziv, kml) {
   if (!teren && !admin) { const ima = new Set(kolege.map(k => k.id)); moji.forEach(k => { if (!ima.has(k.id)) kolege.push(k); }); }
   let i;
   if (admin || kolege.length > 8) {
-    i = await _primaocBiraj(kolege, naziv, admin);
+    // Admin: grupe kao prečice za izbor primalaca (samo članovi koji su u spisku)
+    const grupe = admin ? (_grupeAdmin || _grupeAdminKes() || []).map(gr => ({ naziv: gr.naziv, idx: (gr.clanovi || []).map(c => kolege.findIndex(k => k.id === c.id)).filter(n => n >= 0) })).filter(gr => gr.idx.length) : [];
+    i = await _primaocBiraj(kolege, naziv, admin, grupe);
   } else {
     const akcije = kolege.map(k => ({ label: _escHtml(k.ime) }));
     akcije.push({ label: '🔑 Pošalji šifrom — više ljudi, drugi profil ili šumarija (važi 2 dana)' });
@@ -38045,7 +38047,7 @@ async function _primaociSvi() {
 // Birač primaoca: pretraga (ime ili šumarija), višestruki izbor, "Odaberi sve" / "Ukloni".
 // Vraća NIZ indeksa u listi, lista.length = šifra, null = odustao. "Odaberi sve" važi za
 // trenutno filtriran prikaz, pa se pretragom po šumariji bira cijela šumarija.
-function _primaocBiraj(lista, naziv, prikaziSumariju) {
+function _primaocBiraj(lista, naziv, prikaziSumariju, grupe) {
   return new Promise(res => {
     const izabrani = new Set();
     const bg = document.createElement('div');
@@ -38057,6 +38059,7 @@ function _primaocBiraj(lista, naziv, prikaziSumariju) {
     box.innerHTML = '<div style="font-weight:700;margin-bottom:8px">📤 Pošalji: ' + _escHtml(naziv) + '</div>' +
       '<input id="prim-trazi" type="search" autocomplete="off" placeholder="Traži kolegu (ime ili šumarija)" style="font-size:16px;padding:10px;border-radius:10px;border:1px solid #476;background:rgba(255,255,255,.07);color:inherit;margin-bottom:8px">' +
       '<div style="display:flex;gap:8px;margin-bottom:6px"><button type="button" id="prim-sve" style="flex:1;' + dugme + '">Odaberi sve</button><button type="button" id="prim-ukloni" style="flex:1;' + dugme + '">Ukloni</button></div>' +
+      ((grupe && grupe.length) ? '<div id="prim-grupe" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' + grupe.map((gr, gi) => '<button type="button" data-g="' + gi + '" style="' + dugme + ';min-height:40px;padding:6px 10px;border-color:#3b82f6;font-size:13px">👥 ' + _escHtml(gr.naziv) + ' (' + gr.idx.length + ')</button>').join('') + '</div>' : '') +
       '<div id="prim-lista" style="overflow-y:auto;flex:1;min-height:120px"></div>' +
       '<button type="button" id="prim-salji" style="margin-top:8px;padding:12px;border-radius:10px;border:0;background:#2f7d4f;color:#fff;font-weight:700;min-height:46px"></button>' +
       '<button type="button" id="prim-sifra" style="margin-top:6px;' + dugme + '">🔑 Pošalji šifrom (više ljudi, važi 2 dana)</button>' +
@@ -38083,6 +38086,12 @@ function _primaocBiraj(lista, naziv, prikaziSumariju) {
     box.querySelector('#prim-trazi').addEventListener('input', crtaj);
     box.querySelector('#prim-sve').addEventListener('click', () => { vidljivi().forEach(({ idx }) => izabrani.add(idx)); crtaj(); });
     box.querySelector('#prim-ukloni').addEventListener('click', () => { izabrani.clear(); crtaj(); });
+    // Grupa = prečica: izabere/odizabere sve njene članove (korisnik i dalje može dodati ili ukloniti pojedince)
+    box.querySelector('#prim-grupe')?.addEventListener('click', e => {
+      const b = e.target.closest('button[data-g]'); if (!b) return;
+      const idx = grupe[Number(b.dataset.g)].idx, sviIn = idx.every(i => izabrani.has(i));
+      idx.forEach(i => sviIn ? izabrani.delete(i) : izabrani.add(i)); crtaj();
+    });
     box.querySelector('#prim-lista').addEventListener('click', e => {
       const b = e.target.closest('button[data-i]'); if (!b) return;
       const n = Number(b.dataset.i); izabrani.has(n) ? izabrani.delete(n) : izabrani.add(n); crtaj();
@@ -38199,6 +38208,30 @@ async function _primljeniObrisiSpisak() {
   _primljeniBadge(); _primljeniRender();
 }
 var _primTab = 'p';   // 'p' = primljeno, 's' = poslano, 'k' = kolege
+var _primFilter = { q: '', v: '' };   // pretraga i filter vrste u Primljeno
+function _primRedHtml(x, sad) {
+  return '<div class="prm-red' + (!x.vidjeno ? ' novo' : '') + '"><div class="prm-info"><b>' + (_PRIM_IKONA[x.vrsta] || '🗺') + ' ' + _escHtml(x.naziv) + (!x.vidjeno ? ' <i>NOVO</i>' : '') + '</b>' +
+    '<small>od ' + _escHtml(x.odIme) + ' · ' + _dozStarost(sad - x.t) + ' · ' + x.kb + ' KB</small></div><div class="prm-akcije">' +
+    '<button type="button" class="pri" onclick="_primljeniNaKarti(\'' + _jsAttr(x.id) + '\')">Na karti</button>' +
+    '<button type="button" onclick="_primljeniPreimenuj(\'' + _jsAttr(x.id) + '\')">Preimenuj</button>' +
+    '<button type="button" onclick="_primljeniDalje(\'' + _jsAttr(x.id) + '\')">Pošalji dalje</button>' +
+    '<button type="button" class="opa" onclick="_primljeniObrisi(\'' + _jsAttr(x.id) + '\')">Obriši</button></div></div>';
+}
+// Lista primljenog filtrirana pretragom (naziv ili pošiljalac) i vrstom; crta se u zasebnu kutiju da fokus u
+// polju pretrage ne nestane pri kucanju.
+function _primListaHtml(lista) {
+  const q = _primFilter.q.trim().toLowerCase(), v = _primFilter.v, sad = Date.now();
+  const r = lista.filter(x => (!v || x.vrsta === v) && (!q || (String(x.naziv) + ' ' + String(x.odIme)).toLowerCase().includes(q)));
+  if (!r.length) return '<p class="prm-prazno">Nema rezultata za ovu pretragu.</p>';
+  return (r.length !== lista.length ? '<p class="prm-pomoc">' + r.length + ' od ' + lista.length + '</p>' : '') + r.map(x => _primRedHtml(x, sad)).join('');
+}
+function _primFiltriraj(q, v) {
+  if (q !== undefined) _primFilter.q = String(q).slice(0, 80);
+  if (v !== undefined) _primFilter.v = v === _primFilter.v ? '' : v;
+  const box = document.getElementById('prm-lista-box');
+  if (box) box.innerHTML = _primListaHtml(_primljeniUcitaj());
+  if (v !== undefined) document.querySelectorAll('#primljeni-panel .prm-filter-v button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === _primFilter.v)));
+}
 function _primTabPostavi(t) {
   _primTab = t === 's' ? 's' : t === 'k' ? 'k' : 'p'; _primljeniRender(_primTab === 'p');
   if (_primTab === 'k') _kontaktiOsvjezi(true).then(() => { if (_primTab === 'k') _primljeniRender(); }).catch(() => {});
@@ -38226,16 +38259,50 @@ async function _grupeAdminUcitaj(force) {
   }
   return _grupeAdmin;
 }
-function _grupeAdminHtml() {
+// ── Zasebna admin sekcija "Grupe korisnika" (Korisnici → Grupe korisnika) ──
+const _GRUPE_TEREN = 'ŠPD US ŠUME';
+function _grupeRefreshUI() {
+  if (document.getElementById('grupe-panel')) _grupePanelRender();
+  if (_primTab === 'k' && document.getElementById('primljeni-panel')) _primljeniRender();
+}
+function grupeAdminOtvori() {
+  if (!isAdmin()) { showToast('Grupe pravi samo admin'); return; }
+  let el = document.getElementById('grupe-panel');
+  if (!el) { el = document.createElement('div'); el.id = 'grupe-panel'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); document.body.appendChild(el); }
+  _grupePanelRender();
+  _grupeAdminUcitaj(true).then(() => _grupePanelRender()).catch(() => {});
+}
+function grupeAdminZatvori() { document.getElementById('grupe-panel')?.remove(); }
+function _grupePanelRender() {
+  const el = document.getElementById('grupe-panel');
+  if (!el) return;
   const lista = _grupeAdmin || _grupeAdminKes() || [];
-  if (!_grupeAdmin) _grupeAdminUcitaj().then(() => { if (_primTab === 'k') _primljeniRender(); }).catch(() => {});
-  return '<div class="prm-grupe"><div class="prm-grupe-h"><b>👥 Grupe kolega</b><small>Samo admin vidi grupe. Korisnik dobija samo kolege iz svojih grupa kao prijedlog za slanje; može biti u više grupa.</small></div>' +
-    (_grupeAdminGreska ? '<p class="prm-grupe-greska">' + _escHtml(_grupeAdminGreska) + '</p>' : '') +
-    lista.map(gr => {
-      const cl = Array.isArray(gr.clanovi) ? gr.clanovi : [];
-      return '<button type="button" class="prm-grupa" onclick="_grupaUredi(\'' + _jsAttr(gr.id) + '\')"><b>' + _escHtml(gr.naziv) + '</b><small>' + cl.length + ' ' + (cl.length === 1 ? 'član' : 'članova') + (cl.length ? ' · ' + _escHtml(cl.slice(0, 3).map(c => c.ime).join(', ') + (cl.length > 3 ? '…' : '')) : '') + '</small></button>';
-    }).join('') +
-    '<button type="button" class="prm-sifra prm-grupa-nova" onclick="_grupaUredi(null)">➕ Nova grupa</button></div>';
+  const clanoviHtml = cl => {
+    const teren = cl.filter(c => (c.sumarija || '') === _GRUPE_TEREN), proj = cl.filter(c => (c.sumarija || '') !== _GRUPE_TEREN);
+    const chip = c => '<span class="grp-chip" title="' + _escHtml(c.sumarija || '') + '">' + _escHtml(c.ime || 'Korisnik') + '</span>';
+    return (teren.length ? '<div class="grp-red"><i>Terenski (' + teren.length + ')</i>' + teren.map(chip).join('') + '</div>' : '') +
+      (proj.length ? '<div class="grp-red"><i>Projektanti (' + proj.length + ')</i>' + proj.map(chip).join('') + '</div>' : '');
+  };
+  el.innerHTML = '<div class="grp-head"><button type="button" class="grp-x" onclick="grupeAdminZatvori()" aria-label="Zatvori">‹</button><div><b>👥 Grupe korisnika</b><small>' + lista.length + ' ' + (lista.length === 1 ? 'grupa' : 'grupa') + '</small></div></div>' +
+    '<div class="grp-body"><p class="grp-pomoc">Povezuješ korisnike u grupe (terenski radnici, projektanti, projektanti iz bilo koje šumarije). Jedan korisnik može biti u <b>više grupa</b>. Korisnici grupe <b>ne vide</b>: svako dobija samo kolege iz svojih grupa kao <b>prijedlog za slanje</b>.</p>' +
+    (_grupeAdminGreska ? '<p class="grp-greska">' + _escHtml(_grupeAdminGreska) + '</p>' : '') +
+    '<button type="button" class="grp-nova" onclick="_grupaUredi(null)">➕ Nova grupa</button>' +
+    (lista.length ? '' : '<p class="grp-prazno">Još nema grupa. Napravi prvu: npr. „Ekipa Cazin“ pa joj dodaj terenske radnike i projektante.</p>') +
+    lista.map(gr => { const cl = Array.isArray(gr.clanovi) ? gr.clanovi : [];
+      return '<article class="grp-kartica"><header><b>' + _escHtml(gr.naziv) + '</b><span>' + cl.length + ' ' + (cl.length === 1 ? 'član' : 'članova') + '</span></header>' +
+        (cl.length ? clanoviHtml(cl) : '<p class="grp-prazno">Grupa je prazna.</p>') +
+        '<div class="grp-akcije"><button type="button" onclick="_grupaUredi(\'' + _jsAttr(gr.id) + '\')">✏ Uredi članove</button><button type="button" class="opa" onclick="_grupaObrisiDirektno(\'' + _jsAttr(gr.id) + '\')">🗑 Obriši</button></div></article>';
+    }).join('') + '</div>';
+}
+async function _grupaObrisiDirektno(id) {
+  const gr = (_grupeAdmin || _grupeAdminKes() || []).find(x => x.id === id);
+  if (!gr || !await _dlgConfirm('Obrisati grupu „' + gr.naziv + '“? Članovi ostaju korisnici, samo gube prijedloge iz ove grupe.', { title: 'Obriši grupu', okLabel: 'Obriši', danger: true })) return;
+  if (!(await _kontaktiSesija())) return;
+  try {
+    const r = await _withTimeout(sb.rpc('admin_grupa_obrisi', { p_id: id }), 15000);
+    if (r.error) throw r.error;
+    showToast('Grupa obrisana'); await _grupeAdminUcitaj(true); _grupeRefreshUI();
+  } catch (e) { showToast((typeof _isNetworkErr === 'function' && _isNetworkErr(e)) ? '⚠ Nema veze — pokušaj kad imaš signal' : '⚠ ' + String(e?.message || e)); }
 }
 // Uređivač grupe: naziv + pretraga + izbor članova (svi korisnici, filter po šumariji/terenskim)
 async function _grupaUredi(id) {
@@ -38292,7 +38359,7 @@ async function _grupaUredi(id) {
         const r = await _withTimeout(sb.rpc('admin_grupa_spremi', { p_id: id || null, p_naziv: naziv, p_clanovi: [...izabrani, ...ostali.filter(x => izabrani.has(x))] }), 20000);
         if (r.error) throw r.error;
         showToast('✓ Grupa sačuvana: ' + naziv); kraj(true);
-        await _grupeAdminUcitaj(true); if (_primTab === 'k') _primljeniRender();
+        await _grupeAdminUcitaj(true); _grupeRefreshUI();
       } catch (e) { showToast(poruka(e)); }
     });
     q('#gr-obrisi')?.addEventListener('click', async () => {
@@ -38301,7 +38368,7 @@ async function _grupaUredi(id) {
         const r = await _withTimeout(sb.rpc('admin_grupa_obrisi', { p_id: id }), 15000);
         if (r.error) throw r.error;
         showToast('Grupa obrisana'); kraj(true);
-        await _grupeAdminUcitaj(true); if (_primTab === 'k') _primljeniRender();
+        await _grupeAdminUcitaj(true); _grupeRefreshUI();
       } catch (e) { showToast(poruka(e)); }
     });
     crtaj();
@@ -38354,7 +38421,7 @@ function _primljeniRender(oznaciVidjeno) {
       ? 'Kolegu dodaješ <b>šifrom</b>: pozoveš ga i daš mu kod od 5 cifara (isti kod može unijeti više ljudi), ili ti on da svoj kod. Ko unese kod, vidi tebe i ti njega.'
       : 'Projektanti iz tvoje šumarije su <b>dodani automatski</b>. Kolegu iz druge šumarije ili terenskog radnika dodaješ <b>šifrom</b> — oba smjera, jedan kod za više ljudi.') + '</p>';
     h += '<div class="prm-kol-akcije"><button type="button" class="prm-sifra" onclick="_kontaktiPozovi().then(()=>_primljeniRender())">📨 Pozovi kolegu (daj šifru)</button><button type="button" class="prm-sifra" onclick="_kontaktiPrihvati().then(()=>_primljeniRender())">🔢 Unesi šifru koju sam dobio</button></div>';
-    if (isAdmin()) h += _grupeAdminHtml();
+    if (isAdmin()) h += '<button type="button" class="prm-sifra prm-grupe-link" onclick="_primljeniZatvori();grupeAdminOtvori()">👥 Grupe korisnika (admin)</button>';
     if (!kol.length) h += '<p class="prm-prazno">Još nema kolega. Pozovi nekoga šifrom ili unesi šifru koju si dobio.</p>';
     kol.forEach(k => {
       h += '<div class="prm-red prm-kolega"><div class="prm-info"><b><span class="skr-dot" style="background:' + _escHtml(k.color || '#64748b') + '"></span> ' + _escHtml(k.ime) + '</b>' +
@@ -38368,14 +38435,12 @@ function _primljeniRender(oznaciVidjeno) {
   if (!poslano) {
     h += '<button type="button" class="prm-sifra" onclick="primljeniPreuzmiSifrom()">🔑 Preuzmi šifrom</button>';
     if (!lista.length) h += '<p class="prm-prazno">Još ništa nije primljeno. Kad ti kolega pošalje trag, poligon, fotografiju ili KML, stiže ovdje i dobiješ obavijest. Kolegama šalješ iz kartice traga, mjerenja, fotografije ili Dodaj fajl na kartu → Pošalji.</p>';
-    lista.forEach(x => {
-      h += '<div class="prm-red' + (!x.vidjeno ? ' novo' : '') + '"><div class="prm-info"><b>' + (_PRIM_IKONA[x.vrsta] || '🗺') + ' ' + _escHtml(x.naziv) + (!x.vidjeno ? ' <i>NOVO</i>' : '') + '</b>' +
-        '<small>od ' + _escHtml(x.odIme) + ' · ' + _dozStarost(sad - x.t) + ' · ' + x.kb + ' KB</small></div><div class="prm-akcije">' +
-        '<button type="button" class="pri" onclick="_primljeniNaKarti(\'' + _jsAttr(x.id) + '\')">Na karti</button>' +
-        '<button type="button" onclick="_primljeniPreimenuj(\'' + _jsAttr(x.id) + '\')">Preimenuj</button>' +
-        '<button type="button" onclick="_primljeniDalje(\'' + _jsAttr(x.id) + '\')">Pošalji dalje</button>' +
-        '<button type="button" class="opa" onclick="_primljeniObrisi(\'' + _jsAttr(x.id) + '\')">Obriši</button></div></div>';
-    });
+    if (lista.length > 4) {
+      const vrste = [['', 'Sve'], ['trag', '👣 Trag'], ['poligon', '⬠ Poligon'], ['linija', '📏 Linija'], ['kml', '🗺 KML']].filter(([k]) => !k || lista.some(x => x.vrsta === k));
+      h += '<div class="prm-trazi"><input id="prm-trazi" type="search" autocomplete="off" placeholder="Traži naziv ili pošiljaoca…" value="' + _escHtml(_primFilter.q) + '" oninput="_primFiltriraj(this.value)"><div class="prm-filter-v">' +
+        vrste.map(([k, l]) => '<button type="button" data-v="' + k + '" aria-pressed="' + (_primFilter.v === k) + '" onclick="_primFiltriraj(undefined,\'' + k + '\')">' + l + '</button>').join('') + '</div></div>';
+    }
+    h += '<div id="prm-lista-box">' + (lista.length ? _primListaHtml(lista) : '') + '</div>';
     if (lista.length) h += '<button type="button" class="prm-spisak" onclick="_primljeniObrisiSpisak()">Obriši spisak primljenih</button>';
   } else {
     if (!poslani.length) h += '<p class="prm-prazno">Još ništa nije poslano sa ovog telefona. Šalješ iz kartice traga, mjerenja, fotografije, Preglednika KML oznaka ili Dodaj fajl na kartu → Pošalji.</p>';
