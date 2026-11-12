@@ -1436,3 +1436,12 @@ html .mfav-card.nedostupna{opacity:.75;border-style:dashed}
 .mfav-preview[data-kind=off]:not([data-ovl]) .mfav-tag{background:#166534d9}
 .mfav-preview[data-ovl=slope] .mfav-tag{background:#b45309d9}.mfav-preview[data-ovl=ekspo] .mfav-tag{background:#6d28d9d9}
 .mfav-copy b{font-size:15px}
+/* v4.1.2: Primljeni podaci — tab Kolege; fotografija poslana kao KML prikazuje sliku u popupu */
+#primljeni-panel .prm-pomoc{margin:0 0 10px;font-size:13px;line-height:1.55;color:var(--field-muted,#94a3b8)}
+#primljeni-panel .prm-kol-akcije{display:grid;gap:8px;margin-bottom:12px}
+#primljeni-panel .prm-kol-akcije .prm-sifra{margin:0}
+#primljeni-panel .prm-kolega{display:flex;align-items:center;justify-content:space-between;gap:10px}
+#primljeni-panel .prm-kolega .prm-akcije{margin-top:0}
+#primljeni-panel .skr-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:baseline}
+#primljeni-panel .prm-tabovi button{font-size:12px;padding-left:4px;padding-right:4px}
+.le-pop2 .le-foto{display:block;width:100%;max-height:220px;object-fit:cover;border-radius:10px;margin:0 0 8px}

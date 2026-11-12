@@ -98,14 +98,17 @@ function _layerEditorHtml(i) {
 }
 function _layerInfo(layer) {
   const attrs=new Map(Object.entries(layer._kmlExtData||{})),description=String(layer._kmlDesc||'');
-  let text=description;
+  let text=description,slika='';
+  // Slika iz opisa (fotografija poslana kao KML) — samo data:image jpeg/png/webp, nikad vanjski URL
+  const m=/<img[^>]+src=["'](data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+\/=]+)["']/i.exec(description);
+  if(m)slika=m[1];
   if(/<[a-z][\s\S]*>/i.test(description)){
     const doc=new DOMParser().parseFromString(description,'text/html');
     doc.querySelectorAll('script,style,iframe,object,embed,img,link').forEach(e=>e.remove());
     doc.querySelectorAll('tr').forEach(tr=>{const cells=tr.querySelectorAll('td,th');if(cells.length>=2){const key=cells[0].textContent.trim(),value=cells[1].textContent.trim();if(key&&!attrs.has(key))attrs.set(key,value);}});
     doc.querySelectorAll('table').forEach(e=>e.remove());text=doc.body.textContent.trim();
   }
-  return {attrs:[...attrs],text};
+  return {attrs:[...attrs],text,slika};
 }
 // Mjere objekta iz geometrije (turf): poligon = površina + obim, linija = dužina, tačka = koordinate.
 function _layerMjere(layer) {
@@ -129,6 +132,7 @@ function _layerPopupHtml(layer,uid) {
   return '<article class="le-popup le-pop2" onclick="event.stopPropagation()" style="--le-col:'+col+';--le-fill:'+fill+'">'+
     '<header class="le-heading"><i class="le-sw le-sw-'+type.toLowerCase()+'" aria-hidden="true"></i><span>'+type+' · '+esc(k?.name||'Učitani sloj')+'</span><b id="'+uid+'-nm">'+esc(layer._kmlName||'Bez naziva')+'</b></header>'+
     (mjere.length?'<div class="le-object-measure">'+mjere.map(([n,v])=>'<div><span>'+n+'</span><b>'+esc(v)+'</b></div>').join('')+'</div>':'')+
+    (info.slika?'<img class="le-foto" alt="Fotografija" src="'+info.slika+'">':'')+
     (info.text?'<p class="le-description">'+esc(info.text)+'</p>':'')+
     (attrs.length?'<details class="le-attributes"><summary>Podaci o objektu <em>'+attrs.length+'</em></summary><dl>'+attrs.map(([key,value])=>'<div><dt>'+esc(key)+'</dt><dd>'+esc(value||'—')+'</dd></div>').join('')+'</dl></details>':'')+
     '<div class="le-actions le-pop-act">'+btn('_kmlPopKlikOff','kljuc','Isključi klik')+btn('_kmlPopPosalji','posalji','Pošalji')+btn('_kmlPopEditStart','crtaj','Naziv i opis')+btn('_kmlPopStyleToggle','boja','Stil fajla')+btn('_kmlPopSakrij','sakrij','Sakrij')+'</div>'+

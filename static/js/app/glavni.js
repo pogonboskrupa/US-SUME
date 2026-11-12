@@ -7792,8 +7792,7 @@ function _setupFotoPopup(m, idx, la, lo, ts, full, isOwn, shared) {
   const expandBtn = `<button class="foto-popup-btn fpp-info" onclick="openFotoFullscreen(${fkey},${!isOwn})"><svg class="ic"><use href="#ic-trazi"/></svg> Proširi</button>`;
   let actionBtns = '';
   if (isOwn) {
-    const shareLbl = shared ? '👥 Podijeli' : '📤 Podijeli';
-    actionBtns = `<button class="foto-popup-btn fpp-share" onclick="openShareFotoDlg(${fkey})">${shareLbl}</button>`;
+    actionBtns = `<button class="foto-popup-btn fpp-share" onclick="_fotoPosalji(${fkey})">📤 Pošalji</button>`;
     actionBtns += ` <button class="foto-popup-btn" onclick="deleteFoto(${fkey})"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši</button>`;
   } else {
     actionBtns = `<button class="foto-popup-btn" onclick="deleteFotoShared(${fkey})"><svg class="ic"><use href="#ic-obrisi"/></svg> Ukloni</button>`;
@@ -7837,6 +7836,38 @@ function closeFotoFullscreen() {
   ++_fotoFullscreenEpoch;
   document.getElementById('foto-fullscreen').style.display='none';
   document.getElementById('foto-fullscreen-img').src='';
+}
+
+// ─ Fotografija kao KML ─
+// Fotografija se šalje kao običan KML fajl (tačka + slika u opisu kao data: URI), istim putem kao trag ili
+// mjerenje: bira se kolega ili šifra, na serveru ne ostaje, a primalac je dobije u Primljenim podacima.
+// Ranije je "Podijeli" upisivao sliku u zajedničku tabelu loc_fotos, što je tražilo vezu i radilo samo
+// unutar šumarije.
+function _fotoToKml(f, slika) {
+  const dt = new Date(f.ts).toLocaleString('hr', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const ime = 'Fotografija ' + dt;
+  const meta = [f.odjel ? 'Odjel ' + f.odjel : '', f.gj || '', dt].filter(Boolean).join(' · ');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${_escXml(ime)}</name>
+  <Placemark><name>${_escXml(ime)}</name>
+    <description><![CDATA[<img src="${slika}" width="320"/><p>${_escXml(meta)}</p>]]></description>
+    <ExtendedData><Data name="Vrijeme"><value>${_escXml(dt)}</value></Data>${f.odjel ? `<Data name="Odjel"><value>${_escXml(f.odjel)}</value></Data>` : ''}${f.gj ? `<Data name="Gospodarska jedinica"><value>${_escXml(f.gj)}</value></Data>` : ''}</ExtendedData>
+    <Point><coordinates>${f.lo},${f.la},0</coordinates></Point>
+  </Placemark></Document></kml>`;
+}
+async function _fotoPosalji(tsKey) {
+  const f = _locFotos.find(x => x.ts === tsKey);
+  if (!f) return;
+  try { map.closePopup(); } catch (e) {}
+  let slika = f.full;
+  if (!slika) { try { slika = await _kmlcGet('fotofull:' + f.ts); } catch (e) {} }
+  if (!slika) slika = f.thumb;   // puna slika nije na telefonu — šalje se mala, uz upozorenje
+  if (!slika) { showToast('Fotografija nije dostupna za slanje'); return; }
+  if (slika === f.thumb && !f.full) showToast('Puna fotografija nije na telefonu — šalje se smanjena');
+  let kml = _fotoToKml(f, slika);
+  if (new Blob([kml]).size > _PRIM_MAX_BAJTA && f.thumb) kml = _fotoToKml(f, f.thumb);
+  const dt = new Date(f.ts).toLocaleString('hr', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+  await podaciPosalji('kml', 'Foto ' + dt + (f.odjel ? ' · odjel ' + f.odjel : ''), kml);
 }
 
 // ─ Share dialog ─
@@ -38132,20 +38163,66 @@ async function _primljeniObrisiSpisak() {
   _primljeniSpremi([]);
   _primljeniBadge(); _primljeniRender();
 }
-var _primTab = 'p';   // 'p' = primljeno, 's' = poslano
-function _primTabPostavi(t) { _primTab = t === 's' ? 's' : 'p'; _primljeniRender(_primTab === 'p'); }
+var _primTab = 'p';   // 'p' = primljeno, 's' = poslano, 'k' = kolege
+function _primTabPostavi(t) {
+  _primTab = t === 's' ? 's' : t === 'k' ? 'k' : 'p'; _primljeniRender(_primTab === 'p');
+  if (_primTab === 'k') _kontaktiOsvjezi(true).then(() => { if (_primTab === 'k') _primljeniRender(); }).catch(() => {});
+}
+// Kolege kojima šalješ: projektanti iz tvoje šumarije su automatski tu; svako ko ti je dao šifru poziva (ili je
+// uzeo tvoju) dodan je u oba smjera. Terenski nalog nema šumariju, pa ima samo kolege iz šifre.
+function _primKolege() {
+  const teren = isSpdField() && !isAdmin(), po = new Map();
+  if (!teren) _shareKolege().forEach(k => po.set(k.id, { id: k.id, ime: k.ime, sumarija: kolegeMap?.[k.id]?.sumarija || '', color: k.color, izvor: 'sumarija' }));
+  _kontaktiLokalno().forEach(k => {
+    if (po.has(k.id)) { po.get(k.id).sifra = true; return; }
+    po.set(k.id, { id: k.id, ime: k.ime || 'Kolega', sumarija: k.sumarija || '', color: (typeof _bojaZaId === 'function' ? _bojaZaId(k.id) : '#64748b'), izvor: 'sifra', sifra: true });
+  });
+  return [...po.values()].sort((a, b) => a.ime.localeCompare(b.ime, 'bs'));
+}
+async function _kontaktiUkloniJednog(id) {
+  const k = _kontaktiLokalno().find(x => x.id === id);
+  if (!k) return;
+  if (!await _dlgConfirm('Ukloniti „' + (k.ime || 'kolegu') + '“ iz kolega? Ukloni se kod oboje; ponovo se dodaje šifrom.', { title: 'Ukloni kolegu', okLabel: 'Ukloni', danger: true })) return;
+  if (!await _kontaktiSesija()) return;
+  try {
+    const r = await _withTimeout(sb.rpc('kontakt_ukloni', { p_id: id }), 15000);
+    if (r.error) throw r.error;
+    _kontaktiSpremi(_kontaktiLokalno().filter(x => x.id !== id));
+    showToast('Kolega uklonjen: ' + (k.ime || ''));
+    _primljeniRender();
+  } catch (e) { showToast((typeof _isNetworkErr === 'function' && _isNetworkErr(e)) ? '⚠ Nema veze — ukloni kad imaš signal' : '⚠ ' + String(e?.message || e)); }
+}
 function _primljeniRender(oznaciVidjeno) {
   const el = document.getElementById('primljeni-panel');
   if (!el) return;
-  const lista = _primljeniUcitaj(), poslani = _poslaniUcitaj(), sad = Date.now(), poslano = _primTab === 's';
-  let h = '<div class="prm-head"><button type="button" class="prm-x" onclick="_primljeniZatvori()" aria-label="Zatvori">‹</button><div><b>' + (poslano ? '📤 Poslani fajlovi' : '📥 Primljeni podaci') + '</b><small>Čuvaju se samo na ovom telefonu</small></div></div>' +
+  const lista = _primljeniUcitaj(), poslani = _poslaniUcitaj(), sad = Date.now(), tab = _primTab, poslano = tab === 's', kolege = tab === 'k';
+  const kol = _primKolege();
+  const naslov = kolege ? '👥 Kolege' : poslano ? '📤 Poslani fajlovi' : '📥 Primljeni podaci';
+  const podnaslov = kolege ? 'Ovima šalješ KML, trag, mjerenje i fotografiju' : 'Čuvaju se samo na ovom telefonu';
+  let h = '<div class="prm-head"><button type="button" class="prm-x" onclick="_primljeniZatvori()" aria-label="Zatvori">‹</button><div><b>' + naslov + '</b><small>' + podnaslov + '</small></div></div>' +
     '<div class="prm-tabovi" role="tablist">' +
-    '<button type="button" role="tab" aria-selected="' + !poslano + '" onclick="_primTabPostavi(\'p\')">📥 Primljeno (' + lista.length + ')</button>' +
-    '<button type="button" role="tab" aria-selected="' + poslano + '" onclick="_primTabPostavi(\'s\')">📤 Poslano (' + poslani.length + ')</button></div><div class="prm-body">';
+    '<button type="button" role="tab" aria-selected="' + (tab === 'p') + '" onclick="_primTabPostavi(\'p\')">📥 Primljeno (' + lista.length + ')</button>' +
+    '<button type="button" role="tab" aria-selected="' + poslano + '" onclick="_primTabPostavi(\'s\')">📤 Poslano (' + poslani.length + ')</button>' +
+    '<button type="button" role="tab" aria-selected="' + kolege + '" onclick="_primTabPostavi(\'k\')">👥 Kolege (' + kol.length + ')</button></div><div class="prm-body">';
+  if (kolege) {
+    const teren = isSpdField() && !isAdmin();
+    h += '<p class="prm-pomoc">' + (teren
+      ? 'Kolegu dodaješ <b>šifrom</b>: pozoveš ga i daš mu kod od 5 cifara (isti kod može unijeti više ljudi), ili ti on da svoj kod. Ko unese kod, vidi tebe i ti njega.'
+      : 'Projektanti iz tvoje šumarije su <b>dodani automatski</b>. Kolegu iz druge šumarije ili terenskog radnika dodaješ <b>šifrom</b> — oba smjera, jedan kod za više ljudi.') + '</p>';
+    h += '<div class="prm-kol-akcije"><button type="button" class="prm-sifra" onclick="_kontaktiPozovi().then(()=>_primljeniRender())">📨 Pozovi kolegu (daj šifru)</button><button type="button" class="prm-sifra" onclick="_kontaktiPrihvati().then(()=>_primljeniRender())">🔢 Unesi šifru koju sam dobio</button></div>';
+    if (!kol.length) h += '<p class="prm-prazno">Još nema kolega. Pozovi nekoga šifrom ili unesi šifru koju si dobio.</p>';
+    kol.forEach(k => {
+      h += '<div class="prm-red prm-kolega"><div class="prm-info"><b><span class="skr-dot" style="background:' + _escHtml(k.color || '#64748b') + '"></span> ' + _escHtml(k.ime) + '</b>' +
+        '<small>' + _escHtml([k.sumarija, k.izvor === 'sumarija' ? 'iz tvoje šumarije' : '', k.sifra ? 'dodan šifrom' : ''].filter(Boolean).join(' · ')) + '</small></div>' +
+        (k.sifra ? '<div class="prm-akcije"><button type="button" class="opa" onclick="_kontaktiUkloniJednog(\'' + _jsAttr(k.id) + '\')">Ukloni</button></div>' : '') + '</div>';
+    });
+    h += '</div>';
+    el.innerHTML = h;
+    return;
+  }
   if (!poslano) {
     h += '<button type="button" class="prm-sifra" onclick="primljeniPreuzmiSifrom()">🔑 Preuzmi šifrom</button>';
-    h += '<button type="button" class="prm-sifra" onclick="kontaktiDodaj().then(_primljeniRender)">👥 Kolege (' + _kontaktiLokalno().length + ')</button>';
-    if (!lista.length) h += '<p class="prm-prazno">Još ništa nije primljeno. Kad ti kolega pošalje trag, poligon ili KML, stiže ovdje i dobiješ obavijest. Kolegama šalješ iz kartice traga, mjerenja ili Dodaj fajl na kartu → Pošalji.</p>';
+    if (!lista.length) h += '<p class="prm-prazno">Još ništa nije primljeno. Kad ti kolega pošalje trag, poligon, fotografiju ili KML, stiže ovdje i dobiješ obavijest. Kolegama šalješ iz kartice traga, mjerenja, fotografije ili Dodaj fajl na kartu → Pošalji.</p>';
     lista.forEach(x => {
       h += '<div class="prm-red' + (!x.vidjeno ? ' novo' : '') + '"><div class="prm-info"><b>' + (_PRIM_IKONA[x.vrsta] || '🗺') + ' ' + _escHtml(x.naziv) + (!x.vidjeno ? ' <i>NOVO</i>' : '') + '</b>' +
         '<small>od ' + _escHtml(x.odIme) + ' · ' + _dozStarost(sad - x.t) + ' · ' + x.kb + ' KB</small></div><div class="prm-akcije">' +
@@ -38156,7 +38233,7 @@ function _primljeniRender(oznaciVidjeno) {
     });
     if (lista.length) h += '<button type="button" class="prm-spisak" onclick="_primljeniObrisiSpisak()">Obriši spisak primljenih</button>';
   } else {
-    if (!poslani.length) h += '<p class="prm-prazno">Još ništa nije poslano sa ovog telefona. Šalješ iz kartice traga, mjerenja, Preglednika KML oznaka ili Dodaj fajl na kartu → Pošalji.</p>';
+    if (!poslani.length) h += '<p class="prm-prazno">Još ništa nije poslano sa ovog telefona. Šalješ iz kartice traga, mjerenja, fotografije, Preglednika KML oznaka ili Dodaj fajl na kartu → Pošalji.</p>';
     poslani.slice(0, 100).forEach(x => {
       h += '<div class="prm-red"><div class="prm-info"><b>' + (_PRIM_IKONA[x.vrsta] || '🗺') + ' ' + _escHtml(x.naziv) + '</b><small>za ' + _escHtml(x.kome) + ' · ' + _dozStarost(sad - x.t) + '</small></div></div>';
     });

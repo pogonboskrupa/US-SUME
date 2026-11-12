@@ -27,7 +27,7 @@ const mk=(ls,rpc)=>{const store=Object.assign({},ls),toasts=[];
  // UI: izbornik, dugme u biraču i u dijalogu fotografije
  assert(/async function kontaktiDodaj/.test(src)&&/id="prim-dodaj"/.test(src)&&/_shareFotoDodajKolegu/.test(src));
  assert(/const teren = isSpdField\(\) && !isAdmin\(\);[\s\S]*let entries = teren \? \[\]/.test(src),'terenski u dijalogu slike ne vidi sve korisnike');
- assert(/Kolege \(' \+ _kontaktiLokalno\(\)\.length/.test(src),'dugme Kolege u Primljenim podacima');
+ assert(/_primTabPostavi\(\\'k\\'\)[^;]*Kolege \(' \+ kol\.length/.test(src),'tab Kolege u Primljenim podacima');
  // v4.1.1: jedan kod za više ljudi, dvosmjerno; spisak se osvježava prije izbora primaoca
  const sql=fs.readFileSync(__dirname+'/../../supabase/migrations/20261114_kontakt_poziv_vise.sql','utf8');
  const prih=sql.slice(sql.indexOf('function public.kontakt_poziv_prihvati'));
@@ -37,5 +37,26 @@ const mk=(ls,rpc)=>{const store=Object.assign({},ls),toasts=[];
  assert(/async function _kontaktiSvjezi/.test(src)&&/const moji = admin \? \[\] : await _kontaktiSvjezi\(\)/.test(src),'spisak se osvježava prije izbora');
  assert(/_kontaktiPozivAktivan\(\) \? 20000 : 120000/.test(src),'češće osvježavanje dok je poziv aktivan');
  assert(/može ga unijeti više kolega|Isti kod daj svim kolegama/.test(src),'tekst poziva kaže da ga može unijeti više ljudi');
+ // v4.1.2: tab Kolege — projektanti iz šumarije automatski + kolege iz šifre; terenski samo šifra
+ {
+  const a=src.indexOf('function _primKolege()'),b=src.indexOf('async function _kontaktiUkloniJednog');
+  const mk2=(teren,sh,lok)=>new Function('S','with(S){'+src.slice(a,b)+';return _primKolege();}')({isSpdField:()=>teren,isAdmin:()=>false,_shareKolege:()=>sh,kolegeMap:{a:{sumarija:'KRUPA'}},_kontaktiLokalno:()=>lok,_bojaZaId:()=>'#123'});
+  const sh=[{id:'a',ime:'Ana',color:'#1'}],lok=[{id:'a',ime:'Ana'},{id:'z',ime:'Zoran',sumarija:'ŠPD'}];
+  let r=mk2(false,sh,lok);assert.deepEqual(r.map(k=>k.ime),['Ana','Zoran']);assert.equal(r[0].izvor,'sumarija');assert.equal(r[0].sifra,true,'ista osoba iz šumarije i šifre je jedan red');assert.equal(r[1].izvor,'sifra');
+  r=mk2(true,sh,lok);assert.deepEqual(r.map(k=>k.ime),['Ana','Zoran'],'terenski: samo iz šifre');assert(r.every(k=>k.izvor==='sifra'));
+ }
+ // v4.1.2: fotografija se šalje kao KML sa slikom u opisu
+ {
+  const a=src.indexOf('function _fotoToKml'),b=src.indexOf('async function _fotoPosalji');
+  const kml=new Function('S','with(S){'+src.slice(a,b)+';return _fotoToKml;}')({_escXml:x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;')})({ts:1762900000000,la:44.9,lo:16.1,odjel:'50',gj:'Risovac Krupa'},'data:image/jpeg;base64,AAAA');
+  assert(/<kml[\s>]/.test(kml)&&/<\/kml>\s*$/.test(kml),'ispravan KML okvir (prolazi server provjeru)');
+  assert(/<img src="data:image\/jpeg;base64,AAAA"/.test(kml)&&/<coordinates>16\.1,44\.9,0<\/coordinates>/.test(kml)&&/Odjel 50/.test(kml));
+  assert(/_fotoPosalji\(\$\{fkey\}\)/.test(src)&&!/openShareFotoDlg\(\$\{fkey\}\)/.test(src),'popup fotografije šalje kao KML');
+  const lib=fs.readFileSync(__dirname+'/../../static/js/map-library.js','utf8');assert(/_fotoPosalji\(r\.ref\.ts\)/.test(lib));
+  const le=fs.readFileSync(__dirname+'/../../static/js/layer-editor.js','utf8');
+  const info=new Function('DOMParser',le.slice(le.indexOf('function _layerInfo'),le.indexOf('// Mjere objekta'))+';return _layerInfo;')(class{parseFromString(h){const d={body:{textContent:'x'},querySelectorAll:()=>[]};return d;}});
+  assert.equal(info({_kmlDesc:'<img src="data:image/jpeg;base64,AAAA" width="320"/><p>x</p>'}).slika,'data:image/jpeg;base64,AAAA');
+  assert.equal(info({_kmlDesc:'<img src="https://zlo.example/x.jpg">'}).slika,'','vanjski URL se ne prikazuje');
+ }
  console.log('OK kontakti');
 })().catch(e=>{console.error(e);process.exit(1);});
