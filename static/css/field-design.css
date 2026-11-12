@@ -1525,3 +1525,10 @@ html .lm-card.active{border-color:var(--lm-good);box-shadow:0 0 0 2px color-mix(
 html .lm-thumb{width:52px;height:52px;border-radius:10px}
 html .lm-drop{border-radius:14px;border-color:var(--lm-accent);background:var(--lm-tone);color:var(--field-ink);padding:30px 16px}
 html .lm-section-title{color:var(--field-muted);margin-bottom:12px}
+
+/* Brže pomjeranje karte: zamućena pozadina (backdrop-filter) na kontrolama PREKO karte se mora ponovo
+   računati u svakom frame-u dok se karta vuče (sadržaj ispod se mijenja) — na telefonu je to bio
+   stalan GPU trošak tokom pomjeranja. Pozadine ovih kontrola su ionako 72–94 % neprozirne, pa se
+   bez zamućenja izgled gotovo ne mijenja. Modali (preko mirne karte) zadržavaju zamućenje. */
+html :is(#nv-badge,#action-bar,#rec-bar,#map-zoom-btns,#layer-switch-btn,#map-fav-btn,#oznake-btn,#dem-legend,#mcd-dist,#map-restore-indicator,#scale-menu,#izmjeri-panel,#mjtrg-panel){-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+html[data-field-theme=day] #nv-badge{background:rgba(255,255,255,.9)}
