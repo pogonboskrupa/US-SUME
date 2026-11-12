@@ -112,7 +112,7 @@ function create(options){
   pending=null;if(!target)return;
   const now=Date.now(),pos=options.getPosition(),gps=options.isGpsOn(),fresh=pos&&finite(pos.ts)&&now-pos.ts>=0&&now-pos.ts<20000;
   const ac=pos&&finite(pos.ac)&&pos.ac>=0?pos.ac:null,valid=pos&&finite(pos.la)&&finite(pos.lo);
-  const h=heading(now),dist=valid?distance(pos,target):null,arrived=gps&&fresh&&now-pos.ts<5000&&ac!=null&&ac<=15&&dist<=15;
+  const free=!!target.free,h=heading(now),dist=valid&&!free?distance(pos,target):null,arrived=!free&&gps&&fresh&&now-pos.ts<5000&&ac!=null&&ac<=15&&dist<=15;
   const status=!gps?'GPS isključen':!valid?'Tražim GPS signal':!fresh?'GPS pozicija zastarjela':ac==null?'GPS preciznost nepoznata':ac>35?'Slab GPS · ±'+Math.round(ac)+' m':'GPS ±'+Math.round(ac)+' m';
   ui('ex-gps',status+(gps&&fresh&&now-pos.ts>=5000?' · prije '+Math.floor((now-pos.ts)/1000)+' s':''));g('ex-gps')?.setAttribute('data-state',gps&&fresh&&ac!=null&&ac<=35?'ok':'warn');
   ui('tnp-name',target.name||'Odabrana lokacija');
@@ -120,7 +120,8 @@ function create(options){
   ui('ex-distance-label',arrived?'U krugu od 15 m · provjeri cilj':'Do cilja · zračna udaljenost');
   ui('ex-heading',h?h.source+' · '+Math.round(h.value)+'°':'Smjer nije dostupan');
   const arrow=g('ex-direction-arrow');
-  if(valid&&h&&gps&&fresh){
+  if(free){if(arrow)arrow.style.opacity='0';ui('ex-instruction',!gps?'Uključi GPS za praćenje':!fresh?'Čekam novu GPS poziciju':h?'3D prikaz · karta prati tvoj smjer':'Okreni telefon ili kreni za smjer');}
+  else if(valid&&h&&gps&&fresh){
    const b=bearing(pos,target),rel=(b-h.value+540)%360-180;
    if(arrow){arrow.style.transform='rotate('+rel+'deg)';arrow.style.opacity='1';}
    ui('ex-instruction',arrived?'Odredište je blizu':Math.abs(rel)<20?'Cilj je ispred tebe':Math.abs(rel)>150?'Cilj je iza tebe':rel<0?'Cilj je lijevo od tebe':'Cilj je desno od tebe');
@@ -147,7 +148,7 @@ function create(options){
  function stop(){
   session++;if(timer)root.clearInterval(timer);timer=null;if(pending!=null)root.cancelAnimationFrame(pending);pending=null;if(deferred!=null)root.clearTimeout(deferred);deferred=null;
   view.stop();lastCamera=null;if(goal){map.removeLayer(goal);goal=null;}target=null;course=null;previous=null;
-  document.body.classList.remove('explorer-follow','explorer-nav','explorer-crowded');chrome=null;
+  document.body.classList.remove('explorer-follow','explorer-nav','explorer-crowded','explorer-free');chrome=null;
   if(g('tacka-nav-panel'))g('tacka-nav-panel').style.display='none';if(g('explorer-top'))g('explorer-top').hidden=true;
   if(g('explorer-you'))g('explorer-you').hidden=true;
  }
@@ -155,11 +156,11 @@ function create(options){
  const api={
   get enabledPreference(){return preference();},
   setPreference(on){try{root.localStorage.setItem(preferenceKey,String(!!on));}catch(e){}if(target)api.setExplorerEnabled(on);},
-  get active(){return !!target;},get following(){return !!target&&follow&&visible&&!blocked;},get angle(){return view.angle;},get destination(){return target;},get session(){return session;},screenPoint:ll=>view.screenPoint(ll),
+  get active(){return !!target;},get following(){return !!target&&follow&&visible&&!blocked;},get angle(){return view.angle;},get destination(){return target;},get free(){return !!target?.free;},get session(){return session;},screenPoint:ll=>view.screenPoint(ll),
   start(t){
    if(!t||!finite(t.la)||!finite(t.lo)||Math.abs(t.la)>90||Math.abs(t.lo)>180)return false;
-   stop();if(g('tnp-elev')){g('tnp-elev').style.display='none';g('tnp-elev').textContent='';}map.invalidateSize({animate:false,pan:false});target={...t};follow=preference();visible=true;lastView=0;session++;
-   goal=root.L.circleMarker([t.la,t.lo],{radius:9,color:'#fff',weight:3,fillColor:'#16a34a',fillOpacity:1,interactive:false}).addTo(map);
+   stop();document.body.classList.toggle('explorer-free',!!t.free);if(g('tnp-elev')){g('tnp-elev').style.display='none';g('tnp-elev').textContent='';}map.invalidateSize({animate:false,pan:false});target={...t};follow=preference();visible=true;lastView=0;session++;
+   if(!t.free)goal=root.L.circleMarker([t.la,t.lo],{radius:9,color:'#fff',weight:3,fillColor:'#16a34a',fillOpacity:1,interactive:false}).addTo(map);
    document.body.classList.add('explorer-nav');syncOverlays();
    if(map.getZoom()<16||map.getZoom()>19)map.setZoom(17,{animate:false});
    render();timer=root.setInterval(render,1000);return true;
@@ -187,7 +188,7 @@ function create(options){
    schedule();
   },
   zoom(d){map.setZoom(Math.max(14,Math.min(20,map.getZoom()+d)),{animate:false});lastView=0;render();},
-  overview(){inspect();const p=options.getPosition();if(p&&finite(p.la)&&finite(p.lo))map.fitBounds(root.L.latLngBounds([[p.la,p.lo],[target.la,target.lo]]),{padding:[40,80],maxZoom:17});else map.setView([target.la,target.lo],17);},
+  overview(){if(target.free){inspect();return;}inspect();const p=options.getPosition();if(p&&finite(p.la)&&finite(p.lo))map.fitBounds(root.L.latLngBounds([[p.la,p.lo],[target.la,target.lo]]),{padding:[40,80],maxZoom:17});else map.setView([target.la,target.lo],17);},
   refresh:render
  };
  root.addEventListener('resize',()=>{if(target){view.resize();lastView=0;schedule();}});

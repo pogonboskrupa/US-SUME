@@ -49,7 +49,27 @@ function measure(mode){if(!allowed())return;switchTab('karta');_izmjeriPick(mode
 function open(){if(!allowed())return;closeMenuDropdown();switchTab('teren');el('teren-panel').scrollTop=0;}
 function explorerToggle(on){if(!allowed())return;root.Explorer?.setPreference(!!on);render(false);}
 function explorerOpen(){if(!allowed())return;switchTab('karta');if(root.Explorer?.active){root.Explorer.setExplorerEnabled(root.Explorer.enabledPreference);root.Explorer.setVisible(true);}else showGuideChoice();}
-// Meni → Explorer mod: uključi Explorer i otvori kartu (bez navođenja traži odredište).
-function explorerMeni(){if(!allowed())return;root.Explorer?.setPreference(true);render(false);explorerOpen();}
-root.TerenWorkspace={open,explorerToggle,explorerOpen,explorerMeni,render,rows,search,more,jump,note,measure};
+// Meni → Explorer mode - 3D prikaz. Dva načina: 3D prikaz koji samo prati tebe (bez odredišta) ili navođenje do
+// odredišta; kad je 3D već uključen, nudi se isključivanje. Radi i kad je GPS isključen (pokrene ga).
+async function explorerMeni(){
+ if(!allowed())return;const ex=root.Explorer;if(!ex)return;
+ const opcije=ex.active?[{label:'🔴 Isključi 3D prikaz'},{label:'📍 Navigacija do odredišta'}]:[{label:'🧭 3D prikaz — prati me'},{label:'📍 Navigacija do odredišta'}];
+ const i=await root._dlgActions('Explorer mode - 3D prikaz: karta se nagne u perspektivu i okreće prema tvom smjeru.'+(ex.active&&!ex.free?' Trenutno: navođenje do „'+(ex.destination?.name||'odredišta')+'“.':ex.free?' Trenutno: 3D prikaz je uključen.':''),opcije);
+ if(i==null||i>1)return;
+ if(ex.active&&i===0){if(typeof stopTackaNav==='function')stopTackaNav();else ex.stop();render(false);return;}
+ if(i===1){ex.setPreference(true);render(false);explorerOpen();return;}
+ explorerSlobodno();
+}
+// 3D prikaz bez odredišta: kamera prati položaj i smjer telefona, ispod nje je obična karta.
+function explorerSlobodno(){
+ if(!allowed())return;const ex=root.Explorer;if(!ex)return;
+ switchTab('karta');
+ try{if(!gpsOn)startGPS();}catch(e){}
+ const p=typeof lastP!=='undefined'&&lastP?lastP:null,c=map.getCenter();
+ if(typeof stopTackaNav==='function'&&ex.active)stopTackaNav();
+ ex.setPreference(true);
+ ex.start({free:true,la:p?p.la:c.lat,lo:p?p.lo:c.lng,name:'3D prikaz'});
+ ex.setVisible(true);ex.requestCompass();render(false);
+}
+root.TerenWorkspace={open,explorerToggle,explorerOpen,explorerMeni,explorerSlobodno,render,rows,search,more,jump,note,measure};
 })(window);

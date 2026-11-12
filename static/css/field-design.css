@@ -1480,3 +1480,6 @@ html .mfav-card.nedostupna{opacity:.75;border-style:dashed}
 #primljeni-panel .prm-filter-v button[aria-pressed=true]{background:#1d4ed8;border-color:#60a5fa;color:#fff}
 #grupe-panel .grp-sekcija{margin:20px 0 4px;font:800 15px system-ui}
 #grupe-panel .grp-zadane{border-left-color:#3b82f6}
+
+/* v4.2.3: Explorer mode - 3D prikaz bez odredišta: nema cilja, udaljenosti ni dugmeta Pregled */
+body.explorer-free :is(.ex-target,.ex-guidance,#ex-overview,#tnp-road,#tnp-elev){display:none!important}

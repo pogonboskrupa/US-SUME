@@ -5498,7 +5498,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         <section class="trn-card trn-explorer" id="trn-explorer">
           <div class="trn-explorer-art" aria-hidden="true"><svg viewBox="0 0 320 100"><path d="M0 90L65 30 111 65 185 12 246 64 289 35 320 70V100H0Z" fill="currentColor" opacity=".16"/><path d="M60 100L151 60 200 46 260 0" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="6 6"/><path d="M149 57L160 34 171 57 160 51Z" fill="currentColor"/></svg></div>
           <div class="trn-section-label">Orijentacija i navođenje</div>
-          <h3>Explorer mod</h3><p>Pregled ispred tebe — karta prati položaj i smjer telefona.</p>
+          <h3>Explorer mode - 3D prikaz</h3><p>3D pogled ispred tebe — karta prati položaj i smjer telefona, sa ili bez odredišta.</p>
           <label class="trn-explorer-switch"><input type="checkbox" id="trn-explorer-toggle" onchange="TerenWorkspace.explorerToggle(this.checked)"><span>Koristi Explorer pri navođenju</span></label>
           <div id="trn-explorer-state" role="status">Odaberi odredište za prikaz u smjeru kretanja.</div>
           <button type="button" id="trn-explorer-open" class="trn-btn trn-btn-accent" onclick="TerenWorkspace.explorerOpen()">Odaberi odredište</button>
@@ -6033,7 +6033,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.2.2';
+const APP_VER = 'v4.2.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6281,7 +6281,7 @@ function _loadLocalVlake() {
   <button type="button" class="mdrop-item" id="menu-field-work" onclick="TerenWorkspace.open()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg></span><span>RAD NA TERENU<small>Pozicija, Explorer, tragovi i bilješke</small></span><span class="mdrop-arrow" aria-hidden="true">›</span></button>
   <button class="mdrop-item" id="field-theme-toggle" type="button" onclick="toggleFieldTheme()" aria-pressed="false"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-sun"/></svg></span>Dnevni mod</button>
   <button type="button" class="mdrop-item" id="menu-share-kretanje" onclick="closeMenuDropdown();shareSheetOpen()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg></span>Dijeljenje kretanja</button>
-  <button type="button" class="mdrop-item" id="menu-explorer-mod" onclick="closeMenuDropdown();TerenWorkspace.explorerMeni()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-guide"/></svg></span><span>Explorer mod<small>Pregled ispred tebe, karta prati smjer</small></span></button>
+  <button type="button" class="mdrop-item" id="menu-explorer-mod" onclick="closeMenuDropdown();TerenWorkspace.explorerMeni()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-guide"/></svg></span><span>Explorer mode - 3D prikaz<small>3D pogled ispred tebe, karta prati smjer</small></span></button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-camera"/></svg></span>Uslikaj lokaciju</button>
   <button type="button" class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-guide"/></svg></span>Vodi me do odjela/lokacije</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-measure"/></svg></span>Mjerenja i tragovi</button>
