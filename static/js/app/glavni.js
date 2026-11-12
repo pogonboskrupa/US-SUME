@@ -11770,7 +11770,9 @@ function _makeDemCanvasLayer(mode) {
       _getTerrariumTile(coords.z, coords.x, coords.y).then(async src => {
         if (!src) { done(null, canvas); return; }
         await _demPredah();
-        const elev = (()=>{try{return _terrariumDecodeTile(src);}finally{if(src.close)src.close();}})();
+        const elevRaw = (()=>{try{return _terrariumDecodeTile(src);}finally{if(src.close)src.close();}})();
+        // Ekspozicija iz izglađenih visina (isti razlog kao nagib); N.V. ostaje sirova visina.
+        const elev = mode !== 'nv' && DemQuality.smoothFor ? DemQuality.smoothFor(elevRaw, Math.cos(_tile2lat(coords.y + 0.5, coords.z) * Math.PI / 180) * 156543.03392 / 2 ** coords.z) : elevRaw;
         const ctx = canvas.getContext('2d');
         const out = ctx.createImageData(256, 256);
         const od  = out.data;
@@ -11906,7 +11908,9 @@ const DemSlopeClass = L.GridLayer.extend({
     canvas.width = canvas.height = 256;
     _getTerrariumTile(coords.z, coords.x, coords.y).then(async src => { if (src) await _demPredah();
       if (!src) { done(null, canvas); return; }
-      const elev = (()=>{try{return _terrariumDecodeTile(src);}finally{if(src.close)src.close();}})();
+      const elevRaw = (()=>{try{return _terrariumDecodeTile(src);}finally{if(src.close)src.close();}})();
+      // Izglađene visine (~150 m) — sirovi DEM daje lažne strmine (krošnje, šum), vidi DemQuality.smooth.
+      const elev = DemQuality.smoothFor ? DemQuality.smoothFor(elevRaw, Math.cos(_tile2lat(coords.y + 0.5, coords.z) * Math.PI / 180) * 156543.03392 / 2 ** coords.z) : elevRaw;
       // Geografska veličina piksela u metrima na ovoj geografskoj širini
       const lat  = _tile2lat(coords.y + 0.5, coords.z);
       const pixM = Math.cos(lat * Math.PI / 180) * 156543.03392 / Math.pow(2, coords.z);
@@ -38526,6 +38530,18 @@ async function _zadaneUredi(korisnikId) {
   const kandidati = svi.filter(k => k.id !== kor.id);
   // Zadana kolegica koje nema u općem spisku primalaca ipak mora biti vidljiva (i uklonjiva).
   (postojece?.kolege || []).forEach(c => { if (c.id !== kor.id && !kandidati.some(k => k.id === c.id)) kandidati.push({ id: c.id, ime: c.ime || 'Korisnik', sumarija: c.sumarija || '' }); });
+  // S kim korisnik VEĆ može dijeliti (zadano + grupe + šifra + šumarija) — inače "Trenutno zadano: 0" izgleda
+  // kao da nema nikoga, iako korisnik ima kolege iz grupa ili preko šifre. Server: 20261119 (bez nje tiho prazno).
+  const vec = new Map();
+  try {
+    const r = await _withTimeout(sb.rpc('admin_korisnik_dijeljenje', { p_user: kor.id }), 12000);
+    if (!r.error) (r.data || []).forEach(x => vec.set(x.id, x));
+  } catch (e) {}
+  const _izvorTxt = a => (a || []).map(i => ({ zadano: 'zadano', grupa: 'grupa', 'šifra': 'šifra', 'šumarija': 'šumarija' }[i] || i)).join(', ');
+  const vecHtml = vec.size
+    ? '<details style="margin-bottom:8px;border:1px solid #476;border-radius:10px;padding:8px 10px"' + (vec.size <= 6 ? ' open' : '') + '><summary style="cursor:pointer;font-size:13px;font-weight:700">Već može dijeliti sa: ' + vec.size + '</summary><div style="max-height:130px;overflow-y:auto;margin-top:6px;font-size:12px;line-height:1.6">' +
+      [...vec.values()].map(x => '<div>' + _escHtml(x.ime) + ' <span style="opacity:.6">· ' + _escHtml(_izvorTxt(x.izvori)) + '</span></div>').join('') + '</div></details>'
+    : '<div style="font-size:12px;opacity:.7;margin-bottom:8px">Još ne može dijeliti ni sa kim (nema grupa, šifre ni zadanih kolega).</div>';
   return new Promise(res => {
     const bg = document.createElement('div');
     bg.id = 'zadane-uredi';
@@ -38536,6 +38552,7 @@ async function _zadaneUredi(korisnikId) {
     const dugme = 'padding:10px 12px;border-radius:10px;border:1px solid #476;background:transparent;color:inherit;min-height:44px';
     const sumarije = [...new Set(kandidati.map(k => k.sumarija || 'Bez šumarije'))].sort((a, b) => a.localeCompare(b, 'bs'));
     box.innerHTML = '<div style="font-weight:700;margin-bottom:2px">👤 ' + _escHtml(kor.ime) + '</div><div style="font-size:12px;opacity:.7;margin-bottom:8px">Trenutno zadano: <b>' + izabrani.size + '</b> (označene su na vrhu). Ove kolege će mu biti prikazane po defaultu u spisku za slanje.</div>' +
+      vecHtml +
       '<input id="zd-trazi" type="search" autocomplete="off" placeholder="Traži kolegu (ime ili šumarija)" style="' + polje + '">' +
       '<select id="zd-sum" style="' + polje + '"><option value="">Sve šumarije</option>' + sumarije.map(s => '<option>' + _escHtml(s) + '</option>').join('') + '</select>' +
       '<div style="display:flex;gap:8px;margin-bottom:6px"><button type="button" id="zd-sve" style="flex:1;' + dugme + '">Dodaj sve prikazane</button><button type="button" id="zd-ukloni" style="flex:1;' + dugme + '">Ukloni sve prikazane</button></div>' +
@@ -38546,10 +38563,10 @@ async function _zadaneUredi(korisnikId) {
     bg.appendChild(box); document.body.appendChild(bg);
     const q = s => box.querySelector(s), kraj = v => { bg.remove(); res(v); };
     const vidljivi = () => { const t = q('#zd-trazi').value.trim().toLowerCase(), s = q('#zd-sum').value;
-      return kandidati.filter(k => (!s || (k.sumarija || 'Bez šumarije') === s) && (!t || (k.ime + ' ' + (k.sumarija || '')).toLowerCase().includes(t))).sort((x, y) => (pocetni.has(y.id) ? 1 : 0) - (pocetni.has(x.id) ? 1 : 0)); };
+      return kandidati.filter(k => (!s || (k.sumarija || 'Bez šumarije') === s) && (!t || (k.ime + ' ' + (k.sumarija || '')).toLowerCase().includes(t))).sort((x, y) => ((pocetni.has(y.id) ? 2 : 0) + (vec.has(y.id) ? 1 : 0)) - ((pocetni.has(x.id) ? 2 : 0) + (vec.has(x.id) ? 1 : 0))); };
     const crtaj = () => {
       q('#zd-lista').innerHTML = vidljivi().map(k => { const on = izabrani.has(k.id);
-        return '<button type="button" data-i="' + _escHtml(k.id) + '" aria-pressed="' + on + '" style="display:block;width:100%;text-align:left;padding:12px;margin:2px 0;border-radius:10px;border:0;background:' + (on ? 'rgba(47,125,79,.45)' : 'rgba(255,255,255,.06)') + ';color:inherit;min-height:44px">' + (on ? '☑ ' : '☐ ') + _escHtml(k.ime) + ' <small style="opacity:.6">· ' + _escHtml(k.sumarija || 'Bez šumarije') + '</small></button>'; }).join('') || '<div style="opacity:.6;padding:14px">Nema rezultata</div>';
+        return '<button type="button" data-i="' + _escHtml(k.id) + '" aria-pressed="' + on + '" style="display:block;width:100%;text-align:left;padding:12px;margin:2px 0;border-radius:10px;border:0;background:' + (on ? 'rgba(47,125,79,.45)' : 'rgba(255,255,255,.06)') + ';color:inherit;min-height:44px">' + (on ? '☑ ' : '☐ ') + _escHtml(k.ime) + ' <small style="opacity:.6">· ' + _escHtml(k.sumarija || 'Bez šumarije') + '</small>' + (vec.has(k.id) && !on ? ' <small style="color:#86efac">· već dijeli (' + _escHtml(_izvorTxt(vec.get(k.id).izvori)) + ')</small>' : '') + '</button>'; }).join('') || '<div style="opacity:.6;padding:14px">Nema rezultata</div>';
       q('#zd-spremi').textContent = '💾 Spremi (' + izabrani.size + ' ' + (izabrani.size === 1 ? 'kolega' : 'kolega') + ')';
     };
     q('#zd-trazi').addEventListener('input', crtaj); q('#zd-sum').addEventListener('change', crtaj);
