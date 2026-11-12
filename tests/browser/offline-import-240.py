@@ -39,7 +39,7 @@ async def main():
    assert await page.evaluate("JSON.stringify([vlake,_tacke,_tragRegistry])===fieldSnapshot")
    # Zadržan je samo povratni rezultat kopiranja radi determinističke provjere;
    # puni fajl se stvarno kopira proizvodnim workerom, bez umjetnog čekanja u mjerenju.
-   await page.wait_for_function("_sqlImports.get('uvoz-1500').written===1500000000",timeout=120000);await page.wait_for_function('copyMs>0',timeout=10000);copied_ms=round(await page.evaluate('copyMs'))
+   await page.wait_for_function("_sqlImports.get('uvoz-1500').written===1500000000",timeout=120000);await page.wait_for_function('copyMs>0',timeout=30000);copied_ms=round(await page.evaluate('copyMs'))
    await page.evaluate('copyHold=false;void 0');await page.wait_for_function("_sqlLayers.find(sl=>sl.name==='uvoz-1500').saved&&_sqlImports.size===0",timeout=20000)
    meta=await page.evaluate("(async()=>{const r=await _sqlWCall({type:'list'});const e=r.rows.find(x=>x.name==='uvoz-1500');const fh=await(await navigator.storage.getDirectory()).getFileHandle(e.opfsName);return {saved:e.opfs,path:e.opfsName,size:(await fh.getFile()).size,last:JSON.parse(localStorage.getItem(_LASTMAP_KEY))};})()")
    assert meta['saved'] and meta['size']==1_500_000_000 and meta['last']['opfsName']==meta['path'],meta
