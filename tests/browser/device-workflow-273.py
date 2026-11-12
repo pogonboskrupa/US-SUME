@@ -1,5 +1,5 @@
 """Puni app: karte na uređaju, tim, tastatura, brisanje oznaka i pregled UI; fake server."""
-import asyncio,importlib.util,mimetypes,os,tempfile
+import asyncio, json,importlib.util,mimetypes,os,tempfile
 from pathlib import Path
 from playwright.async_api import async_playwright
 ROOT=Path(__file__).resolve().parents[2]
@@ -126,10 +126,15 @@ async def main():
    # Cold page restart restores genuine persisted raster locally, without another import.
    await page.evaluate("()=>{map.setView([44.9015,16.0015],15,{animate:false});window.lastRasterView={lat:map.getCenter().lat,lng:map.getCenter().lng,z:map.getZoom()};}")
    expectedView=await page.evaluate('lastRasterView')
+   # Hladan restart = stara instanca je ZATVORENA (kao na telefonu). Dok je bila otvorena paralelno sa novom,
+   # njeni zakašnjeli moveend upisi u isti localStorage su na sporom CI-u znali pregaziti sačuvan prikaz.
+   originalName=await page.evaluate('originalMapName')
+   assert json.loads(await page.evaluate("localStorage.getItem('tvlake_last_pos')"))['la']==expectedView['lat']
+   await page.close()
    restored=await ctx.new_page();restored.on('pageerror',lambda e:errors.append(str(e)))
    await restored.goto('http://device.test/');await restored.wait_for_function('_sqlLayers.length===1',timeout=30000)
    await restored.wait_for_function('_sqlLayers[0].layer.getContainer()?.querySelector("img.leaflet-tile-loaded")',timeout=30000)
-   assert await restored.evaluate('_sqlLayers[0].name')==await page.evaluate('originalMapName')
+   assert await restored.evaluate('_sqlLayers[0].name')==originalName
    actualView=await restored.evaluate('({lat:map.getCenter().lat,lng:map.getCenter().lng,z:map.getZoom()})')
    assert actualView['z']==expectedView['z'] and abs(actualView['lat']-expectedView['lat'])<.00005 and abs(actualView['lng']-expectedView['lng'])<.00005,(actualView,expectedView)
    assert not errors,errors
