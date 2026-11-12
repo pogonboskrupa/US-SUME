@@ -29997,9 +29997,10 @@ function _sqlWorkerEnsure() {
   if (_sqlW) return;
   _perfTacka('prije radnika');
   const url = URL.createObjectURL(new Blob([_SQL_WORKER_SRC], {type:'application/javascript'}));
+  _perfTacka('radnik: Blob URL');
   _sqlW = new Worker(url);
+  _perfTacka('radnik: new Worker');
   URL.revokeObjectURL(url);
-  _perfTacka('pravljenje radnika (Blob + Worker)');
   _sqlW.onmessage = ({data:d}) => {
     // Nezatražena poruka iz workera (nema id, pa nema ni callbacka): velika
     // OPFS karta je u pozadini dobila sync handle i od sad čita punom
@@ -31064,6 +31065,14 @@ async function sqlmapRestoreAll() {
     }
   }
 
+  // Karta je već prikazana brzim putem: popis ostalih karata traži SQL radnika, čije pravljenje na
+  // Android WebView-u zna držati nit ~0,8 s (izmjereno v4.2.8). Odgodi ga dok se pokretanje ne smiri,
+  // da prvi dodiri i pomjeranje karte ne zapnu.
+  if (shownAny) {
+    _pt(null);
+    await new Promise(r => setTimeout(() => (typeof requestIdleCallback === 'function' ? requestIdleCallback(() => r(), { timeout: 3000 }) : r()), 2500));
+    _pt(null);
+  }
   _pt('restore: do popisa karata');
   try {
     const _tListT0 = performance.now();
