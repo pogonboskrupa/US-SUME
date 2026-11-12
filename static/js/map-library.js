@@ -110,5 +110,16 @@
     _libraryFilter(value){sync();category=Object.hasOwn(labels,value)?value:'all';limit=40;opened='';saveView();render();},
     _librarySearch(value){sync();query=String(value).slice(0,160);limit=40;saveView();render();},_librarySort(value){sync();sortRucno=true;sort=['department','date','proximity','name'].includes(value)?value:'department';limit=40;saveView();render();},
     _libraryGroup(on,group){visible(filtered().filter(r=>!group||JSON.stringify([r.gj,r.odjel])===group),!!on);},_libraryMore(){limit+=40;render();}});
-  map.on('moveend',()=>{if(sort==='proximity'&&el('oznake-panel')?.style.display!=='none')render();});
+  // Sort "najbliže sredini karte" se osvježava na pomak karte — ali NE dok je otvoreno uređivanje stavke ili
+  // dok je fokus u polju preglednika: "Prati me" pomjera kartu na svaki GPS fiks, a otvaranje tastature
+  // mijenja veličinu prikaza (i to je moveend), pa je ponovno crtanje brisalo polje čim se dodirne i
+  // ništa se nije moglo upisati. Uz to najviše jedno crtanje u 1,5 s.
+  let moveT=0;
+  function moveRender(){
+    if(sort!=='proximity'||el('oznake-panel')?.style.display==='none')return;
+    const a=document.activeElement;
+    if(opened||(a&&el('oznake-panel')?.contains?.(a)&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)))return;
+    const sad=Date.now();if(sad-moveT<1500)return;moveT=sad;render();
+  }
+  map.on('moveend',moveRender);
 })();
