@@ -62,7 +62,7 @@ async def main():
    await page.evaluate("""async token=>{fixtureOnline=true;_netZaboraviKvarove();sbUser={id:'11111111-1111-4111-8111-111111111111'};sbProfile={id:sbUser.id,odobren:true,sumarija:'TEST',ime:'Emina',prezime:'Projektant'};sbInitData=async()=>{};_reloadCoreData=async()=>{};sbStartRealtime=()=>{};sb=supabase.createClient('https://server.fixture','fixture-public-key',{global:{fetch:reliableFetch},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});await sb.auth.setSession({access_token:token,refresh_token:'fixture'});_revealApp();}""",token)
   async def create(name,online=True):
    await page.evaluate('(online)=>{fixtureOnline=online;switchTab("projekat");showNovProjektForm()}',online)
-   await page.locator('#np-odjel').fill(name);await page.locator('#np-gj-plain').fill('TEST')
+   await page.locator('#np-odjel').fill(name);await page.evaluate("()=>{const s=document.getElementById('np-gj');s.value='_custom';_npGjChange(s)}");await page.locator('#np-gj-custom').fill('TEST')
    await page.locator('[onclick="saveNovProjekt()"]').click()
    return await page.evaluate('_aktivniProjektId')
   async def add(id):

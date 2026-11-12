@@ -1652,6 +1652,8 @@ function _primijeniUlogeUI(data) {
   // Meni stavke
   const adminItem = document.getElementById('menu-admin-item');
   if (adminItem) adminItem.style.display = isAdm ? 'block' : 'none';
+  const gjItem = document.getElementById('menu-gj-item');
+  if (gjItem) gjItem.style.display = isAdm ? 'block' : 'none';
   const postavkeItem = document.getElementById('menu-postavke-item');
   if (postavkeItem) postavkeItem.style.display = isAdm ? 'block' : 'none';
   const apkItem = document.getElementById('menu-apk-download');
@@ -1836,6 +1838,7 @@ function _startupRestore() {
     if (!alive()) return;
     korak('geojsonOdjeli', () => geojsonOdjeliRestore());
     korak('tragReg',       () => _tragRegLoad());
+    korak('gjSpisak',      () => { _gjSrvUcitaj(); });
     korak('pratiKretanje', () => { _followObnovi(); _followIzUrla(); });
     // Flush tragova koji nisu dospjeli na server (offline pri snimanju)
     if (_mrezaProbaj() && sbUser && sbProfile) {
@@ -4080,10 +4083,20 @@ function _npGjChange(sel) {
 // šumarije nemaju unaprijed definisan spisak GJ-ova pa ih projektant upisuje ručno.
 function _npIsKrupa() { return (sbProfile?.sumarija || '') === 'ŠUMARIJA BOS.KRUPA'; }
 
+// Padajući spisak GJ za novi projekat: GJ šumarije (admin) + one koje je korisnik ranije sam upisao +
+// "Druga GJ (upiši)…". Bez ijedne ponuđene GJ odmah se prikazuje polje za upis.
+function _npGjPopuni() {
+  const sel = document.getElementById('np-gj'); if (!sel) return;
+  const prije = sel.value, opc = _gjOpcije();
+  sel.innerHTML = '<option value="">— odaberi —</option>' + opc.map(v => '<option value="' + _escHtml(v) + '">' + _escHtml(v) + '</option>').join('') + '<option value="_custom">Druga GJ (upiši)…</option>';
+  if (prije && (prije === '_custom' || opc.includes(prije))) sel.value = prije;
+  const plain = document.getElementById('np-gj-plain'); if (plain) plain.style.display = 'none';
+  sel.style.display = '';
+  if (!opc.length) { sel.value = '_custom'; _npGjChange(sel); }
+}
 function _npGjValue() {
-  if (!_npIsKrupa()) { const v = document.getElementById('np-gj-plain').value.trim(); _gjZapamti(v); return v; }
   const sel = document.getElementById('np-gj');
-  if (sel.value === '_custom') return document.getElementById('np-gj-custom').value.trim();
+  if (sel.value === '_custom') { const v = document.getElementById('np-gj-custom').value.trim(); _gjZapamti(v); return v; }
   return sel.value;
 }
 
@@ -4097,11 +4110,8 @@ function showNovProjektForm() {
   document.getElementById('np-gj-custom').style.display = 'none';
   document.getElementById('np-gj-custom').value = '';
   document.getElementById('np-gj-plain').value = '';
-  const dl = document.getElementById('np-gj-lista');
-  if (dl) dl.innerHTML = _gjMoje().map(v => `<option value="${_escHtml(v)}">`).join('');
-  const isKrupa = _npIsKrupa();
-  document.getElementById('np-gj').style.display = isKrupa ? '' : 'none';
-  document.getElementById('np-gj-plain').style.display = isKrupa ? 'none' : '';
+  _npGjPopuni();
+  _gjSrvUcitaj();
   document.getElementById('np-povrsina').value = '';
   document.getElementById('np-datum').value = todayStr();
 }
@@ -17389,7 +17399,6 @@ function closeTragRegistry() {
 let _trgGrpBy = 'date';
 let _msrGrpBy = 'date';
 
-const _GJ_OPTIONS = ['RISOVAC KRUPA','GRMEČ JASENICA','VOJSKOVA','BAŠTRA ĆORKOVAČA','GOMILA'];
 const _SUMARIJE   = ['ŠPD US ŠUME','ŠUMARIJA BOS.KRUPA','ŠUMARIJA BOS.PETROVAC','ŠUMARIJA SANSKI MOST','ŠUMARIJA BIHAĆ','ŠUMARIJA CAZIN','ŠUMARIJA KLJUČ'];
 
 // Fiksni spisak GJ postoji samo za Šumariju Bos. Krupa. Ostale šumarije počinju prazne, a svaka GJ koju
@@ -17398,10 +17407,36 @@ const _GJ_MOJE_KEY = 'tvlake_gj_moje_v1:';
 function _gjMoje() {
   try { const a = JSON.parse(localStorage.getItem(_GJ_MOJE_KEY + (sbUser?.id || '')) || '[]'); return Array.isArray(a) ? a.filter(x => typeof x === 'string' && x) : []; } catch (e) { return []; }
 }
-function _gjOpcije() { return _npIsKrupa() ? _GJ_OPTIONS : _gjMoje(); }
+// Spisak GJ po šumarijama vodi admin (Meni → Gospodarske jedinice, tabela gospodarske_jedinice, migracija
+// 20261120). Keš u localStorage, pa padajući spisak radi i offline. Dok keš ne postoji (nova instalacija bez
+// mreže / migracija nije pokrenuta), Bos. Krupa koristi dosadašnji ugrađeni spisak.
+const _GJ_SRV_KEY = 'tvlake_gj_srv_v1';
+const _GJ_KRUPA_UGRADJENO = ['Risovac Krupa','Grmeč Jasenica','Vojskova','Baštra Ćorkovača','Gomila'];
+function _gjSrvKes() { try { const a = JSON.parse(localStorage.getItem(_GJ_SRV_KEY) || 'null'); return Array.isArray(a) ? a : null; } catch (e) { return null; } }
+function _gjSrvZa(sumarija) {
+  const k = _gjSrvKes();
+  if (!k) return sumarija === 'ŠUMARIJA BOS.KRUPA' ? _GJ_KRUPA_UGRADJENO.slice() : [];
+  return k.filter(x => x && x.sumarija === sumarija && x.naziv).map(x => x.naziv).sort((a, b) => a.localeCompare(b, 'bs'));
+}
+async function _gjSrvUcitaj() {
+  if (typeof sb === 'undefined' || !sb || !sbUser || sbUser._cachedStub) return null;
+  if (typeof _mrezaProbaj === 'function' && !_mrezaProbaj()) return null;
+  try {
+    const r = await _withTimeout(sb.from('gospodarske_jedinice').select('id,sumarija,naziv').order('naziv'), 12000);
+    if (r.error) return null;
+    localStorage.setItem(_GJ_SRV_KEY, JSON.stringify(r.data || []));
+    if (document.getElementById('nov-proj-sec')?.style.display !== 'none') _npGjPopuni();
+    return r.data || [];
+  } catch (e) { return null; }
+}
+function _gjOpcije() {
+  const srv = _gjSrvZa(sbProfile?.sumarija || '');
+  const vlastite = _gjMoje().filter(v => !srv.some(x => x.toLowerCase() === v.toLowerCase()));
+  return [...srv, ...vlastite];
+}
 function _gjZapamti(v) {
   v = (v || '').trim();
-  if (!v || _npIsKrupa() || _gjMoje().some(x => x.toLowerCase() === v.toLowerCase())) return;
+  if (!v || _gjOpcije().some(x => x.toLowerCase() === v.toLowerCase())) return;
   try { localStorage.setItem(_GJ_MOJE_KEY + (sbUser?.id || ''), JSON.stringify([..._gjMoje(), v].sort((a, b) => a.localeCompare(b, 'bs')))); } catch (e) {}
 }
 function _gjFieldHtml(pfx, val) {
@@ -38470,6 +38505,48 @@ function grupeAdminOtvori() {
   _grupePanelRender();
   _grupeAdminUcitaj(true).then(() => _grupePanelRender()).catch(() => {});
   _zadaneAdminUcitaj(true).then(() => _grupePanelRender()).catch(() => {});
+}
+// ── Admin: Gospodarske jedinice po šumarijama ─────────────────────────────────
+function gjAdminOtvori() {
+  if (!isAdmin()) { showToast('Gospodarske jedinice uređuje samo admin'); return; }
+  let el = document.getElementById('gj-panel');
+  if (!el) { el = document.createElement('div'); el.id = 'gj-panel'; el.className = 'grupe-panel-isto'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); document.body.appendChild(el); }
+  _gjPanelRender(null);
+  _gjSrvUcitaj().then(r => _gjPanelRender(r === null ? 'Nema veze sa serverom ili migracija 20261120_gospodarske_jedinice.sql nije pokrenuta — prikazan je zadnji sačuvani spisak.' : null));
+}
+function gjAdminZatvori() { document.getElementById('gj-panel')?.remove(); }
+function _gjPanelRender(upozorenje) {
+  const el = document.getElementById('gj-panel'); if (!el) return;
+  const k = _gjSrvKes() || [];
+  const sumarije = _SUMARIJE.filter(x => x !== 'ŠPD US ŠUME');
+  el.innerHTML = '<div class="grp-head"><button type="button" class="grp-x" onclick="gjAdminZatvori()" aria-label="Zatvori">‹</button><div><b>🌲 Gospodarske jedinice</b><small>' + k.length + ' GJ u ' + sumarije.length + ' šumarija</small></div></div>' +
+    '<div class="grp-body"><p class="grp-pomoc">GJ koje dodaš ovdje projektanti te šumarije biraju u padajućem spisku pri pravljenju projekta. Uvijek mogu i sami upisati drugu GJ (opcija „Druga GJ (upiši)…“).</p>' +
+    (upozorenje ? '<p class="grp-greska">' + _escHtml(upozorenje) + '</p>' : '') +
+    sumarije.map(sum => {
+      const gj = k.filter(x => x.sumarija === sum).sort((a, b) => a.naziv.localeCompare(b.naziv, 'bs'));
+      return '<article class="grp-kartica"><header><b>' + _escHtml(sum) + '</b><span>' + gj.length + ' GJ</span></header>' +
+        (gj.length ? '<div class="grp-red">' + gj.map(x => '<span class="grp-chip">' + _escHtml(x.naziv) + ' <button type="button" class="gj-x" onclick="_gjAdminObrisi(\'' + _jsAttr(x.id) + '\')" aria-label="Ukloni ' + _escHtml(x.naziv) + '">✕</button></span>').join('') + '</div>' : '<p class="grp-prazno">Još nema GJ.</p>') +
+        '<div class="grp-akcije"><button type="button" onclick="_gjAdminDodaj(\'' + _jsAttr(sum) + '\')">➕ Dodaj GJ</button></div></article>';
+    }).join('') + '</div>';
+}
+async function _gjAdminDodaj(sumarija) {
+  const naziv = ((await _dlgPrompt('Naziv gospodarske jedinice (' + sumarija + ')', '', { title: 'Nova GJ' })) || '').trim();
+  if (!naziv) return;
+  if (!(await _kontaktiSesija())) return;
+  try {
+    const r = await _withTimeout(sb.rpc('admin_gj_dodaj', { p_sumarija: sumarija, p_naziv: naziv }), 15000);
+    if (r.error) throw r.error;
+    showToast('✓ GJ dodana: ' + naziv);
+  } catch (e) { const m = String(e?.message || e); showToast(/PGRST202|does not exist/i.test(m) ? '⚠ Pokreni migraciju 20261120_gospodarske_jedinice.sql' : '⚠ ' + m); }
+  await _gjSrvUcitaj(); _gjPanelRender(null);
+}
+async function _gjAdminObrisi(id) {
+  const x = (_gjSrvKes() || []).find(g => g.id === id); if (!x) return;
+  if (!(await _dlgConfirm('Ukloniti GJ „' + x.naziv + '“ iz spiska šumarije ' + x.sumarija + '? Postojeći projekti zadržavaju svoj naziv GJ.', { title: 'Ukloni GJ', okLabel: 'Ukloni' }))) return;
+  if (!(await _kontaktiSesija())) return;
+  try { const r = await _withTimeout(sb.rpc('admin_gj_obrisi', { p_id: id }), 15000); if (r.error) throw r.error; showToast('GJ uklonjena'); }
+  catch (e) { showToast('⚠ ' + String(e?.message || e)); }
+  await _gjSrvUcitaj(); _gjPanelRender(null);
 }
 function grupeAdminZatvori() { document.getElementById('grupe-panel')?.remove(); }
 function _grupePanelRender() {

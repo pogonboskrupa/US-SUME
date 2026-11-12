@@ -5172,6 +5172,10 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           style="display:block;width:calc(100% - 32px);margin:8px 16px 0;padding:10px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#bbf7d0;font-size:13px;font-weight:600;cursor:pointer;">
           👥 Grupe korisnika (povezivanje kolega za slanje)
         </button>
+        <button id="admin-gj-btn" onclick="gjAdminOtvori()"
+          style="display:block;width:calc(100% - 32px);margin:8px 16px 0;padding:10px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#bbf7d0;font-size:13px;font-weight:600;cursor:pointer;">
+          🌲 Gospodarske jedinice (po šumarijama)
+        </button>
         <!-- Statistika je stajala uvijek otvorena (7 redova) i gurala listu
              korisnika ispod pregiba — sad je iza prekidača, izbor se pamti. -->
         <button id="admin-stats-toggle" onclick="_admStatsToggle()"
@@ -5902,7 +5906,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.3.9';
+const APP_VER = 'v4.4.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6165,6 +6169,7 @@ function _loadLocalVlake() {
   </section><section class="mdrop-section">
   <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-users"/></svg>Račun i pomoć</div>
   <button type="button" class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-users"/></svg></span>Admin — korisnici</button>
+  <button type="button" class="mdrop-item" id="menu-gj-item" style="display:none;" onclick="closeMenuDropdown();gjAdminOtvori()"><span class="mdrop-ico" aria-hidden="true">🌲</span>Gospodarske jedinice</button>
   <button type="button" class="mdrop-item" id="menu-debug-item" style="display:none;color:#f87171;" onclick="closeMenuDropdown();if(sbProfile?.is_admin)switchTab('debug')"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-debug"/></svg></span>DEBUG</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();promijeniPin()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-pin"/></svg></span>Promijeni PIN</button>
   <button type="button" id="menu-azuriraj" class="mdrop-item mdrop-azur" onclick="closeMenuDropdown();azurirajAplikaciju()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-update"/></svg></span>Ažuriraj aplikaciju<span class="mdrop-azur-nova" hidden></span></button>
