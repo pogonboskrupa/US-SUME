@@ -32651,7 +32651,7 @@ function _updateNotice(latest, id = 'ver-banner') {
   action.onclick = () => { azurirajAplikaciju(); };
   const close = document.createElement('button'); close.type = 'button'; close.className = 'update-notice-close';
   close.textContent = '×'; close.setAttribute('aria-label', 'Sakrij obavijest o ažuriranju');
-  close.onclick = () => { if(latest)try{localStorage.setItem('tvlake_ver_dismissed',latest);}catch(e){} b.remove(); };
+  close.onclick = () => { if(latest)try{localStorage.setItem('tvlake_ver_dismissed',JSON.stringify({v:latest,t:Date.now()}));}catch(e){} b.remove(); };
   b.append(action,close); document.body.appendChild(b);
 }
 
@@ -33023,10 +33023,52 @@ async function _checkLatestVersion() {
     }
     const local = APP_VER.replace(/^v/, '');
     if (_verCmp(latest, local) <= 0) return;               // već na najnovijoj (ili novijoj lokalnoj)
-    _menuAzurOznaci(latest);                                 // Meni: istaknuto i kad je baner odbijen
-    if (localStorage.getItem('tvlake_ver_dismissed') === latest) return; // korisnik odbio baš ovu verziju
-    _showVersionBanner(latest, isAPK);
+    try { localStorage.setItem('tvlake_ver_najnovija', latest); } catch (e) {}
+    _azurPrikazi(latest, isAPK);
   } catch(e) { /* offline / CORS / bilo šta — tiho preskoči */ }
+}
+// Oznaka u Meniju + obavijest (poštuje zatvaranje 24 h i snimanje u toku). Zove je i pokretanje sa
+// zapamćenom najnovijom verzijom, pa oznaka ostaje i bez mreže / između provjera.
+function _azurPrikazi(latest, isAPK) {
+  try {
+    _menuAzurOznaci(latest);                                 // Meni: istaknuto i kad je baner odbijen
+    // Zatvorena obavijest za ISTU verziju ne vraća se 24 h (stari zapis bez vremena = zatvoreno upravo sad).
+    let odb = null; try { odb = JSON.parse(localStorage.getItem('tvlake_ver_dismissed') || 'null'); } catch (e) { odb = { v: localStorage.getItem('tvlake_ver_dismissed'), t: Date.now() }; }
+    if (odb && odb.v === latest && Date.now() - (odb.t || 0) < 24 * 3600000) return;
+    // Dok traje snimanje ne prekidamo rad — obavijest se pokaže kad snimanje stane (sljedeća provjera).
+    if (typeof _anyRecOn === 'function' && _anyRecOn()) { _azurCekaSnimanje = latest; return; }
+    _showVersionBanner(latest, isAPK);
+  } catch (e) {}
+}
+
+// Redovna provjera nove verzije (do v4.3.1 _checkLatestVersion nije pozivalo ništa — obavijest i
+// oznaka u Meniju nikad se nisu pojavljivale). Tiho, samo uz mrežu: ~20 s poslije pokretanja, pri
+// povratku u aplikaciju i dok je otvorena — najviše jednom u 6 h (GitHub API limit bez prijave je
+// 60 zahtjeva/h po IP-u, a mobilna mreža dijeli IP). Dok traje snimanje obavijest čeka kraj snimanja.
+var _azurCekaSnimanje = null, _azurZadnja = 0;
+const _AZUR_RAZMAK_MS = 6 * 3600000;
+function _azurProvjeriAkoTreba(sila) {
+  try {
+    if (_azurCekaSnimanje && !(typeof _anyRecOn === 'function' && _anyRecOn())) {
+      const v = _azurCekaSnimanje; _azurCekaSnimanje = null; _showVersionBanner(v, location.hostname === 'appassets.androidplatform.net');
+    }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    let zadnja = _azurZadnja; try { zadnja = Math.max(zadnja, +localStorage.getItem('tvlake_ver_provjera') || 0); } catch (e) {}
+    if (!sila && Date.now() - zadnja < _AZUR_RAZMAK_MS) return;
+    _azurZadnja = Date.now(); try { localStorage.setItem('tvlake_ver_provjera', String(_azurZadnja)); } catch (e) {}
+    _checkLatestVersion();
+  } catch (e) {}
+}
+if (typeof document !== 'undefined' && typeof setTimeout === 'function') {
+  setTimeout(() => {
+    try {
+      const v = localStorage.getItem('tvlake_ver_najnovija');
+      if (v && /^\d+\.\d+\.\d+$/.test(v) && _verCmp(v, APP_VER.replace(/^v/, '')) > 0) _azurPrikazi(v, location.hostname === 'appassets.androidplatform.net');
+    } catch (e) {}
+  }, 8000);
+  setTimeout(() => _azurProvjeriAkoTreba(false), 20000);
+  setInterval(() => _azurProvjeriAkoTreba(false), 15 * 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(() => _azurProvjeriAkoTreba(false), 3000); });
 }
 
 // Meni → Ažuriraj aplikaciju: kad postoji novija verzija, stavka dobija oznaku "NOVO vX.Y.Z" i

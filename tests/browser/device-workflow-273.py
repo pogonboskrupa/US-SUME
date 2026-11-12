@@ -106,7 +106,7 @@ async def main():
    await page.locator('#ver-banner .update-notice-action').click()
    assert await page.evaluate('updateClicks')==1
    await page.locator('#ver-banner .update-notice-close').click();assert await page.locator('#ver-banner').count()==0
-   assert await page.evaluate("localStorage.getItem('tvlake_ver_dismissed')")=='9.9.9'
+   assert await page.evaluate("JSON.parse(localStorage.getItem('tvlake_ver_dismissed')).v")=='9.9.9'
    # Same single dialog, deliberate native settings actions; no asserted autostart status.
    await page.evaluate("""()=>{window.deviceCalls=[];window.AndroidDevice={status:()=>JSON.stringify({batteryExempt:false,manufacturer:'Xiaomi'}),openBattery:()=>deviceCalls.push('battery'),openAutostart:()=>deviceCalls.push('autostart'),openAppSettings:()=>deviceCalls.push('app')};showDeviceSettings();}""")
    await page.wait_for_function('document.querySelector("#dlg-sheet.show")');await page.wait_for_timeout(350)
