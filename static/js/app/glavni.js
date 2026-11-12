@@ -18227,6 +18227,7 @@ function _fabSnimTragBegin() {
     _pauziResetuj(_tragPauseWin);  // zaostala pauza prethodne sesije ne smije suditi novim tačkama
     _tragPts = [];
     _tragBuf = [];
+    _tragAccReset();
     _tragLastT = 0;
     _tragRetraceReset(0);
     if (_tragLine) { map.removeLayer(_tragLine); _tragLine = null; }
@@ -18415,6 +18416,25 @@ function _tragRetraceKorak(la, lo, ac, al, now) {
 }
 
 let _tragBuf = [];      // kružni buffer zadnja 3 raw GPS fixa za median filtar
+// Prag tačnosti fiksa za trag (v4.1.3). Ranije je vrijedilo "sve do 50 m" čim istekne 9 s stabilizacije,
+// pa je prvih minut-dva (GPS se tek smiruje, ±15-40 m, posebno među zgradama) ulazilo u trag kao
+// vijugave/ravne linije mimo puta, a trag je postajao precizan tek kad se signal smirio.
+//  • Početak: dok nije viđen ijedan fiks ≤ GPS_STAB_ACC (12 m), prima se samo takav; ako ga nema za
+//    _TRAG_ACC_POCETAK_MS (60 s), prag ide na adaptivni da se trag ne izgubi u šumi/među zgradama.
+//  • Poslije: prag je 3× najbolja tačnost u zadnjih 60 s (najmanje 15 m, najviše 50 m) — kad signal
+//    postane ±3 m, fiksevi od ±30 m više ne mogu pokvariti liniju.
+const _TRAG_ACC_POCETAK_MS = 60000, _TRAG_ACC_PROZOR_MS = 60000;
+let _tragAccHist = [], _tragAccPocetak = 0, _tragAccDobar = false;
+function _tragAccReset() { _tragAccHist = []; _tragAccPocetak = 0; _tragAccDobar = false; }
+function _tragAccPrag(ac, now) {
+  if (!_tragAccPocetak) _tragAccPocetak = now;
+  _tragAccHist.push({ t: now, ac });
+  while (_tragAccHist.length && now - _tragAccHist[0].t > _TRAG_ACC_PROZOR_MS) _tragAccHist.shift();
+  if (ac <= GPS_STAB_ACC) _tragAccDobar = true;
+  if (!_tragAccDobar && now - _tragAccPocetak < _TRAG_ACC_POCETAK_MS) return GPS_STAB_ACC;
+  const najbolja = Math.min(..._tragAccHist.map(x => x.ac));
+  return Math.min(50, Math.max(15, najbolja * 3));
+}
 let _tragLastT = 0;     // timestamp zadnje commit tačke (za speed-gate)
 let _tragLiveSeg = null;// živi "rubber-band" segment do trenutne pozicije
 let _tragLastMoveT = 0; // timestamp zadnjeg stvarnog pomaka (za auto-pauzu)
@@ -18424,7 +18444,8 @@ function _addTragPoint(la, lo, ac, al, sp, nowOverride, bypassPauzu) {
   if (!_tragOn || (_tragPaused && !bypassPauzu)) return;
 
   // 1. Odbaci samo katastrofalno loše fikseve (dok se signal smiruje, strože)
-  if (ac > ((typeof _gpsStabPending !== 'undefined' && _gpsStabPending) ? GPS_STAB_ACC : 50)) return;
+  const now0 = nowOverride || Date.now();
+  if (ac > ((typeof _gpsStabPending !== 'undefined' && _gpsStabPending) ? GPS_STAB_ACC : (bypassPauzu ? 50 : _tragAccPrag(ac, now0)))) return;   // replay iz native bafera: stari prag (fiksevi su već odabrani)
 
   // nowOverride: koristi se pri "replay-u" tačaka iz native GPS bafera
   // (_drainNativeGpsBuffer) — te tačke su prikupljene RANIJE (dok je WebView
