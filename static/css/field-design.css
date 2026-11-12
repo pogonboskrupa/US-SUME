@@ -1532,3 +1532,32 @@ html .lm-section-title{color:var(--field-muted);margin-bottom:12px}
    bez zamućenja izgled gotovo ne mijenja. Modali (preko mirne karte) zadržavaju zamućenje. */
 html :is(#nv-badge,#action-bar,#rec-bar,#map-zoom-btns,#layer-switch-btn,#map-fav-btn,#oznake-btn,#dem-legend,#mcd-dist,#map-restore-indicator,#scale-menu,#izmjeri-panel,#mjtrg-panel){-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
 html[data-field-theme=day] #nv-badge{background:rgba(255,255,255,.9)}
+
+/* Instalirane karte (v4.3.3): lokalne karte prve, zbijeni redovi umjesto velikih kartica. */
+html #ls-pane-inst .inst-head{text-align:left;display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 2px 4px}
+html #ls-pane-inst .inst-head h3{margin:0;font:750 19px/1.3 system-ui;color:var(--field-ink)}
+html #ls-pane-inst .inst-head small{display:block;margin-top:3px;font-size:11px;line-height:1.5;color:var(--field-muted)}
+html #ls-pane-inst .catalog-section{margin-top:12px;padding:12px}
+html #ls-pane-inst :is(.installed-grid,#installed-local-list){grid-template-columns:1fr;gap:8px}
+html #ls-pane-inst :is(.inst-layer-row,.installed-map){flex-direction:row;align-items:center;gap:10px;padding:8px;border-radius:12px;min-height:72px}
+html #ls-pane-inst .inst-layer-row label{flex-direction:row;align-items:center;gap:10px}
+html #ls-pane-inst .installed-preview{width:64px;height:56px;aspect-ratio:auto;border-radius:9px;flex-shrink:0}
+html #ls-pane-inst .installed-preview-tag{left:3px;bottom:3px;max-width:calc(100% - 6px);padding:1px 4px;font-size:8px;border-radius:4px}
+html #ls-pane-inst .installed-toggle{flex:1;flex-direction:row-reverse;align-items:center;padding:0;gap:10px}
+html #ls-pane-inst .installed-toggle input{appearance:none;-webkit-appearance:none;width:44px;height:26px;border-radius:999px;background:#475569;position:relative;cursor:pointer;transition:background .15s;margin:0}
+html #ls-pane-inst .installed-toggle input::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .15s;box-shadow:0 1px 3px #0005}
+html #ls-pane-inst .installed-toggle input:checked{background:#16a34a}
+html #ls-pane-inst .installed-toggle input:checked::after{transform:translateX(18px)}
+html #ls-pane-inst .catalog-copy b{font-size:13px}
+html #ls-pane-inst .catalog-copy small{margin-top:1px}
+html #ls-pane-inst .catalog-status{margin-top:2px}
+html #ls-pane-inst .inst-layer-row>button{align-self:center;margin:0;min-width:40px;min-height:40px;font-size:13px;opacity:.8}
+html #ls-pane-inst .installed-map>.catalog-copy{padding:0}
+html #ls-pane-inst .installed-map>button{margin:0;align-self:center;min-width:72px}
+html #ls-pane-inst .installed-map.is-active>button{background:#16a34a;border-color:#16a34a;color:#fff}
+html #ls-pane-inst #installed-local-list:has(.catalog-empty)+.catalog-wide{display:none}
+html #ls-pane-inst .catalog-empty{padding:12px 8px}
+@media(min-width:560px){html #ls-pane-inst .installed-grid{grid-template-columns:1fr 1fr}}
+html #ls-pane-inst .inst-head :is(h3,small){text-align:left!important}
+html #ls-pane-inst .installed-map .installed-preview-tag{display:none}
+html #ls-pane-inst .installed-map.is-active .installed-preview{outline:2px solid #16a34a;outline-offset:1px}
