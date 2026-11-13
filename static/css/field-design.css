@@ -1629,3 +1629,8 @@ html[data-field-theme=day] .le-pop2 .le-actions button.le-danger{color:#b91c1c;b
 .mqm-boja.on{border-color:#1d4ed8;box-shadow:0 0 0 2px #93c5fd}
 .mqm-boje input[type=color]{width:34px;height:30px;border:0;background:none;padding:0;cursor:pointer}
 #msr-quick-meta{max-height:72vh;max-height:72dvh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+
+/* Primljeni podaci: broj nepregledanih na dugmetu Meni (v4.4.8) */
+#menu-btn{position:relative}
+body.ima-primljeno #menu-btn::before{content:attr(data-primljeno);position:absolute;top:2px;right:calc(50% - 26px);min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#ef4444;color:#fff;font:800 11px/18px system-ui;text-align:center;box-sizing:border-box;box-shadow:0 0 0 2px var(--field-bg,#0b1424);z-index:2}
+.prm-red.azur{border-left:3px solid #22c55e}

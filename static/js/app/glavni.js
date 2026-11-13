@@ -3141,6 +3141,40 @@ function _admGrupisiPoAktivnosti(users, sada) {
 }
 // "prije 12 min" čita se brže od punog datuma; pun datum ostaje pored.
 // Numerička usporedba verzija ("v3.6.10" > "v3.6.9"); NaN segment = 0.
+// ── Admin: obavijest o ažuriranju (Primljeni podaci korisnika; radi i na starijim verzijama) ──
+function _admAzurReferenca() {
+  let r = (typeof APP_VER === 'string' ? APP_VER : '').replace(/^v/, '');
+  try { const n = localStorage.getItem('tvlake_ver_najnovija'); if (n && _admVerUsporedi(n, r) > 0) r = n; } catch (e) {}
+  return r;
+}
+async function adminPosaljiAzuriranje(ids, opis) {
+  if (!isAdmin()) return;
+  ids = (ids || []).filter(Boolean); if (!ids.length) { showToast('Nema korisnika za obavijest'); return; }
+  const ver = _admAzurReferenca();
+  if (!await _dlgConfirm('Poslati obavijest „Nova verzija v' + ver + '“ ' + (opis || ids.length + ' korisnika') + '?\n\nStiže u Primljene podatke i pokaže se kad otvore aplikaciju (radi i na starijim verzijama).', { title: 'Obavijest o ažuriranju', okLabel: 'Pošalji' })) return;
+  if (!(await _kontaktiSesija())) return;
+  try {
+    const r = await _withTimeout(sb.rpc('admin_posalji_azuriranje', { p_korisnici: ids, p_verzija: ver, p_link: _APK_STALNI }), 30000);
+    if (r.error) throw r.error;
+    showToast('✓ Obavijest poslana: ' + (r.data ?? ids.length) + (r.data === 1 ? ' korisnik' : ' korisnika'));
+  } catch (e) { const m = String(e?.message || e); showToast(/PGRST202|does not exist/i.test(m) ? '⚠ Pokreni migraciju 20261121_obavijest_azuriranje.sql' : '⚠ ' + m); }
+}
+function adminAzurirajKorisnika(uid) {
+  const u = (_adminUsers || []).find(x => x.id === uid); if (!u) return;
+  adminPosaljiAzuriranje([uid], 'korisniku ' + ((u.ime || '') + ' ' + (u.prezime || '')).trim());
+}
+async function adminAzurirajStarije() {
+  if (!isAdmin() || !_adminUsers) return;
+  const ref = _admAzurReferenca(), aktivni = _adminUsers.filter(u => !u.is_admin && u.odobren !== false);
+  const stari = aktivni.filter(u => u.app_version && _admVerUsporedi(u.app_version, ref) < 0);
+  const nepoznati = aktivni.filter(u => u.app_version === null);
+  const i = await _dlgActions('📢 Obavijest o ažuriranju na v' + ref, [
+    { label: 'Samo sa starijom verzijom (' + stari.length + ')' },
+    { label: 'Starija verzija + oni koji verziju nisu javili (' + (stari.length + nepoznati.length) + ')' },
+    { label: 'Odustani' }]);
+  if (i === 0) adminPosaljiAzuriranje(stari.map(u => u.id), stari.length + ' korisnika sa starijom verzijom');
+  else if (i === 1) adminPosaljiAzuriranje([...stari, ...nepoznati].map(u => u.id), (stari.length + nepoznati.length) + ' korisnika');
+}
 function _admVerUsporedi(a, b) {
   const pa = String(a || '').replace(/^v/, '').split('.').map(Number);
   const pb = String(b || '').replace(/^v/, '').split('.').map(Number);
@@ -3425,6 +3459,8 @@ function _admKarticaHtml(u, saSumarijom) {
             <svg class="ic"><use href="#ic-prebaci"/></svg> Prebaci
           </button>
         </div>
+        <button onclick="adminAzurirajKorisnika('${uid}')" title="Pošalji obavijest o novoj verziji u Primljene podatke ovog korisnika"
+          style="width:100%;margin-bottom:8px;padding:7px 10px;background:#3f2d0c;border:1px solid #f59e0b;border-radius:6px;color:#fde68a;font-size:12px;cursor:pointer;">📢 Pošalji obavijest o ažuriranju</button>
         <label style="display:flex;align-items:center;gap:7px;font-size:11px;color:#94a3b8;cursor:pointer;margin-bottom:8px;">
           <input type="checkbox" ${u.je_vodeci ? 'checked' : ''}
             onchange="adminSetVodeci('${uid}',this.checked,'${nmJs}')"
@@ -22191,7 +22227,9 @@ function togK(i) {
 function delK(i) {
   const k = kmlLs[i];
   if (!k) return false;
-  try { const ime = k._origName || k.name, l = _primljeniUcitaj(); let ch = false; l.forEach(x => { if (x.lokalno === ime) { x.lokalno = ''; ch = true; } }); if (ch) _primljeniSpremi(l); } catch (e) {}
+  // Obrisan sloj koji je stigao od kolege (Primljeni podaci → Na karti): nestaje i zapis u Primljenim podacima,
+  // da "obrisano" ne ostane u spisku (i ne bi se ponovo stavljalo na kartu).
+  try { const ime = k._origName || k.name, l = _primljeniUcitaj(), ostaje = l.filter(x => x.lokalno !== ime); if (ostaje.length !== l.length) { l.filter(x => x.lokalno === ime).forEach(x => { _kmlcDelete('primljeno:' + x.id).catch(() => {}); }); _primljeniSpremi(ostaje); _primljeniBadge(); if (document.getElementById('primljeni-panel')) _primljeniRender(); } } catch (e) {}
   if (!k._key) {
     try {
       const store=JSON.parse(localStorage.getItem(_LOCAL_KML_KEY)||'{}'),name=k._origName||k.name,cacheKey=store[name]?.cacheKey;
@@ -38146,9 +38184,15 @@ function _primljeniSpremi(a) {
     : (() => { try { localStorage.setItem(_primKljuc(), JSON.stringify(a)); return true; } catch (e) { return false; } })();
 }
 function _primljeniBadge() {
+  if (typeof _primAzurOcisti === 'function') _primAzurOcisti();
   const n = _primljeniUcitaj().filter(x => !x.vidjeno).length;
   const w = document.getElementById('mdrop-primljeni-cnt');
   if (w) { w.style.display = n ? '' : 'none'; const sp = w.firstChild; if (sp) sp.textContent = String(n); }
+  // Vidljiva oznaka i kad je Meni zatvoren: broj nepregledanih na dugmetu Meni (+ tačka uz stavku).
+  try {
+    document.body.classList.toggle('ima-primljeno', n > 0);
+    const mb = document.getElementById('menu-btn'); if (mb) { if (n) mb.setAttribute('data-primljeno', n > 9 ? '9+' : String(n)); else mb.removeAttribute('data-primljeno'); }
+  } catch (e) {}
 }
 function _primljeniObavijesti(novi) {
   if (!novi.length) return;
@@ -38617,7 +38661,25 @@ async function _primljeniObrisiSpisak() {
 }
 var _primTab = 'p';   // 'p' = primljeno, 's' = poslano, 'k' = kolege
 var _primFilter = { q: '', v: '' };   // pretraga i filter vrste u Primljeno
+// Obavijest o ažuriranju koju je poslao admin (migracija 20261121): naziv "⬆ Nova verzija vX.Y.Z …".
+function _primAzurVerzija(x) { const m = /^⬆ Nova verzija v(\d+(?:\.\d+){1,3})/.exec(String(x?.naziv || '')); return m ? m[1] : null; }
+// Ako je aplikacija već na toj (ili novijoj) verziji, obavijest više nema smisla — tiho se uklanja.
+function _primAzurOcisti() {
+  try {
+    const l = _primljeniUcitaj(), zastarjele = l.filter(x => { const v = _primAzurVerzija(x); return v && _verCmp(v, APP_VER.replace(/^v/, '')) <= 0; });
+    if (!zastarjele.length) return;
+    zastarjele.forEach(x => { _kmlcDelete('primljeno:' + x.id).catch(() => {}); });
+    _primljeniSpremi(l.filter(x => !zastarjele.includes(x)));
+    _primljeniBadge(); if (document.getElementById('primljeni-panel')) _primljeniRender();
+  } catch (e) {}
+}
 function _primRedHtml(x, sad) {
+  if (_primAzurVerzija(x)) {
+    return '<div class="prm-red azur' + (!x.vidjeno ? ' novo' : '') + '"><div class="prm-info"><b>⬆ Nova verzija v' + _escHtml(_primAzurVerzija(x)) + (!x.vidjeno ? ' <i>NOVO</i>' : '') + '</b>' +
+      '<small>Admin · ' + _dozStarost(sad - x.t) + ' · ažuriranje aplikacije</small></div><div class="prm-akcije">' +
+      '<button type="button" class="pri" onclick="azurirajAplikaciju()">⬇ Ažuriraj</button>' +
+      '<button type="button" class="opa" onclick="_primljeniObrisi(\'' + _jsAttr(x.id) + '\')">Obriši</button></div></div>';
+  }
   return '<div class="prm-red' + (!x.vidjeno ? ' novo' : '') + '"><div class="prm-info"><b>' + (_PRIM_IKONA[x.vrsta] || '🗺') + ' ' + _escHtml(x.naziv) + (!x.vidjeno ? ' <i>NOVO</i>' : '') + '</b>' +
     '<small>od ' + _escHtml(x.odIme) + ' · ' + _dozStarost(sad - x.t) + ' · ' + x.kb + ' KB</small></div><div class="prm-akcije">' +
     '<button type="button" class="pri" onclick="_primljeniNaKarti(\'' + _jsAttr(x.id) + '\')">Na karti</button>' +

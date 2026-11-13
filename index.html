@@ -5176,6 +5176,10 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
           style="display:block;width:calc(100% - 32px);margin:8px 16px 0;padding:10px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#bbf7d0;font-size:13px;font-weight:600;cursor:pointer;">
           🌲 Gospodarske jedinice (po šumarijama)
         </button>
+        <button id="admin-azur-btn" onclick="adminAzurirajStarije()"
+          style="display:block;width:calc(100% - 32px);margin:8px 16px 0;padding:10px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#bbf7d0;font-size:13px;font-weight:600;cursor:pointer;">
+          📢 Obavijest o ažuriranju (korisnici sa starijom verzijom)
+        </button>
         <!-- Statistika je stajala uvijek otvorena (7 redova) i gurala listu
              korisnika ispod pregiba — sad je iza prekidača, izbor se pamti. -->
         <button id="admin-stats-toggle" onclick="_admStatsToggle()"
@@ -5906,7 +5910,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.4.7';
+const APP_VER = 'v4.4.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
