@@ -79,7 +79,7 @@
     if(actionName==='klik'){if(r.category==='local'||r.category==='server'){_kmlKlikPostavi(r.ref,r.ref.klikOff!==true);showToast(r.ref.klikOff?'🔒 Klik na fajl isključen':'🔓 Klik na fajl uključen');}return;}
     if(actionName==='send'){
       if(r.category==='local'){await _layerPosalji(r.index);return;}
-      if(r.category==='tracks'){podaciPosalji('trag',_tragIme(r.ref),_tragToKml(r.ref));return;}
+      if(r.category==='tracks'){if(r.ref.fotos?.length&&typeof _tragPosaljiSaSlikama==='function')_tragPosaljiSaSlikama(r.ref);else podaciPosalji('trag',_tragIme(r.ref),_tragToKml(r.ref));return;}
       return;
     }
     if(actionName==='export'){await _tragKmlMeni(r.ref.id);return;}

@@ -7783,6 +7783,11 @@ async function onLocPhotoSelected(input) {
     // a Android ubija WebView pri povratku iz kamere; bez ovoga offline foto trajno
     // izgubi punu rezoluciju. Od v1.9.6 ostaje trajno — fotografija se ne šalje sama.
     _kmlcSave('fotofull:' + ts, full).catch(() => {});
+    if (_tragFotoCeka && _tragOn && ((_tragLiveMeta && _tragLiveMeta.fotos) || []).length >= 30) {
+      // Trag nosi najviše 30 slika (pri spremanju se višak odsijecao TIHO). Slika ostaje kao obična fotografija.
+      _tragFotoCeka = false;
+      showToast('⚠ Trag već ima 30 slika — ova je sačuvana kao obična fotografija na karti');
+    }
     if (_tragFotoCeka && _tragOn) {
       // Slika snimljena DOK se snima trag postaje dio traga (meta ide u crash snimak i u sačuvani trag).
       _tragFotoCeka = false;
@@ -18094,6 +18099,34 @@ async function _tragKmzBajti(t) {
   const kml = new TextEncoder().encode(_tragToKml(t, dok));
   return _zipStore([{ name: 'doc.kml', data: kml }, ...fajlovi]);
 }
+// Trag + slike kao JEDAN KML (slike kao data: URI u opisu tačke, isto kao poslana fotografija) — primalac ga
+// otvara iz Primljenih podataka i vidi liniju i tačke sa slikama. Ograničenje servera je ~2,8 MB: prvo se
+// pokušaju pune slike, pa smanjene (sličice), pa onoliko slika koliko stane; korisniku se kaže koliko ide.
+async function _tragKmlSaSlikama(t) {
+  const fotos = (t.fotos || []).filter(f => Number.isFinite(f.la) && Number.isFinite(f.lo));
+  const pune = [];
+  for (const f of fotos) { let du = null; try { du = await _kmlcGet('fotofull:' + f.ts); } catch (e) {} pune.push(typeof du === 'string' && du.startsWith('data:image/') ? du : (f.thumb || null)); }
+  const sastavi = izbor => _tragToKml(t, izbor);
+  const velicina = kml => new Blob([kml]).size;
+  const max = typeof _PRIM_MAX_BAJTA === 'number' ? _PRIM_MAX_BAJTA : 2800000;
+  const lista = srcs => fotos.map((f, i) => srcs[i] ? { putanja: srcs[i], la: f.la, lo: f.lo } : null).filter(Boolean);
+  let kml = sastavi(lista(pune));
+  if (velicina(kml) <= max) return { kml, poslano: lista(pune).length, smanjeno: false, ukupno: fotos.length };
+  const male = fotos.map(f => f.thumb || null);
+  kml = sastavi(lista(male));
+  if (velicina(kml) <= max) return { kml, poslano: lista(male).length, smanjeno: true, ukupno: fotos.length };
+  let izbor = lista(male);
+  while (izbor.length && velicina(sastavi(izbor)) > max) izbor = izbor.slice(0, -1);
+  return { kml: sastavi(izbor), poslano: izbor.length, smanjeno: true, ukupno: fotos.length };
+}
+async function _tragPosaljiSaSlikama(t) {
+  showToast('⏳ Pripremam trag sa slikama…');
+  let r;
+  try { r = await _tragKmlSaSlikama(t); } catch (e) { showToast('⚠ Slike nije moguće pripremiti — šaljem samo trag'); return podaciPosalji('trag', _tragIme(t), _tragToKml(t)); }
+  if (r.poslano < r.ukupno) showToast('⚠ Stane ' + r.poslano + ' od ' + r.ukupno + ' slika (ograničenje veličine) — ostale pošalji posebno');
+  else if (r.smanjeno) showToast('Slike se šalju smanjene (ograničenje veličine)');
+  return podaciPosalji('trag', _tragIme(t), r.kml);
+}
 function _bajtiUBase64(u) { let s = ''; const K = 0x8000; for (let i = 0; i < u.length; i += K) s += String.fromCharCode.apply(null, u.subarray(i, i + K)); return btoa(s); }
 
 // Dijeljenje traga kao KML preko native share sheet-a (Bluetooth/mail/mreže...).
@@ -18172,7 +18205,11 @@ async function _tragKmlMeni(id) {
     { label: ico('ic-posalji') + 'Podijeli (Viber, WhatsApp, e-mail…)', radi: () => _tragRegShare(id) },
     { label: ico('ic-uvezi') + 'Sačuvaj .kml na telefon', radi: () => _tragKmlSacuvaj(id) },
   ];
-  akcije.push({ label: ico('ic-korisnik') + (isAdmin() ? 'Pošalji korisniku (bilo koja šumarija)' : 'Pošalji kolegu iz šumarije (ostaje samo kod njega)'), radi: () => podaciPosalji('trag', _tragIme(t), _tragToKml(t)) });
+  const komu = isAdmin() ? 'Pošalji korisniku (bilo koja šumarija)' : 'Pošalji kolegi (ostaje samo kod njega)';
+  if (nF) {
+    akcije.push({ label: ico('ic-korisnik') + komu + ' — SA slikama (' + nF + ')', radi: () => _tragPosaljiSaSlikama(t) });
+    akcije.push({ label: ico('ic-korisnik') + komu + ' — samo trag', radi: () => podaciPosalji('trag', _tragIme(t), _tragToKml(t)) });
+  } else akcije.push({ label: ico('ic-korisnik') + komu, radi: () => podaciPosalji('trag', _tragIme(t), _tragToKml(t)) });
   const i = await _dlgActions('📄 ' + _tragIme(t) + ' — izvoz', akcije.map(a => ({ label: a.label })));
   if (i >= 0 && akcije[i]) akcije[i].radi();
 }
