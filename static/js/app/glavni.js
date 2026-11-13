@@ -7839,9 +7839,9 @@ function _setupFotoPopup(m, idx, la, lo, ts, full, isOwn, shared) {
   let actionBtns = '';
   if (isOwn) {
     actionBtns = `<button class="foto-popup-btn fpp-share" onclick="_fotoPosalji(${fkey})">📤 Pošalji</button>`;
-    actionBtns += ` <button class="foto-popup-btn" onclick="deleteFoto(${fkey})"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši</button>`;
+    actionBtns += ` <button class="foto-popup-btn" onclick="fotoObrisiPitaj(${fkey},false)"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši</button>`;
   } else {
-    actionBtns = `<button class="foto-popup-btn" onclick="deleteFotoShared(${fkey})"><svg class="ic"><use href="#ic-obrisi"/></svg> Ukloni</button>`;
+    actionBtns = `<button class="foto-popup-btn" onclick="fotoObrisiPitaj(${fkey},true)"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši</button>`;
   }
   m.bindPopup(
     `<div style="min-width:200px;max-width:256px;color:#1e293b;">
@@ -8135,6 +8135,18 @@ async function sbLoadSharedFotos() {
 }
 
 // ─ Brisanje ─
+// Brisanje fotografije iz popupa na karti — uvijek uz pitanje "jesi li siguran".
+async function fotoObrisiPitaj(tsKey, dijeljena) {
+  try { map.closePopup(); } catch (e) {}
+  const f = (dijeljena ? _sharedFotos : _locFotos).find(x => x.ts === tsKey);
+  if (!f) return;
+  const poruka = dijeljena
+    ? 'Jesi li siguran da želiš ukloniti ovu fotografiju sa ovog telefona?'
+    : 'Jesi li siguran da želiš obrisati ovu fotografiju?' + (f.sbId ? '\n\nObrisat će se i sa servera.' : '\n\nOvo se ne može vratiti.');
+  if (!await _dlgConfirm(poruka, { title: 'Obriši fotografiju', danger: true, okLabel: 'Da, obriši' })) return;
+  if (dijeljena) await deleteFotoShared(tsKey); else deleteFoto(tsKey);
+  showToast('🗑 Fotografija obrisana');
+}
 function deleteFoto(tsKey) {
   const idx = _locFotos.findIndex(x => x.ts === tsKey);
   if (idx < 0) return;
@@ -17365,7 +17377,9 @@ function _tragPopupHtml(t, lenM) {
 // Native confirm() je u WebView-u ružan i blokira nit — isti _dlgConfirm kao svuda.
 async function _tragPopupObrisi(id) {
   try { map.closePopup(); } catch (e) {}
-  if (await _dlgConfirm('Obrisati trag?', { danger: true })) _tragRegDelete(id);
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  if (await _dlgConfirm('Jesi li siguran da želiš obrisati trag „' + _tragIme(t) + '“?' + ((t.fotos && t.fotos.length) ? '\n\nSlike snimljene uz trag ostaju kao fotografije na karti.' : '') + '\n\nOvo se ne može vratiti.', { title: 'Obriši trag', danger: true, okLabel: 'Da, obriši' })) { _tragRegDelete(id); showToast('🗑 Trag obrisan'); }
 }
 
 function _tragPopupRefresh(id) {

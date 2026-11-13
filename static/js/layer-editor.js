@@ -137,7 +137,7 @@ function _layerPopupHtml(layer,uid) {
     (info.slika?'<img class="le-foto" alt="Fotografija" src="'+info.slika+'" style="cursor:zoom-in" onclick="_kmlPopSlikaProsiri(\''+uid+'\')"><div class="le-foto-akcije"><button type="button" onclick="_kmlPopSlikaProsiri(\''+uid+'\')">🔍 Otvori sliku</button><button type="button" onclick="_kmlPopSlikaKaoTacka(\''+uid+'\')">'+(typeof _kmlSlikeKaoTacke==='function'&&k&&_kmlSlikeKaoTacke(k)?'🖼 Prikaži kao sličicu':'• Prikaži kao tačku')+'</button></div>':'')+
     (info.text?'<p class="le-description">'+esc(info.text)+'</p>':'')+
     (attrs.length?'<details class="le-attributes"><summary>Podaci o objektu <em>'+attrs.length+'</em></summary><dl>'+attrs.map(([key,value])=>'<div><dt>'+esc(key)+'</dt><dd>'+esc(value||'—')+'</dd></div>').join('')+'</dl></details>':'')+
-    '<div class="le-actions le-pop-act">'+btn('_kmlPopKlikOff','kljuc','Isključi klik')+btn('_kmlPopPosalji','posalji','Pošalji')+btn('_kmlPopEditStart','crtaj','Naziv i opis')+btn('_kmlPopStyleToggle','boja','Stil fajla')+btn('_kmlPopSakrij','sakrij','Sakrij')+'</div>'+
+    '<div class="le-actions le-pop-act">'+btn('_kmlPopKlikOff','kljuc','Isključi klik')+btn('_kmlPopPosalji','posalji','Pošalji')+btn('_kmlPopEditStart','crtaj','Naziv i opis')+btn('_kmlPopStyleToggle','boja','Stil fajla')+btn('_kmlPopSakrij','sakrij','Sakrij')+btn('_kmlPopObrisi','obrisi','Obriši fajl','le-danger')+'</div>'+
     '<div id="'+uid+'-edit" class="le-fields" style="display:none"><div class="le-sub-bar"><button type="button" class="le-nazad" onclick="_kmlPopNazad(\''+uid+'\')">'+ic('nazad')+'<span>Nazad</span></button><b>Naziv i opis</b></div><label>Naziv objekta<input id="'+uid+'-name-in" maxlength="160" value="'+esc(layer._kmlName)+'"></label><label>Opis / napomena<textarea id="'+uid+'-desc-in" rows="3" maxlength="2000">'+esc(layer._kmlDesc)+'</textarea></label><small>'+(k?._key?'Izmjena naziva i opisa važi za ovaj prikaz server fajla.':'Naziv i opis čuvaju se u lokalnom fajlu.')+'</small><div class="le-actions"><button type="button" onclick="_kmlPopSave(\''+uid+'\')">'+(k?._key?'Primijeni':'Sačuvaj')+'</button><button type="button" onclick="_kmlPopCancel(\''+uid+'\')">Odustani</button></div></div>'+
     '<div id="'+uid+'-style" style="display:none">'+_layerStyleControls(i)+'</div></article>';
 }
@@ -146,6 +146,17 @@ function _kmlPopPosalji(uid) {
   const i=_kmlPopFindIdx(uid);if(i<0)return;
   try{map.closePopup();}catch(e){}
   _layerPosalji(i);
+}
+// Obriši cijeli fajl sa telefona (uz pitanje "jesi li siguran"). Server-katalog fajl se samo skida sa telefona.
+async function _kmlPopObrisi(uid) {
+  const i=_kmlPopFindIdx(uid),k=kmlLs[i];if(!k)return;
+  try{map.closePopup();}catch(e){}
+  const ime=k.name||'fajl',izKataloga=!!k._key;
+  const ok=await _dlgConfirm('Jesi li siguran da želiš obrisati „'+ime+'“ sa ovog telefona?'+(izKataloga?'\n\nFajl ostaje na serveru, možeš ga ponovo preuzeti.':'\n\nOvo se ne može vratiti.'),{title:'Obriši fajl',danger:true,okLabel:'Da, obriši'});
+  if(!ok)return;
+  const idx=kmlLs.indexOf(k);if(idx<0)return;
+  if(delK(idx)===false)return;
+  showToast('🗑 Obrisano: '+ime);
 }
 // Sakrij cijeli fajl sa karte (isto kao isključivanje u Slojevi → Granice, odakle se i vraća).
 function _kmlPopSakrij(uid) {
