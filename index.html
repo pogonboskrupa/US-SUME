@@ -5906,7 +5906,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.4.6';
+const APP_VER = 'v4.4.7';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7630,6 +7630,12 @@ function _loadLocalVlake() {
     </div>
   </div>
   <label style="display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:13px;color:#1e293b;"><input type="checkbox" id="mqm-lbl" style="width:18px;height:18px"> Prikaži oznaku na karti (površina / dužina)</label>
+  <details id="mqm-izgled" class="mqm-izgled" open><summary>🎨 Izgled na karti</summary>
+    <div class="mqm-red"><span>Boja</span><div id="mqm-boje" class="mqm-boje"></div></div>
+    <div class="mqm-red"><span>Debljina <b id="mqm-deb-v">4</b> px</span><input type="range" id="mqm-deb" min="1" max="12" step="1" value="4" oninput="_mqmStil('weight',+this.value)"></div>
+    <div class="mqm-red"><span>Linija</span><select id="mqm-dash" onchange="_mqmStil('dash',this.value)"><option value="">Puna</option><option value="10 6">Crtice</option><option value="2 7">Tačke</option></select></div>
+    <div class="mqm-red" id="mqm-fill-red"><span>Ispuna <b id="mqm-fill-v">18</b>%</span><input type="range" id="mqm-fill" min="0" max="100" step="5" value="18" oninput="_mqmStil('fillOpacity',this.value/100)"></div>
+  </details>
   <div style="display:flex;gap:10px;">
     <button id="mqm-delete-btn" onclick="_mqmDelete()" style="display:none;flex:0 0 auto;background:#fef2f2;color:#dc2626;border:1.5px solid #fecaca;border-radius:12px;padding:12px 14px;font-size:14px;cursor:pointer;"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
     <button onclick="_mqmSave()"

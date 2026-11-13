@@ -26297,9 +26297,10 @@ function _msrRedraw() {
     // Nevidljivi hit-zone za lakše tapanje na mobilnom
     _msrLayer.addLayer(L.polyline(drawLL, {color:'#000', weight:28, opacity:0.001, lineCap:'round', lineJoin:'round', interactive:true, pane:'tragMsrLines'}));
     // Bijela pozadinska linija (outline kontrast)
-    _msrLayer.addLayer(L.polyline(drawLL, {color:'#fff', weight:7, opacity:0.85, lineCap:'round', lineJoin:'round', interactive:false, pane:'tragMsrLines'}));
+    const _em = _mqmId && _msrRegistry.find(x => x.id === _mqmId), _ew = (_em && _em.weight) || 4, _ed = (_em && _em.dash) || null;
+    _msrLayer.addLayer(L.polyline(drawLL, {color:'#fff', weight:_ew + 3, opacity:0.85, lineCap:'round', lineJoin:'round', interactive:false, pane:'tragMsrLines'}));
     // Obojena linija
-    _msrLayer.addLayer(L.polyline(drawLL, {color:_msrColor, weight:4, opacity:1.0, lineCap:'round', lineJoin:'round', interactive:false, pane:'tragMsrLines'}));
+    _msrLayer.addLayer(L.polyline(drawLL, {color:_msrColor, weight:_ew, dashArray:_ed, opacity:1.0, lineCap:'round', lineJoin:'round', interactive:false, pane:'tragMsrLines'}));
 
     // Poligon (≥3 tačaka)
     if (pts.length >= 3) {
@@ -26641,6 +26642,32 @@ function _mqmOpen() {
   if (title) title.textContent = '📏 Mjerenje završeno — spremi opis (opciono)';
   document.getElementById('mqm-delete-btn').style.display = 'none';  // novo mjerenje — ništa za brisanje
   document.getElementById('msr-quick-meta').style.display = '';
+  _mqmIzgledOsvjezi();
+}
+// Izgled mjerenja u panelu za uređivanje: boja, debljina, vrsta linije, ispuna. Piše se odmah u mjerenje i
+// vidi se na karti uživo (preview = _msrRedraw); popup/lista/štampa čitaju iste vrijednosti.
+const _MQM_BOJE = ['#fbbf24', '#f97316', '#ef4444', '#ec4899', '#a855f7', '#3b82f6', '#06b6d4', '#22c55e', '#ffffff', '#111827'];
+function _mqmIzgledOsvjezi() {
+  const m = _mqmId && _msrRegistry.find(x => x.id === _mqmId); if (!m) return;
+  const box = document.getElementById('mqm-boje');
+  if (box) box.innerHTML = _MQM_BOJE.map(c => '<button type="button" class="mqm-boja' + ((m.color || '#fbbf24').toLowerCase() === c ? ' on' : '') + '" style="background:' + c + '" aria-label="Boja ' + c + '" onclick="_mqmStil(\'color\',\'' + c + '\')"></button>').join('')
+    + '<input type="color" aria-label="Vlastita boja" value="' + (/^#[0-9a-f]{6}$/i.test(m.color || '') ? m.color : '#fbbf24') + '" onchange="_mqmStil(\'color\',this.value)">';
+  const w = m.weight || _lineStyle.msrW || 4, f = Math.round((m.fillOpacity ?? ((_lineStyle.msrFillOp ?? 18) / 100)) * 100);
+  const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
+  set('mqm-deb', w); set('mqm-fill', f); set('mqm-dash', m.dash || '');
+  const t1 = document.getElementById('mqm-deb-v'); if (t1) t1.textContent = w;
+  const t2 = document.getElementById('mqm-fill-v'); if (t2) t2.textContent = f;
+  const fr = document.getElementById('mqm-fill-red'); if (fr) fr.style.display = (m.mode || 'dist') === 'area' ? '' : 'none';
+}
+function _mqmStil(k, v) {
+  const m = _mqmId && _msrRegistry.find(x => x.id === _mqmId); if (!m) return;
+  if (k === 'color') { m.color = v; _msrColor = v; }
+  else if (k === 'weight') { m.weight = Math.max(1, Math.min(12, +v || 4)); const t = document.getElementById('mqm-deb-v'); if (t) t.textContent = m.weight; }
+  else if (k === 'dash') { m.dash = v || ''; const sel = document.getElementById('mqm-dash'); if (sel) sel.value = m.dash; }
+  else if (k === 'fillOpacity') { m.fillOpacity = Math.max(0, Math.min(1, +v)); const t = document.getElementById('mqm-fill-v'); if (t) t.textContent = Math.round(m.fillOpacity * 100); }
+  _msrRegSave();
+  if (k === 'color') _mqmIzgledOsvjezi();
+  try { _msrRedraw(); } catch (e) {}
 }
 function _mqmSave() {
   const m = _mqmId && _msrRegistry.find(x => x.id === _mqmId);
@@ -26938,7 +26965,7 @@ function _msrDrawAllSaved() {
     const latlngs = m.pts.map(p => [p.lat, p.lng]);
     const buildPopup = () => _msrPopupHtml(m);
 
-    const gw = _lineStyle.msrW || 4;
+    const gw = m.weight || _lineStyle.msrW || 4, gd = m.dash || null;
     // Tekstualna oznaka na karti (dužina na sredini linije / površina u centru poligona)
     const _msrTextMk = (lat, lng, txt) => L.marker([lat, lng], {
       icon: L.divIcon({ className: '', iconSize: [0,0], iconAnchor: [0,0],
@@ -26957,7 +26984,7 @@ function _msrDrawAllSaved() {
     };
     if (mode === 'area' && latlngs.length >= 3) {
       const poly = L.polygon(latlngs, {
-        color: color, weight: gw,
+        color: color, weight: gw, dashArray: gd,
         fillColor: color, fillOpacity: m.fillOpacity ?? ((_lineStyle.msrFillOp ?? 18) / 100),
         opacity: 0.9, interactive: true, pane: 'tragMsrLines'
       });
@@ -26973,7 +27000,7 @@ function _msrDrawAllSaved() {
       const drawLL = mode === 'area' ? [...latlngs, latlngs[0]] : latlngs;
       const hit = L.polyline(drawLL, {color:'#000', weight:28, opacity:0.001, lineCap:'round', lineJoin:'round', interactive:true, pane:'tragMsrLines'});
       const bg  = L.polyline(drawLL, {color:'#fff', weight:gw+3, opacity:0.7, lineCap:'round', lineJoin:'round', interactive:false, pane:'tragMsrLines'});
-      const fg  = L.polyline(drawLL, {color, weight:gw, opacity:1.0, lineCap:'round', lineJoin:'round', interactive:false, pane:'tragMsrLines'});
+      const fg  = L.polyline(drawLL, {color, weight:gw, dashArray:gd, opacity:1.0, lineCap:'round', lineJoin:'round', interactive:false, pane:'tragMsrLines'});
       hit.bindPopup(buildPopup, {maxWidth: 260});
       hit.on('click', _msrOpenPopup(hit));
       _msrSavedLayer.addLayer(hit);
@@ -27006,7 +27033,8 @@ function _msrRegZoom(id) {
   _msrSetMode(_msrMode);
   _msrRedraw();
   _msrUpdPanel();
-  map.fitBounds(L.latLngBounds(m.pts.map(p => [p.lat, p.lng])), {padding:[40,40]});
+  // Panel za uređivanje zauzima dno ekrana — mjerenje se centrira u vidljivom dijelu iznad njega.
+  map.fitBounds(L.latLngBounds(m.pts.map(p => [p.lat, p.lng])), {paddingTopLeft:[40,70], paddingBottomRight:[40, Math.min(Math.round(innerHeight * 0.62), 520)]});
 
   // Popuni panel s postojećim podacima
   const sel = document.getElementById('mqm-gj-sel');
@@ -27029,6 +27057,7 @@ function _msrRegZoom(id) {
   if (title) title.textContent = '✏️ Edituj mjerenje — vuci tačke ili dodaj nove';
   document.getElementById('mqm-delete-btn').style.display = '';  // postojeće mjerenje — nudi brisanje odmah
   document.getElementById('msr-quick-meta').style.display = '';
+  _mqmIzgledOsvjezi();
 
   // Uđi u aktivni mod snimanja
   msrStart();
