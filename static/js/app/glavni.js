@@ -7902,7 +7902,9 @@ async function openFotoFullscreen(tsKey, isShared) {
   document.getElementById('foto-fullscreen-meta').textContent=`${dt} · ${f.la.toFixed(5)}, ${f.lo.toFixed(5)}`;
   document.getElementById('foto-fullscreen').style.display='flex';
   const img=document.getElementById('foto-fullscreen-img');img.src=f.full||f.thumb;
-  _fotoFullSrc=f.full||f.thumb;_fotoFullIme='Fotografija '+dt;document.getElementById('foto-fullscreen')?.classList.remove('zum');_fotoFullAkcije();
+  _fotoFullSrc=f.full||f.thumb;_fotoFullIme='Fotografija '+dt;
+  _fotoFullObrisi=async()=>{await fotoObrisiPitaj(tsKey,!!isShared);if(!(isShared?_sharedFotos:_locFotos).includes(f))closeFotoFullscreen();};
+  _fotoFullZoomInit();_fotoFullReset();_fotoFullAkcije();
   if(f.full)return;
   try {
     const local=isShared?null:await _kmlcGet('fotofull:'+f.ts);
@@ -7919,7 +7921,7 @@ function closeFotoFullscreen() {
   ++_fotoFullscreenEpoch;
   document.getElementById('foto-fullscreen').style.display='none';
   document.getElementById('foto-fullscreen-img').src='';
-  document.getElementById('foto-fullscreen').classList.remove('zum');_fotoFullSrc='';
+  document.getElementById('foto-fullscreen').classList.remove('zum');_fotoFullSrc='';_fotoFullObrisi=null;if(typeof _fotoFullReset==='function')_fotoFullReset();
 }
 
 // ─ Fotografija kao KML ─
@@ -22098,7 +22100,7 @@ function _kmlFotoSloj(k) {
     k._fotoGrp = L.layerGroup(k._fotoTacke.map(l => {
       const src = _kmlSlikaIz(l), nm = l._kmlName || 'Slika';
       const mk = L.marker(l.getLatLng(), { icon: L.divIcon({ className: '', iconSize: [46, 56], iconAnchor: [23, 56], html: _fotoMarkerHtml(src, false, true) }) });
-      mk.on('click', e => { L.DomEvent.stopPropagation(e); _fotoPrikaziSrc(src, nm + ' · ' + (k.name || '')); });
+      mk.on('click', e => { L.DomEvent.stopPropagation(e); _fotoPrikaziSrc(src, nm + ' · ' + (k.name || ''), () => _kmlSlikaObrisi(k)); });
       return mk;
     }));
   }
@@ -22110,29 +22112,74 @@ function _kmlFotoSloj(k) {
 }
 // Slika preko cijelog ekrana (zajedničko za vlastite i primljene fotografije).
 let _fotoFullSrc = '', _fotoFullIme = '';
-function _fotoPrikaziSrc(src, meta) {
+let _fotoFullObrisi = null;
+function _fotoPrikaziSrc(src, meta, obrisi) {
   if (!src) return;
   try { map.closePopup(); } catch (e) {}
   ++_fotoFullscreenEpoch;
-  _fotoFullSrc = src; _fotoFullIme = String(meta || 'Slika');
+  _fotoFullSrc = src; _fotoFullIme = String(meta || 'Slika'); _fotoFullObrisi = typeof obrisi === 'function' ? obrisi : null;
   const ov = document.getElementById('foto-fullscreen'); if (!ov) return;
-  ov.classList.remove('zum');
   document.getElementById('foto-fullscreen-meta').textContent = _fotoFullIme;
   document.getElementById('foto-fullscreen-img').src = src;
+  _fotoFullZoomInit(); _fotoFullReset();
   _fotoFullAkcije();
   ov.style.display = 'flex';
 }
+// Dugmad ispod slike: Sačuvaj, Podijeli i (kad se zna šta se briše) Obriši. Zum je prstima: dva prsta, dvostruki dodir, točkić.
 function _fotoFullAkcije() {
   const ov = document.getElementById('foto-fullscreen'); if (!ov) return;
   let bar = document.getElementById('foto-fullscreen-akcije');
-  if (!bar) {
-    bar = document.createElement('div'); bar.id = 'foto-fullscreen-akcije';
-    bar.innerHTML = '<button type="button" onclick="_fotoFullZum()">🔍 Uvećaj</button><button type="button" onclick="_fotoFullSacuvaj()">💾 Sačuvaj</button><button type="button" onclick="_fotoFullPodijeli()">📤 Podijeli</button>';
-    ov.appendChild(bar);
-    document.getElementById('foto-fullscreen-img')?.addEventListener('click', e => { e.stopPropagation(); _fotoFullZum(); });
-  }
+  if (!bar) { bar = document.createElement('div'); bar.id = 'foto-fullscreen-akcije'; ov.appendChild(bar); }
+  bar.innerHTML = '<button type="button" onclick="_fotoFullSacuvaj()">💾 Sačuvaj</button><button type="button" onclick="_fotoFullPodijeli()">📤 Podijeli</button>'
+    + (_fotoFullObrisi ? '<button type="button" class="fz-obrisi" onclick="_fotoFullObrisiKlik()">🗑 Obriši</button>' : '')
+    + '<div class="fz-savjet">Prstima uvećaj · dvostruki dodir = zum</div>';
 }
-function _fotoFullZum() { document.getElementById('foto-fullscreen')?.classList.toggle('zum'); }
+async function _fotoFullObrisiKlik() { const f = _fotoFullObrisi; if (f) await f(); }
+// Zum i pomjeranje slike: dva prsta (pinch), dvostruki dodir (1× ↔ 2,5×), točkić miša, jedan prst pomjera uvećanu sliku.
+let _fz = { s: 1, x: 0, y: 0 }, _fzInit = false;
+function _fotoFullReset() { _fz = { s: 1, x: 0, y: 0 }; _fotoFullPrimijeni(); }
+function _fotoFullPrimijeni() {
+  const img = document.getElementById('foto-fullscreen-img'); if (!img) return;
+  if (_fz.s <= 1.001) { _fz.s = 1; _fz.x = 0; _fz.y = 0; }
+  const w = img.clientWidth, h = img.clientHeight, mx = Math.max(0, (w * _fz.s - innerWidth) / 2 + 40), my = Math.max(0, (h * _fz.s - innerHeight) / 2 + 40);
+  _fz.x = Math.max(-mx, Math.min(mx, _fz.x)); _fz.y = Math.max(-my, Math.min(my, _fz.y));
+  img.style.transform = 'translate(' + _fz.x + 'px,' + _fz.y + 'px) scale(' + _fz.s + ')';
+  document.getElementById('foto-fullscreen')?.classList.toggle('zum', _fz.s > 1);
+}
+function _fotoFullZoomInit() {
+  if (_fzInit) return; _fzInit = true;
+  const ov = document.getElementById('foto-fullscreen'), img = document.getElementById('foto-fullscreen-img'); if (!ov || !img) return;
+  let d0 = 0, s0 = 1, p0 = null, zadnjiTap = 0, pomak = false;
+  const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  ov.addEventListener('touchstart', e => {
+    if (!e.target.closest('#foto-fullscreen-img')) return;
+    if (e.touches.length === 2) { d0 = dist(e.touches); s0 = _fz.s; p0 = null; }
+    else if (e.touches.length === 1) { p0 = { x: e.touches[0].clientX - _fz.x, y: e.touches[0].clientY - _fz.y }; pomak = false; }
+  }, { passive: true });
+  ov.addEventListener('touchmove', e => {
+    if (!e.target.closest('#foto-fullscreen-img')) return;
+    if (e.touches.length === 2 && d0) { e.preventDefault(); _fz.s = Math.max(1, Math.min(8, s0 * dist(e.touches) / d0)); _fotoFullPrimijeni(); pomak = true; }
+    else if (e.touches.length === 1 && p0 && _fz.s > 1) { e.preventDefault(); _fz.x = e.touches[0].clientX - p0.x; _fz.y = e.touches[0].clientY - p0.y; _fotoFullPrimijeni(); pomak = true; }
+  }, { passive: false });
+  ov.addEventListener('touchend', e => {
+    if (e.touches.length < 2) d0 = 0;
+    if (!e.target.closest('#foto-fullscreen-img') || pomak || e.touches.length) return;
+    const sad = Date.now();
+    if (sad - zadnjiTap < 320) { _fz.s = _fz.s > 1 ? 1 : 2.5; _fotoFullPrimijeni(); zadnjiTap = 0; } else zadnjiTap = sad;
+  }, { passive: true });
+  img.addEventListener('dblclick', e => { e.preventDefault(); _fz.s = _fz.s > 1 ? 1 : 2.5; _fotoFullPrimijeni(); });
+  ov.addEventListener('wheel', e => { if (!e.target.closest('#foto-fullscreen-img')) return; e.preventDefault(); _fz.s = Math.max(1, Math.min(8, _fz.s * (e.deltaY < 0 ? 1.15 : 1 / 1.15))); _fotoFullPrimijeni(); }, { passive: false });
+}
+// Brisanje primljene slike direktno iz pregleda: pita, briše fajl (i zapis u Primljenim) i zatvara pregled.
+async function _kmlSlikaObrisi(k) {
+  if (!k) return;
+  const n = (k._fotoTacke || []).length, ime = k.name || 'fajl';
+  const ok = await _dlgConfirm('Jesi li siguran da želiš obrisati ' + (n > 1 ? 'fajl „' + ime + '“ sa svih ' + n + ' slika' : 'ovu sliku („' + ime + '“)') + ' sa ovog telefona?' + (n > 1 ? '\n\nBriše se cijeli fajl (trag i sve slike u njemu).' : '') + '\n\nOvo se ne može vratiti.', { title: 'Obriši sliku', danger: true, okLabel: 'Da, obriši' });
+  if (!ok) return;
+  const idx = kmlLs.indexOf(k); if (idx < 0) return;
+  if (delK(idx) === false) return;
+  closeFotoFullscreen(); showToast('🗑 Slika obrisana');
+}
 function _fotoFullImeFajla() {
   const ext = /^data:image\/png/.test(_fotoFullSrc) ? 'png' : /^data:image\/webp/.test(_fotoFullSrc) ? 'webp' : 'jpg';
   return (_fotoFullIme.replace(/[\\/:*?"<>|·]+/g, ' ').replace(/\s+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'slika') + '.' + ext;
@@ -22152,7 +22199,7 @@ function _fotoFullPodijeli() {
 }
 // Popup KML objekta: dugmad za sliku (vidi _layerPopupHtml).
 function _kmlPopSlika(uid) { let src = ''; for (const k of kmlLs) k.grp?.eachLayer?.(function w(l) { if (src) return; if (l._kmlPopupId === uid) src = _kmlSlikaIz(l); else if (l.eachLayer) l.eachLayer(w); }); return src; }
-function _kmlPopSlikaProsiri(uid) { const src = _kmlPopSlika(uid); if (src) _fotoPrikaziSrc(src, document.getElementById(uid + '-nm')?.textContent || 'Slika'); }
+function _kmlPopSlikaProsiri(uid) { const src = _kmlPopSlika(uid), k = kmlLs[_kmlPopFindIdx(uid)]; if (src) { if (k) { try { _kmlFotoSloj(k); } catch (e) {} } _fotoPrikaziSrc(src, document.getElementById(uid + '-nm')?.textContent || 'Slika', k ? () => _kmlSlikaObrisi(k) : null); } }
 function _kmlPopSlikaKaoTacka(uid) { const i = _kmlPopFindIdx(uid), k = kmlLs[i]; if (!k) return; const on = !_kmlSlikeKaoTacke(k); try { map.closePopup(); } catch (e) {} _kmlSlikeKaoTackePostavi(k, on); showToast(on ? 'Slike u „' + (k.name || 'fajlu') + '“ prikazane kao tačke' : 'Slike u „' + (k.name || 'fajlu') + '“ prikazane kao sličice'); }
 
 // Leaflet Canvas ne razumije SVG url(#pattern). Mali ponovljivi raster ostaje
