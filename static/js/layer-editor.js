@@ -134,7 +134,7 @@ function _layerPopupHtml(layer,uid) {
   return '<article class="le-popup le-pop2" onclick="event.stopPropagation()" style="--le-col:'+col+';--le-fill:'+fill+'">'+
     '<header class="le-heading"><i class="le-sw le-sw-'+type.toLowerCase()+'" aria-hidden="true"></i><span>'+type+' · '+esc(k?.name||'Učitani sloj')+'</span><b id="'+uid+'-nm">'+esc(layer._kmlName||'Bez naziva')+'</b></header>'+
     (mjere.length?'<div class="le-object-measure">'+mjere.map(([n,v])=>'<div><span>'+n+'</span><b>'+esc(v)+'</b></div>').join('')+'</div>':'')+
-    (info.slika?'<img class="le-foto" alt="Fotografija" src="'+info.slika+'">':'')+
+    (info.slika?'<img class="le-foto" alt="Fotografija" src="'+info.slika+'" style="cursor:zoom-in" onclick="_kmlPopSlikaProsiri(\''+uid+'\')"><div class="le-foto-akcije"><button type="button" onclick="_kmlPopSlikaProsiri(\''+uid+'\')">🔍 Otvori sliku</button><button type="button" onclick="_kmlPopSlikaKaoTacka(\''+uid+'\')">'+(typeof _kmlSlikeKaoTacke==='function'&&k&&_kmlSlikeKaoTacke(k)?'🖼 Prikaži kao sličicu':'• Prikaži kao tačku')+'</button></div>':'')+
     (info.text?'<p class="le-description">'+esc(info.text)+'</p>':'')+
     (attrs.length?'<details class="le-attributes"><summary>Podaci o objektu <em>'+attrs.length+'</em></summary><dl>'+attrs.map(([key,value])=>'<div><dt>'+esc(key)+'</dt><dd>'+esc(value||'—')+'</dd></div>').join('')+'</dl></details>':'')+
     '<div class="le-actions le-pop-act">'+btn('_kmlPopKlikOff','kljuc','Isključi klik')+btn('_kmlPopPosalji','posalji','Pošalji')+btn('_kmlPopEditStart','crtaj','Naziv i opis')+btn('_kmlPopStyleToggle','boja','Stil fajla')+btn('_kmlPopSakrij','sakrij','Sakrij')+'</div>'+

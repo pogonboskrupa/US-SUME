@@ -1604,3 +1604,14 @@ html.render-lite #share-sheet .shr-status.on .shr-status-dot{animation:none}
 #share-sheet .shr-card{border:1px solid var(--field-border,#334155);border-radius:14px;padding:4px 12px 12px;margin-bottom:10px;background:var(--field-bg,#0b1424)}
 #share-sheet .shr-card .rs-sec{margin-top:10px}
 #share-sheet .shr-row{min-height:44px}
+
+/* Slika preko cijelog ekrana (v4.4.4): uvećanje dodirom, Sačuvaj/Podijeli; primljene slike u KML popupu. */
+#foto-fullscreen.zum{justify-content:flex-start;align-items:flex-start;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y pinch-zoom}
+#foto-fullscreen.zum #foto-fullscreen-img{max-width:none;max-height:none;width:250vw;cursor:zoom-out}
+#foto-fullscreen #foto-fullscreen-img{cursor:zoom-in}
+#foto-fullscreen-akcije{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;justify-content:center}
+#foto-fullscreen.zum #foto-fullscreen-akcije{position:fixed;bottom:16px;left:50%;transform:translateX(-50%)}
+#foto-fullscreen-akcije button{min-height:44px;padding:8px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);color:#fff;font:600 14px system-ui;cursor:pointer}
+#foto-fullscreen.zum #foto-fullscreen-close{position:fixed}
+.le-pop2 .le-foto-akcije{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.le-pop2 .le-foto-akcije button{flex:1;min-height:40px;border-radius:9px;border:1px solid var(--field-border);background:var(--field-bg);color:var(--field-ink);font:600 12px system-ui;cursor:pointer}
