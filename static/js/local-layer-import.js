@@ -123,6 +123,8 @@ async function _localLayerKmlImpl(name,content,owner,driveSource,fmt='') {
   kmlCI++;
   const layer={name:unique,_origName:unique,_driveSource:driveSource,fmt,grp,col,dash:'',weight:2,opacity:.9,vis:true,fill:samoPoligoni,fillCol:col,fillPattern:'solid',fillOpacity:samoPoligoni?.6:.35,tag:name.match(/^(\d+)/)?.[1]||'',_loadedAt:Date.now()};
   layer.onlyPolygon=globalThis.GithubLayers?.defaultOnlyPolygon(layer)===true;
+  // Kamionski putevi sa servera: klik zadano isključen (linije prekrivaju kartu, klik na njih smeta radu).
+  if(globalThis.GithubLayers?.role(layer)==='roads')layer.klikOff=true;
   kmlLs.push(layer);
   applyKmlStyle(kmlLs.length-1);
   try{_localKmlSaveAll(false);}catch(e){}

@@ -1583,3 +1583,24 @@ html #ls-pane-inst .installed-map.is-active .installed-preview{outline:2px solid
 #gj-panel .grp-sekcija{margin:20px 0 4px;font:800 15px system-ui}
 #gj-panel .grp-zadane{border-left-color:#3b82f6}
 #gj-panel .gj-x{border:0;background:transparent;color:inherit;opacity:.7;margin-left:4px;min-width:28px;min-height:28px;cursor:pointer}
+.le-pop2 .le-object-measure>div b{white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/* Print (v4.4.2): redovi izbora se lome umjesto da izlaze van ekrana (mjerilo 1:10 000 je bilo odsječeno). */
+html body.stampa-on #stampa-kontrole .stk-red{flex-wrap:wrap;row-gap:6px}
+html body.stampa-on #stampa-kontrole .stk-red .stk-lbl{flex-basis:100%;margin:2px 0 0}
+html body.stampa-on #stampa-kontrole .stk-head small{white-space:normal}
+@media (min-width:900px) and (hover:hover){html body.stampa-on #stampa-kontrole .stk-red .stk-lbl{flex-basis:auto}}
+
+/* Dijeljenje kretanja (v4.4.2): status na vrhu, sekcije kao kartice. */
+#share-sheet .shr-status{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:14px;margin:4px 0 10px;border:1px solid var(--field-border,#334155);background:var(--field-card,#111c2e)}
+#share-sheet .shr-status b{display:block;font-size:15px}
+#share-sheet .shr-status small{display:block;font-size:12px;line-height:1.5;color:var(--field-muted,#94a3b8);margin-top:2px}
+#share-sheet .shr-status .shr-gps{font-variant-numeric:tabular-nums}
+#share-sheet .shr-status-dot{width:12px;height:12px;border-radius:50%;margin-top:5px;flex-shrink:0;background:#64748b}
+#share-sheet .shr-status.on{border-color:#dc2626;background:color-mix(in srgb,#dc2626 12%,var(--field-card,#111c2e))}
+#share-sheet .shr-status.on .shr-status-dot{background:#ef4444;box-shadow:0 0 0 4px #ef444433;animation:shrPuls 1.6s ease-in-out infinite}
+@keyframes shrPuls{50%{box-shadow:0 0 0 8px #ef444411}}
+html.render-lite #share-sheet .shr-status.on .shr-status-dot{animation:none}
+#share-sheet .shr-card{border:1px solid var(--field-border,#334155);border-radius:14px;padding:4px 12px 12px;margin-bottom:10px;background:var(--field-bg,#0b1424)}
+#share-sheet .shr-card .rs-sec{margin-top:10px}
+#share-sheet .shr-row{min-height:44px}

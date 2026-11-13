@@ -8910,9 +8910,16 @@ function _shareSheetRender() {
   const sub = document.getElementById('share-sheet-sub');
   const ime = (id) => _escHtml((kolegeMap[id]?.ime || 'Kolega'));
   let h = '';
+  // Status na vrhu: da li se dijeli, ko vidi, GPS — odgovor na "šta se sad dešava" bez skrolanja.
+  const _vide = Object.values(_shareViewers || {}).map(v => _escHtml(v.ime || 'Kolega'));
+  const _gpsTxt = lastP ? 'GPS: ±' + Math.round(lastP.ac || 0) + ' m' : 'GPS još nema poziciju';
+  h += '<section class="shr-status ' + (_shareLiveOn ? 'on' : 'off') + '"><span class="shr-status-dot" aria-hidden="true"></span><div><b>' + (_shareLiveOn ? 'Dijeliš kretanje uživo' : 'Dijeljenje je isključeno') + '</b>'
+    + '<small>' + (_shareLiveOn ? _escHtml(_shareOpisPrimalaca()) + (_vide.length ? ' · 👁 vide te: ' + _vide.join(', ') : ' · još te niko ne gleda') : 'Izaberi kolege ili napravi link / QR kod') + '</small>'
+    + '<small class="shr-gps">' + _gpsTxt + '</small></div></section>';
 
   // 1) Kolege iz iste šumarije
   if (_shareImaKolege()) {
+    h += '<section class="shr-card">';
     const kol = _shareKolege();
     const ci = _shareCiljevi();
     h += '<div class="rs-sec">Kolege iz šumarije' + (sbProfile?.sumarija ? ' · ' + _escHtml(sbProfile.sumarija) : '') + '</div>';
@@ -8937,9 +8944,11 @@ function _shareSheetRender() {
         + '<span class="rs-opt-txt"><b>' + (_shareKolegeOn ? '⏹ Zaustavi dijeljenje sa kolegama' : '🔴 Dijeli kretanje sa izabranima') + '</b>'
         + '<span>' + (_shareKolegeOn ? 'Dijeli se uživo, svakih 5 s' : 'Vide te na karti dok ne zaustaviš') + '</span></span></button>';
     }
+    h += '</section>';
   }
 
   // 2) Link / QR
+  h += '<section class="shr-card">';
   h += '<div class="rs-sec">Link / QR kod' + (isSpdField() ? '' : ' · za nekoga van aplikacije') + '</div>';
   if (isSpdField()) h += '<div class="shr-muted">Kretanje dijeliš tako što kolegi pokažeš QR kod ili pošalješ link. Ko ima šifru, vidi te uživo dok ne zaustaviš.</div>';
   if (_shareKodOn && _shareKod) {
@@ -8954,21 +8963,26 @@ function _shareSheetRender() {
   } else {
     h += '<button type="button" class="rs-opt rs-opt--go" onclick="shareKodStartStop()"><span class="rs-opt-txt"><b>🔗 Napravi link i QR kod</b><span>Kolega skenira QR ili otvori link i vidi te uživo</span></span></button>';
   }
+  h += '</section>';
 
   // 3) Pratim
+  h += '<section class="shr-card">';
   h += '<div class="rs-sec">Pratim kretanje</div>';
   const pr = _followLista();
   if (pr.length) {
     h += pr.map(e => {
       const st = _follow[e.kod];
       const uzivo = st && st.zadnje && Date.now() - st.zadnje < 30000;
+      const prije = st && st.zadnje ? Math.round((Date.now() - st.zadnje) / 1000) : null;
+      const kad = uzivo ? 'uživo' : prije != null ? 'zadnje prije ' + (prije < 120 ? prije + ' s' : Math.round(prije / 60) + ' min') : 'čeka dijeljenje';
       return '<div class="shr-row"><span class="shr-dot" style="background:' + (uzivo ? '#22c55e' : '#64748b') + '"></span>'
-        + '<span class="shr-name">' + _escHtml(e.ime || ('Šifra ' + e.kod)) + ' <span class="shr-muted">' + (uzivo ? 'uživo' : 'čeka dijeljenje') + '</span></span>'
+        + '<span class="shr-name">' + _escHtml(e.ime || ('Šifra ' + e.kod)) + ' <span class="shr-muted">' + kad + '</span></span>'
         + '<button type="button" class="shr-x" aria-label="Prestani pratiti" onclick="_followPrekini(\'' + _jsAttr(e.kod) + '\')">✕</button></div>';
     }).join('');
   } else h += '<div class="shr-muted">Ne pratiš nikoga.</div>';
   h += '<div class="rs-row2"><button type="button" class="rs-opt" onclick="sharePratiSkeniraj()"><span class="rs-opt-txt"><b>📷 Skeniraj QR</b></span></button>'
     + '<button type="button" class="rs-opt" onclick="sharePratiUkucaj()"><span class="rs-opt-txt"><b>⌨ Ukucaj šifru</b></span></button></div>';
+  h += '</section>';
 
   body.innerHTML = h;
   if (sub) sub.textContent = _shareLiveOn ? '🔴 ' + _shareOpisPrimalaca() : 'Isključeno';
@@ -21635,6 +21649,7 @@ function _kmlKlikPostavi(k, off) {
   const i = kmlLs.indexOf(k);
   if (i < 0) return;
   k.klikOff = !!off;
+  k.klikRucno = true;
   try { applyKmlStyle(i); } catch (e) {}
   try { saveKmlStyles(); } catch (e) {}
   try { if (typeof _localKmlSaveAll === 'function') _localKmlSaveAll(false); } catch (e) {}
@@ -21861,7 +21876,7 @@ function saveKmlStyles() {
     if (!k._key || k.grp===null || k._downloaded===false) return;
     userMap[k._key] = { col: k.col, dash: k.dash, weight: k.weight, opacity: k.opacity ?? 0.9, vis: k.vis,
       fill: k.fill || false, fillCol: k.fillCol || k.col, fillPattern: k.fillPattern || 'solid', fillOpacity: k.fillOpacity ?? 0.35,
-      tag: k.tag || '', onlyPolygon: k.onlyPolygon===true, ptR: k.ptR || 3, ptRRucno: k.ptRRucno===true, poligoniVidljivi: k.poligoniVidljivi===true, klikOff: k.klikOff===true };
+      tag: k.tag || '', onlyPolygon: k.onlyPolygon===true, ptR: k.ptR || 3, ptRRucno: k.ptRRucno===true, poligoniVidljivi: k.poligoniVidljivi===true, klikOff: k.klikOff===true, klikRucno: k.klikRucno===true };
   });
   localStorage.setItem(_KML_USER_STYLES_KEY, JSON.stringify(userMap));
   if(_localKmlSaveAll(false)===false)throw Error('Lokalni stil nije sačuvan');
@@ -22164,6 +22179,7 @@ function _localKmlSaveAll(prune=true) {
       store[origName].ptRRucno     = k.ptRRucno===true;
       store[origName].poligoniVidljivi = k.poligoniVidljivi===true;
       store[origName].klikOff = k.klikOff===true;
+      store[origName].klikRucno = k.klikRucno===true;
       store[origName].tag          = k.tag || '';
       store[origName]._loadedAt    = k._loadedAt || store[origName]._loadedAt || 0;
     });
@@ -22225,6 +22241,9 @@ async function _localKmlRestore() {
           onlyPolygon: data.onlyPolygon===true, tag: data.tag || '', _loadedAt: data._loadedAt || 0
         };
         layer.onlyPolygon=globalThis.GithubLayers?.defaultOnlyPolygon(layer)??layer.onlyPolygon;
+        // Kamionski putevi sa servera: klik zadano isključen, osim ako ga je korisnik sam uključio (klikRucno).
+        layer.klikRucno=data.klikRucno===true;
+        if(!layer.klikRucno&&globalThis.GithubLayers?.role(layer)==='roads')layer.klikOff=true;
         kmlLs.push(layer);
         if (zapelo && layer.vis && content.length >= _KML_PO_DIJELOVIMA_MIN) { layer.vis = false; sakriveni.push(layer.name); }
         if(layer.vis&&(!layer.onlyPolygon||globalThis.GithubLayers?.selecting()))grp.addTo(map);
@@ -27722,6 +27741,14 @@ function _stpUredi() {
   _stpKontroleRender(); _stpRaspored();
 }
 
+// Koliko terena list pokriva (širina × visina karte na papiru × mjerilo) — da se vidi stane li odjel prije štampe.
+function _stpPokrivaTxt() {
+  try {
+    const f = _STP_FORMATI[_stp.fmt], m = _stp.mjerilo;
+    const d = mm => { const v = mm * m / 1000; return v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1).replace('.', ',') + ' km' : Math.round(v) + ' m'; };
+    return d(f.w) + ' × ' + d(f.h);
+  } catch (e) { return '—'; }
+}
 function _stpKontroleRender() {
   const el = document.getElementById('stampa-kontrole');
   if (!el || !_stp) return;
@@ -27763,7 +27790,7 @@ function _stpKontroleRender() {
       </div>
     </div>`;
   el.innerHTML = `
-    <div class="stk-head"><div><b>Pregled za štampu</b><small>${_STP_FORMATI[_stp.fmt].ime} · ${mjTxt(_stp.mjerilo)}</small></div><button class="stk-chip" aria-expanded="${!_stp.sazeto}" onclick="_stpPregled()">${_stp.sazeto ? 'Postavke ▴' : 'Veći pregled ▾'}</button></div>
+    <div class="stk-head"><div><b>Pregled za štampu</b><small>${_STP_FORMATI[_stp.fmt].ime} · ${mjTxt(_stp.mjerilo)} · list pokriva ${_stpPokrivaTxt()}</small></div><button class="stk-chip" aria-expanded="${!_stp.sazeto}" onclick="_stpPregled()">${_stp.sazeto ? 'Postavke ▴' : 'Veći pregled ▾'}</button></div>
     ${_stp.sazeto ? '' : `
     <div class="stk-red"><span class="stk-lbl">Papir</span>${fmt}</div>
     <div class="stk-red"><span class="stk-lbl">Mjerilo</span>${mj}</div>

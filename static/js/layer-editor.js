@@ -114,7 +114,9 @@ function _layerInfo(layer) {
 function _layerMjere(layer) {
   const out=[];
   try{
-    if(layer._kmlIsPoint&&layer.getLatLng){const p=layer.getLatLng();out.push(['Širina',p.lat.toFixed(6)],['Dužina',p.lng.toFixed(6)]);return out;}
+    if(layer._kmlIsPoint&&layer.getLatLng){const p=layer.getLatLng(),gk=typeof wgsToMGI==='function'?wgsToMGI(p.lat,p.lng):null;
+      // Jedan red: Y/X (MGI, isto kao traka koordinata na karti); bez MGI pretvorbe geografske koordinate.
+      out.push(['Koordinate',gk?'Y '+gk.y+'  ·  X '+gk.x:p.lat.toFixed(6)+', '+p.lng.toFixed(6)]);return out;}
     if(typeof turf==='undefined')return out;
     const f=layer.toGeoJSON(),m=turf.length(f,{units:'kilometers'})*1000,len=m>=1000?(m/1000).toFixed(2).replace('.',',')+' km':Math.round(m)+' m';
     if(layer._kmlIsPolygon){const ha=turf.area(f)/10000;out.push(['Površina',(ha>=100?ha.toFixed(1):ha.toFixed(2)).replace('.',',')+' ha'],['Obim',len]);}
