@@ -22191,6 +22191,7 @@ function togK(i) {
 function delK(i) {
   const k = kmlLs[i];
   if (!k) return false;
+  try { const ime = k._origName || k.name, l = _primljeniUcitaj(); let ch = false; l.forEach(x => { if (x.lokalno === ime) { x.lokalno = ''; ch = true; } }); if (ch) _primljeniSpremi(l); } catch (e) {}
   if (!k._key) {
     try {
       const store=JSON.parse(localStorage.getItem(_LOCAL_KML_KEY)||'{}'),name=k._origName||k.name,cacheKey=store[name]?.cacheKey;
@@ -39058,10 +39059,14 @@ async function _primljeniDalje(id) {
 async function _primljeniObrisi(id) {
   const x = _primljeniUcitaj().find(a => a.id === id);
   if (!x) return;
-  if (!await _dlgConfirm('Obrisati „' + x.naziv + '“ sa ovog telefona?', { title: 'Obriši primljeni podatak', danger: true })) return;
+  // Ako je već stavljen na kartu, i taj sloj nestaje s telefona (inače bi "obrisano" ostalo vidljivo na karti).
+  const slojIdx = x.lokalno ? kmlLs.findIndex(k => !k._key && (k._origName || k.name) === x.lokalno) : -1;
+  if (!await _dlgConfirm('Jesi li siguran da želiš obrisati „' + x.naziv + '“ (od ' + (x.odIme || 'kolege') + ') sa ovog telefona?' + (slojIdx >= 0 ? '\n\nUklonit će se i sa karte.' : '') + '\n\nOvo se ne može vratiti.', { title: 'Obriši primljeni podatak', danger: true, okLabel: 'Da, obriši' })) return;
+  if (slojIdx >= 0) { const i2 = kmlLs.findIndex(k => !k._key && (k._origName || k.name) === x.lokalno); if (i2 >= 0) delK(i2); }
   try { await _kmlcDelete('primljeno:' + id); } catch (e) {}
   _primljeniSpremi(_primljeniUcitaj().filter(a => a.id !== id));
   _primljeniBadge(); _primljeniRender();
+  showToast('🗑 Obrisano: ' + x.naziv);
 }
 
 // ─── Ko smije vidjeti Dijagnostiku / prebacivanje računa ────────────────────

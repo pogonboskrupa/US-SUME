@@ -10,3 +10,11 @@ assert(!/onclick="deleteFoto\(\$\{fkey\}\)"/.test(src)&&!/onclick="deleteFotoSha
 const trag=src.slice(src.indexOf('async function _tragPopupObrisi('),src.indexOf('function _tragPopupRefresh('));
 assert(/Jesi li siguran/.test(trag)&&/okLabel: 'Da, obriši'/.test(trag));
 console.log('ok brisanje uz potvrdu');
+{
+  const p=src.slice(src.indexOf('async function _primljeniObrisi('),src.indexOf('// ─── Ko smije'));
+  assert(/Jesi li siguran/.test(p)&&p.indexOf('_dlgConfirm')<p.indexOf('delK(i2)')&&p.indexOf('_dlgConfirm')<p.indexOf('_kmlcDelete'),'primljeno: pitanje prije brisanja');
+  assert(/Uklonit će se i sa karte/.test(p),'obrisan primljeni podatak nestaje i sa karte');
+  const d=src.slice(src.indexOf('function delK('),src.indexOf('function delK(')+500);
+  assert(/x\.lokalno === ime/.test(d),'brisanje sloja čisti vezu u spisku primljenih');
+  console.log('ok primljeno');
+}
