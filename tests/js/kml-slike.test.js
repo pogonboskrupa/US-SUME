@@ -5,7 +5,7 @@ assert.equal(re.exec('<img src="data:image/jpeg;base64,QUJD" width="3">')[1],'da
 assert(!re.exec('<img src="https://x.y/a.jpg">'),'vanjski URL se ne prikazuje');
 assert(/try \{ _kmlFotoSloj\(k\); \} catch/.test(src),'applyKmlStyle gradi sloj sličica');
 assert(/_fotoPrikaziSrc\(src, nm/.test(src),'klik na sličicu otvara sliku');
-assert(/function _fotoFullSacuvaj\(/.test(src)&&/function _fotoFullPodijeli\(/.test(src)&&/function _fotoFullZum\(/.test(src));
+assert(/function _fotoFullSacuvaj\(/.test(src)&&/function _fotoFullPodijeli\(/.test(src)&&/function _fotoFullReset\(/.test(src));
 assert(/_kmlPopSlikaProsiri\(/.test(le)&&/_kmlPopSlikaKaoTacka\(/.test(le),'popup: otvori sliku i prikaz kao tačka');
 console.log('ok kml slike');
 {
