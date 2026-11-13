@@ -5,7 +5,9 @@
 -- primljeni podaci. Radi i na STARIJIM verzijama aplikacije: stara verzija je prikaže kao obični primljeni
 -- fajl (naziv sadrži uputu i link), nova dodaje dugme "Preuzmi". Podatak se ne čuva na serveru duže od 7 dana.
 -- Ponovno slanje zamjenjuje raniju obavijest istom korisniku (nema gomilanja). Samo admin.
--- Idempotentna; pokreće se RUČNO u Supabase SQL Editoru.
+-- v4.4.10: regex za link imao je gornju granicu 300, a Postgres dozvoljava najviše 255 ponavljanja → 'invalid repetition count(s)'.
+-- Ispravljeno na {8,255}. Idempotentna (create or replace) — ako je ranija verzija već pokrenuta, pokreni ponovo.
+-- Pokreće se RUČNO u Supabase SQL Editoru.
 -- ============================================================
 
 create or replace function public.admin_posalji_azuriranje(p_korisnici uuid[], p_verzija text, p_link text)
@@ -19,7 +21,7 @@ begin
   if coalesce(array_length(p_korisnici, 1), 0) > 500 then raise exception 'Previše korisnika odjednom'; end if;
   v_ver := regexp_replace(coalesce(p_verzija, ''), '^v', '');
   if v_ver !~ '^[0-9]{1,4}(\.[0-9]{1,4}){1,3}$' then raise exception 'Neispravna verzija'; end if;
-  if p_link is null or p_link !~ '^https://[A-Za-z0-9._~:/?#@!$&''()*+,;=%-]{8,300}$' then raise exception 'Neispravan link'; end if;
+  if p_link is null or p_link !~ '^https://[A-Za-z0-9._~:/?#@!$&''()*+,;=%-]{8,255}$' then raise exception 'Neispravan link'; end if;
   v_naziv := '⬆ Nova verzija v' || v_ver || ' — Meni → Ažuriraj aplikaciju';
   v_kml := '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>' || v_naziv
         || '</name><Placemark><name>Nova verzija v' || v_ver || '</name><description><![CDATA[Dostupna je nova verzija aplikacije v' || v_ver

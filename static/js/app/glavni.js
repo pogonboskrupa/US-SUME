@@ -12638,7 +12638,12 @@ function setLayerSqlite(i) {
     if (j === i) { s.visible = true; if (!map.hasLayer(s.layer)) s.layer.addTo(map); }
     else         { s.visible = false; if (map.hasLayer(s.layer)) map.removeLayer(s.layer); }
   });
-  _sqlmapMetaAutoZoom(sl.meta,sl.name);
+  // Promjena karte NE pomjera pogled: centar i zum ostaju isti kao na prethodnoj karti (satelit ↔ topo ↔ offline).
+  // Auto-zum na centar karte ostaje samo pri PRVOM učitavanju/uvozu karte. Ako je centar izvan područja ove karte, kaže se.
+  try {
+    const bb = String(sl.meta?.bounds || '').split(',').map(Number), cc = map.getCenter();
+    if (bb.length === 4 && bb.every(Number.isFinite) && (cc.lng < bb[0] || cc.lng > bb[2] || cc.lat < bb[1] || cc.lat > bb[3])) showToast('ℹ Centar karte je izvan područja ove karte — pomjeri se ili zumiraj na odjel');
+  } catch (e) {}
   _saveLastMap('sqlite', null, sl.name);
   const btn = document.getElementById('layer-switch-btn');
   if (btn) btn.innerHTML = '<svg class="ic"><use href="#ic-arhiva"/></svg>';
@@ -32669,7 +32674,7 @@ async function _loadmapShow(name) {
     let idx=_sqlLayers.findIndex(l=>l.name===name);
     if(idx<0){_loadmapStatus('⏳ Otvaram sačuvanu kartu: '+name);await sqlmapRetryOne(name);idx=_sqlLayers.findIndex(l=>l.name===name);}
     if(idx<0){_loadmapStatus('❌ Karta se nije otvorila. Pokušaj ponovo ili učitaj izvorni fajl.');return false;}
-    setLayerSqlite(idx);_sqlmapMetaAutoZoom(_sqlLayers[idx]?.meta,name);closeLoadMapScreen();return true;
+    setLayerSqlite(idx);closeLoadMapScreen();return true;
   }catch(e){_loadmapStatus('❌ Karta se nije otvorila. Pokušaj ponovo.');return false;}finally{_loadmapOpening=false;}
 }
 async function _loadmapRecentTap(i) { const m=_loadmapRecentShown[i];if(m)await _loadmapShow(m.name); }
