@@ -135,6 +135,10 @@ async def main():
    await restored.goto('http://device.test/');await restored.wait_for_function('_sqlLayers.length===1',timeout=30000)
    await restored.wait_for_function('_sqlLayers[0].layer.getContainer()?.querySelector("img.leaflet-tile-loaded")',timeout=30000)
    assert await restored.evaluate('_sqlLayers[0].name')==originalName
+   # Obnova prikaza je asinhrona (moveend + upis); na sporom CI-u se jedno trenutno čitanje zna desiti prije smirivanja.
+   try:
+    await restored.wait_for_function('(e)=>{const c=map.getCenter();return map.getZoom()===e.z&&Math.abs(c.lat-e.lat)<.00005&&Math.abs(c.lng-e.lng)<.00005}',arg=expectedView,timeout=8000)
+   except Exception: pass
    actualView=await restored.evaluate('({lat:map.getCenter().lat,lng:map.getCenter().lng,z:map.getZoom()})')
    assert actualView['z']==expectedView['z'] and abs(actualView['lat']-expectedView['lat'])<.00005 and abs(actualView['lng']-expectedView['lng'])<.00005,(actualView,expectedView)
    assert not errors,errors

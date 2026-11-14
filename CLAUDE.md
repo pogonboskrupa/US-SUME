@@ -5080,3 +5080,6 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 ### Trokiranje na udaljenom zumu offline karte (v4.6.0)
 - Poslije v4.5.9 prijavljeno "aplikacija trokira"; admin Debug: **379 pločica u DOM-u**, `_onZoomTransitionEnd` 586 ms i 308 ms (Leaflet, kreira stotine `<img>` odjednom). v4.5.9 je prestala bacati pločice u trajni negativni keš, pa se na udaljenom zumu sad stvarno učitavaju/dekodiraju sve (ranije su mnoge bile trajno prazne = jeftine).
 - Ublaženo (uzrok na uređaju NEPOTVRĐEN): dok je `getZoomScale < 1`, `keepBuffer` sloja je 1 (bilo 4; `_kbPrije` pamti staro i vraća ga pri normalnom zumu), i samo JEDAN ponovni pokušaj čitanja za 500/grešku (bilo 2). Ako i dalje trokira: uzeti Debug ("Kašnjenje glavne niti", "Šta je držalo nit") i razmotriti raspoređivanje kreiranja pločica kroz više frame-ova.
+
+### CI trka u testu hladnog restarta (v4.6.1)
+- Release v4.6.0 nije nastao jer je `tests/browser/device-workflow-273.py` pao samo na CI-ju (lokalno 3/3 prolazi): obnova sačuvanog prikaza poslije hladnog restarta je asinhrona, a test je prikaz čitao jednom, odmah. Sad čeka (do 8 s) da se centar/zum poklope s očekivanim pa tek onda tvrdi. Nema izmjene app koda.
