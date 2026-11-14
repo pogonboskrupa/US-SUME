@@ -31305,6 +31305,12 @@ const _sqlGridObruc = {
     // još povećao i usporio popunjavanje, a rub se tu ionako vidi sitno.
     let sk = 1;
     try { sk = this._map.getZoomScale(this._map.getZoom(), this._tileZoom); } catch(e) {}
+    // v4.6.0: Debug je pokazao 379 pločica u DOM-u i zastoj od 586 ms u _onZoomTransitionEnd na udaljenom zumu.
+    // Dok je karta udaljena, drži se samo 1 prsten zadržanih pločica (inače se na stotine vidljivih dodaju još
+    // stotine zadržanih); na normalnom zumu ostaje zadana vrijednost uređaja.
+    // (_renderRecover smanjuje keepBuffer pri memorijskom pritisku — vraća se tek ono što je ovdje sakriveno.)
+    if (sk < 1) { if (this._kbPrije === undefined) { this._kbPrije = this.options.keepBuffer; this.options.keepBuffer = Math.min(1, this._kbPrije); } }
+    else if (this._kbPrije !== undefined) { this.options.keepBuffer = this._kbPrije; this._kbPrije = undefined; }
     const p = this.getTileSize().multiplyBy(sk >= 1 ? _SQL_TILE_OBRUC : 0);
     return L.bounds(b.min.subtract(p), b.max.add(p));
   }
@@ -32221,7 +32227,7 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
                   if (_sqlTileNeg.size >= _SQL_TILE_NEG_MAX) _sqlTileNeg.clear();
                   _sqlTileNeg.add(negK);
                   _roditelj();
-                } else if (n < 2) { setTimeout(() => nPokusaj(n + 1), 300 * (n + 1)); }
+                } else if (n < 1) { setTimeout(() => nPokusaj(n + 1), 400); }
                 else _roditelj();   // prolazna greška: roditelj za sada, ali BEZ trajnog "nema"
               });
             };

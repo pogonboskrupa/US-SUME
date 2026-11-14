@@ -13,7 +13,7 @@ t('negativni keš samo uz potvrđen 404', () => {
   assert.strictEqual((blok.match(/_sqlTileNeg\.add/g) || []).length, 1);
 });
 t('500/greška se ponavlja i ne ide u negativni keš', () => {
-  assert.ok(blok.includes("n < 2") && blok.includes('nPokusaj(n + 1)'));
+  assert.ok(blok.includes("n < 1") && blok.includes('nPokusaj(n + 1)'));
   assert.ok(blok.includes('BEZ trajnog'));
 });
 t('istek od 20 s se ponavlja prije odustajanja', () => {
@@ -21,5 +21,8 @@ t('istek od 20 s se ponavlja prije odustajanja', () => {
 });
 t('obruč se ne dodaje na udaljenom zumu', () => {
   assert.ok(/sk >= 1 \? _SQL_TILE_OBRUC : 0/.test(HTML));
+});
+t('na udaljenom zumu se zadržava samo 1 prsten pločica', () => {
+  assert.ok(/_kbPrije = this\.options\.keepBuffer; this\.options\.keepBuffer = Math\.min\(1, this\._kbPrije\)/.test(HTML));
 });
 console.log(pass + ' prošlo');
