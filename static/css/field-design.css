@@ -1670,3 +1670,7 @@ html #ab-loc-popup .abp-head {gap:8px;}
 html .abp-donji .abp-chip {min-height:37px;font-size:14px;padding:4px 6px;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:19px;}
 html .abp-donji .abp-chip .ic {width:18px;height:18px;margin:0;flex:0 0 auto;}
 html .abp-donji .abp-chip span {white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* v4.5.5: način mjerenja se bira SAMO iz menija Izmjeri; u panelu ostaje samo oznaka izabranog (ne može se mijenjati). */
+html #mjtrg-panel .msr-modes button:not(.on) {display:none;}
+html #mjtrg-panel .msr-modes button {pointer-events:none;flex:1;}

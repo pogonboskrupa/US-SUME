@@ -5054,3 +5054,6 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 ### "Izmjeri" iz modala lokacije nije radilo uz aktivan projekat (v4.5.4)
 - Pravi uzrok (v4.5.1–v4.5.3 su ga promašile): `#ab-izmjeri-menu` je bio DIJETE `#ab-izmjeri-wrap`, a `_updFabVisibility` stavlja wrap na `display:none` kad postoji aktivan projekat (`!hasProj`) ili tokom snimanja. Meni je `position:fixed`, ali ga skriveni roditelj skriva i takvog — pločica je "otvarala" nevidljiv meni. U Playwright testovima nije bilo aktivnog projekta pa se nije vidjelo. Meni je sada SESTRA wrap-a (direktno dijete `#action-bar`), a zatvarač ne zatvara klik unutar menija. Test: `tests/js/izmjeri-meni-sestra.test.js`.
 - **Pouka**: popup koji se otvara iz drugog mjesta ne smije živjeti unutar elementa koji ima vlastitu logiku vidljivosti.
+
+### Način mjerenja se bira samo iz menija Izmjeri (v4.5.5)
+- Panel mjerenja (`#mjtrg-panel .msr-modes`) je nudio ponovni izbor Distanca/Površina/Nagib iako je korisnik način već izabrao u meniju Izmjeri. Sad CSS sakriva neizabrane i gasi klik na izabranu (ostaje kao oznaka šta se mjeri); ID-jevi `msrm-*` i `_msrSetMode` su isti. Promjena načina = novi izbor u Izmjeri. Test: `tests/js/izmjeri-nacin-zakljucan.test.js`.
