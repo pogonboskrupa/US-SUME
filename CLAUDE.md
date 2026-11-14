@@ -5065,3 +5065,8 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 
 ### Format mjerenja (v4.5.7)
 - Hektari UVIJEK na dvije decimale (`_msrHaTxt`, i u redu "Površina" panela); dužine UVIJEK u metrima bez decimala (`_msrFmt` više ne prelazi na km); nagib samo u procentima — ugao u stepenima je uklonjen sa oznake, iz panela i popupa (umjesto njega "Visinska razlika" u m). Test: `tests/js/msr-profil-oznake.test.js`.
+
+### Ikona aplikacije ispunjava polje (v4.5.8)
+- Terenska primjedba (screenshot launchera): ikona je "umanjena i nepregledna" naspram ostalih aplikacija. Uzrok: crtež (puna Dendro map grafika) je u adaptivnom foregroundu zauzimao samo ~42 % platna na ravnoj tamnozelenoj pozadini, dok ostale aplikacije imaju crtež preko cijele ikone.
+- Sad: foreground je crtež (`docs/DENDRO_MAP_ICON.png`, unutrašnji dio bez zaobljenog okvira) na **76 % platna**, pomjeren da sadržaj (D logo lijevo, "Dendro map" dolje) bude centriran u vidljivom oknu (72/108 dp); **pozadina je isti crtež zamućen preko cijelog platna** (`mipmap-*/ic_launcher_background.png`, XML-ovi u `mipmap-anydpi-v26` upućuju na `@mipmap/ic_launcher_background`), pa nema ravnog tamnog ruba. Legacy `ic_launcher.png`/`_round.png` su pun crtež (round = krug).
+- Test `launcher-icon.test.js` više ne traži stari 61 % "safe zone" (to je i napravilo sitnu ikonu), nego da crtež zauzima 70–85 % platna. "D" na lijevom rubu i "Dendro" desno su na granici vidljivog okna — ne povećavati preko 80 % bez provjere. Traži pun APK build (CI); ikonu launcher osvježi tek poslije ažuriranja/ponovne instalacije.

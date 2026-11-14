@@ -21,7 +21,7 @@ assert.ok(!layer.includes('-5.5dp'),'nova puna ikona nema povećanje starog grba
 assert.ok(layer.includes('@mipmap/ic_launcher_foreground'));assert.ok(layer.includes('android:gravity="fill"'));
 for(const name of ['ic_launcher_visible','ic_launcher_round_visible']){
  const adaptive=fs.readFileSync(path.join(res,'mipmap-anydpi-v26',name+'.xml'),'utf8');
- assert.ok(adaptive.includes('@color/ic_launcher_background'));assert.ok(adaptive.includes('@drawable/ic_launcher_foreground_visible'));
+ assert.ok(adaptive.includes('@mipmap/ic_launcher_background'));assert.ok(adaptive.includes('@drawable/ic_launcher_foreground_visible'));
  const legacy=fs.readFileSync(path.join(res,'mipmap-anydpi',name+'.xml'),'utf8');assert.ok(legacy.includes('48dp'));assert.ok(legacy.includes('android:gravity="fill"'));assert.ok(legacy.includes(name.includes('round')?'@mipmap/ic_launcher_round':'@mipmap/ic_launcher'));
 }
 const results=[];
@@ -33,9 +33,11 @@ for(const density of ['mdpi','hdpi','xhdpi','xxhdpi','xxxhdpi']){
   // Include pixel corners + 1 target pixel interpolation allowance.
   radius=Math.max(radius,Math.hypot(Math.abs(x+.5-w/2)+.5,Math.abs(y+.5-h/2)+.5)+1);
  }
- assert.ok(radius<=w*33/108,`${density}: artwork exceeds central 66dp safe circle (${radius})`);
- const diagonal=Math.hypot(maxX-minX+1,maxY-minY+1)/w;
- assert.ok(diagonal<=.61,`${density}: bounding diagonal exceeds safe-zone rule (${diagonal})`);
+ // v4.5.8: ikona mora ISPUNJAVATI polje kao ostale aplikacije (ranije 42 % platna = sitna).
+ // Crtež je 76 % platna (vidljivo okno launchera je 66,7 %), a pozadina je isti crtež preko cijelog platna.
+ const sirina=(maxX-minX+1)/w;
+ assert.ok(sirina>=.70&&sirina<=.85,`${density}: crtež mora zauzimati 70-85 % platna (${sirina})`);
+ assert.ok(fs.existsSync(path.join(res,'mipmap-'+density,'ic_launcher_background.png')));
  results.push({density,radius:Math.round(radius*100)/100,safeRadius:w*33/108});
 }
 const html=require('./_izvor').izvor();
