@@ -18294,7 +18294,7 @@ function _pratiUp() { clearTimeout(_pratiLpT); _pratiLpT = null; }
 function _pratiKlik() { if (_pratiLpBio) { _pratiLpBio = false; return false; } return true; }
 function _pratiPostavi(on) {
   _pratiMe = !!on;
-  const c = document.querySelector('#ab-loc-popup .abp-centar');
+  const c = document.querySelector('#ab-loc-popup .abp-prati');
   ['ab-centar'].forEach(id => { const b = document.getElementById(id); if (b) b.classList.toggle('prati', _pratiMe); });
   if (c) { c.classList.toggle('prati', _pratiMe); c.setAttribute('aria-pressed', String(_pratiMe)); }
 }
@@ -18333,7 +18333,9 @@ function _locPopupUslikaj() {
 // Tile "Trag": s uključenom lokacijom snima/završava trag, bez nje otvara listu tragova.
 function _locTragKlik() { if (gpsOn) _locPopupSnimiTrag(); else _locPopupTragovi('trg'); }
 // Tile "Mjerenja": odmah nudi izbor udaljenost / nagib / površina (isti meni kao dugme Izmjeri).
-function _locPopupMjerenja() {
+function _locPopupMjerenja(ev) {
+  // Globalni 'click' osluškivač zatvara #ab-izmjeri-menu za svaki klik van #ab-izmjeri-wrap — bez ovoga se meni zatvori istog trena.
+  if (ev && ev.stopPropagation) ev.stopPropagation();
   const pop = document.getElementById('ab-loc-popup'); if (pop) pop.style.display = 'none';
   const m = document.getElementById('ab-izmjeri-menu'); if (m) m.style.display = 'block';
 }

@@ -150,7 +150,7 @@ t('Moja lokacija: Trag bez GPS-a otvara Tragove, sa GPS-om snima; Mjerenja odmah
   const api = new Function('document', '_locPopupSnimiTrag', '_locPopupTragovi', 'gpsGet', src.replace(/\bgpsOn\b/g, 'gpsGet()'))(doc, () => calls.push('snimi'), t => calls.push('lista:' + t), () => gps);
   gps = false; api._locTragKlik(); gps = true; api._locTragKlik();
   assert.deepEqual(calls, ['lista:trg', 'snimi']);
-  api._locPopupMjerenja();
+  let stopped=0; api._locPopupMjerenja({stopPropagation:()=>stopped++}); assert.equal(stopped,1,'klik ne smije stići do globalnog zatvarača menija');
   assert.equal(els['ab-loc-popup'].style.display, 'none'); assert.equal(els['ab-izmjeri-menu'].style.display, 'block');
 });
 

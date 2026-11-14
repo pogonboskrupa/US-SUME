@@ -1659,3 +1659,14 @@ html .abp-chips.abp-donji {display:grid;grid-template-columns:repeat(3,1fr);gap:
 html .abp-donji .abp-chip {min-height:53px;font-size:15px;padding:6px 4px;}
 html #ab-loc-popup.gps-off .abp-donji {display:none;}
 html #ab-loc-popup .abp-ukljuci {min-height:48px;margin-bottom:8px;}
+
+/* v4.5.2: zaglavlje Moja lokacija — Prati me + Centriraj uz prekidač; donji red 30 % niži, ikona uz natpis */
+html #ab-loc-popup .abp-hb {flex:0 0 auto;width:54px;height:44px;border-radius:12px;border:1.5px solid var(--field-border);background:transparent;color:var(--field-ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;padding:0;font:600 9.5px system-ui;border-radius:12px;}
+html #ab-loc-popup .abp-hb .ic {width:19px;height:19px;margin:0;}
+html #ab-loc-popup .abp-hb span {white-space:nowrap;}
+html #ab-loc-popup .abp-hb.prati {background:rgba(34,197,94,.18);border-color:#4ade80;}
+html #ab-loc-popup.gps-off .abp-hb {display:none;}
+html #ab-loc-popup .abp-head {gap:8px;}
+html .abp-donji .abp-chip {min-height:37px;font-size:14px;padding:4px 6px;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:19px;}
+html .abp-donji .abp-chip .ic {width:18px;height:18px;margin:0;flex:0 0 auto;}
+html .abp-donji .abp-chip span {white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}

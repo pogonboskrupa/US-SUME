@@ -5910,7 +5910,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.5.1';
+const APP_VER = 'v4.5.2';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7808,7 +7808,8 @@ function _loadLocalVlake() {
           <div class="abp-title">Moja lokacija</div>
           <div class="abp-sub"><span id="gps-info">Isključen</span><span id="gps-age"></span></div>
         </div>
-        <button type="button" class="abp-centar" onclick="if(_pratiKlik())_locPopupCentriraj()" onpointerdown="_pratiDown()" onpointerup="_pratiUp()" onpointerleave="_pratiUp()" onpointercancel="_pratiUp()" title="Centriraj kartu na moju lokaciju (dug dodir: prati me)" aria-label="Centriraj"><svg class="ic"><use href="#ic-meta"/></svg><i class="prati-tog" aria-hidden="true"></i></button>
+        <button type="button" class="abp-hb abp-prati" id="abp-prati" onclick="_pratiToggle()" title="Prati me: karta ide za tobom" aria-label="Prati me"><svg class="ic"><use href="#ic-gps"/></svg><span>Prati me</span></button>
+        <button type="button" class="abp-hb abp-centar" onclick="if(_pratiKlik())_locPopupCentriraj()" onpointerdown="_pratiDown()" onpointerup="_pratiUp()" onpointerleave="_pratiUp()" onpointercancel="_pratiUp()" title="Centriraj kartu na moju lokaciju (dug dodir: prati me)" aria-label="Centriraj"><svg class="ic"><use href="#ic-meta"/></svg><span>Centriraj</span></button>
         <span class="gps-switch" id="gps-switch" onclick="toggleGPS()" title="GPS uključen / isključen"><span class="gps-switch-knob"></span></span>
       </div>
       <button class="abp-ukljuci" onclick="toggleGPS()">
@@ -7816,7 +7817,7 @@ function _loadLocalVlake() {
       <div class="abp-tiles">
         <button type="button" id="ab-loc-trag" class="abp-tile2 abp-trag" onclick="_locTragKlik()" title="Snimanje traga / lista tragova">
           <svg class="ic"><use href="#ic-trag"/></svg><span id="ab-loc-trag-txt">Tragovi</span></button>
-        <button type="button" class="abp-tile2" id="ab-loc-mjerenja" onclick="_locPopupMjerenja()" title="Mjerenje: udaljenost, nagib, površina">
+        <button type="button" class="abp-tile2" id="ab-loc-mjerenja" onclick="_locPopupMjerenja(event)" title="Mjerenje: udaljenost, nagib, površina">
           <svg class="ic"><use href="#ic-uglomjer"/></svg><span>Mjerenja</span></button>
         <button type="button" class="abp-tile2 abp-samo-gps" id="ab-loc-foto" onclick="_locPopupUslikaj()" title="Uslikaj fotografiju na ovoj lokaciji">
           <svg class="ic"><use href="#ic-kamera"/></svg><span>Slika</span></button>
@@ -7824,9 +7825,9 @@ function _loadLocalVlake() {
           <svg class="ic"><use href="#ic-pozicija"/></svg><span>Tačka</span></button>
       </div>
       <div class="abp-chips abp-donji">
-        <button class="abp-chip" id="forest-switch" onclick="_locChipSumski()" onpointerdown="_locLongPress(event)" onpointerup="_locLongPressStop()" onpointerleave="_locLongPressStop()" oncontextmenu="return false" title="Šumski mod — drži prst za objašnjenje">Šumski mod</button>
-        <button class="abp-chip" id="compass-switch" onclick="_togCompassSwitch()" title="Kompas / pravac gledanja">Kompas</button>
-        <button class="abp-chip" id="radius-switch" onclick="_togRadiusRings()" title="Krugovi udaljenosti oko tebe">Radijus</button>
+        <button class="abp-chip" id="forest-switch" onclick="_locChipSumski()" onpointerdown="_locLongPress(event)" onpointerup="_locLongPressStop()" onpointerleave="_locLongPressStop()" oncontextmenu="return false" title="Šumski mod — drži prst za objašnjenje"><svg class="ic"><use href="#ic-stablo"/></svg><span>Šumski mod</span></button>
+        <button class="abp-chip" id="compass-switch" onclick="_togCompassSwitch()" title="Kompas / pravac gledanja"><svg class="ic"><use href="#ic-kompas"/></svg><span>Kompas</span></button>
+        <button class="abp-chip" id="radius-switch" onclick="_togRadiusRings()" title="Krugovi udaljenosti oko tebe"><svg class="ic"><use href="#ic-buffer"/></svg><span>Radijus</span></button>
       </div>
     </div>
   </div>
