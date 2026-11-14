@@ -5057,3 +5057,8 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 
 ### Način mjerenja se bira samo iz menija Izmjeri (v4.5.5)
 - Panel mjerenja (`#mjtrg-panel .msr-modes`) je nudio ponovni izbor Distanca/Površina/Nagib iako je korisnik način već izabrao u meniju Izmjeri. Sad CSS sakriva neizabrane i gasi klik na izabranu (ostaje kao oznaka šta se mjeri); ID-jevi `msrm-*` i `_msrSetMode` su isti. Promjena načina = novi izbor u Izmjeri. Test: `tests/js/izmjeri-nacin-zakljucan.test.js`.
+
+### Oznake i profil mjerenja (v4.5.6)
+- **Površina** se uvijek ispisuje u **ha** u sredini poligona (`_msrHaTxt`: ≥1 ha 2 decimale, manje 3–4, nikad m²/km²); **dužina i nagib** idu PORED linije (`_msrBocniPomak`: okomito na segment, uvijek na stranu "gore", pomak = pola kapsule u tom smjeru + razmak — smjer je isti na svakom zumu, pa se računa jednom pri crtanju), u kapsuli sa obrisom (`.msr-oz`, bijeli prsten + obojen rub; za nagib boja ruba = `_gradeColor`). `_msrOznake(pts, mode, boja)` je JEDNO mjesto za živo (`_msrRedraw`) i sačuvano (`_msrDrawAllSaved`) mjerenje. Prekidač "Prikaži oznaku na karti" i polje `showLbl` su UKLONJENI — oznake su uvijek tu.
+- **Profil terena** za Distancu i Nagib: u panelu (`#msr-profil`, `_msrProfilOsvjezi`, debounce 350 ms + token da stariji odgovor ne pregazi noviji) i u popupu sačuvanog mjerenja ("📈 Profil terena" → postojeći `_renderElevProfile`). Visine: `_msrDemElev` (isti keš pločica kao N.V., radi offline uz preuzet teren), tek ako DEM nema pločicu batch `_fetchProfileElev`. Segmenti su obojeni nagibom, uz Početak/Kraj/Razlika/Max i prosječan nagib.
+- Panel mjerenja je viši (`min(78vh, 640px)`) da profil stane. Test: `tests/js/msr-profil-oznake.test.js`, `msr-oznaka.test.js`.

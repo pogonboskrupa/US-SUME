@@ -1674,3 +1674,18 @@ html .abp-donji .abp-chip span {white-space:nowrap;overflow:hidden;text-overflow
 /* v4.5.5: način mjerenja se bira SAMO iz menija Izmjeri; u panelu ostaje samo oznaka izabranog (ne može se mijenjati). */
 html #mjtrg-panel .msr-modes button:not(.on) {display:none;}
 html #mjtrg-panel .msr-modes button {pointer-events:none;flex:1;}
+
+/* v4.5.6: oznake mjerenja na karti (kapsula sa obrisom, pored linije / u sredini poligona) i profil terena u panelu */
+.msr-oz {position:absolute;left:0;top:0;pointer-events:none;white-space:nowrap;display:flex;flex-direction:column;align-items:center;line-height:1.15;
+  background:rgba(15,23,42,.92);color:#fff;border:2.5px solid var(--c,#fbbf24);border-radius:12px;padding:3px 9px;
+  box-shadow:0 0 0 2px #fff,0 2px 8px rgba(0,0,0,.55);font-family:inherit;}
+.msr-oz b {font-size:14px;font-weight:800;text-shadow:0 0 2px #000,0 0 2px #000;}
+.msr-oz small {font-size:10.5px;font-weight:600;color:#e2e8f0;}
+.msr-oz.ha {padding:4px 12px;border-radius:14px;}
+.msr-oz.ha b {font-size:17px;}
+.msr-pf {margin-top:10px;padding:8px 10px;border-radius:10px;background:rgba(15,23,42,.35);border:1px solid rgba(148,163,184,.25);}
+.msr-pf-t {font-size:12px;font-weight:700;margin-bottom:4px;color:inherit;}
+.msr-pf-stats {display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;}
+.msr-pf-st {display:flex;flex-direction:column;font-size:12px;}
+.msr-pf-st small {font-size:10px;opacity:.7;}
+.msr-pf-nema {font-size:12px;opacity:.8;}

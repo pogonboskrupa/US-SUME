@@ -5910,7 +5910,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.5.5';
+const APP_VER = 'v4.5.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7311,6 +7311,7 @@ function _loadLocalVlake() {
             <span>Površina</span><b><span id="msr-area-m2">—</span> m² · <span id="msr-area-ha">—</span> ha</b>
           </div>
         </div>
+        <div id="msr-profil" class="msr-pf" style="display:none;"></div>
       </div>
 
       <!-- TRAGOVI + MJERENJA -->
@@ -7633,7 +7634,6 @@ function _loadLocalVlake() {
       <input id="mqm-odjel" style="width:100%;background:#f8fafc;border:1.5px solid #e2e8f0;color:#1e293b;border-radius:10px;padding:9px 11px;font-size:13px;box-sizing:border-box;outline:none;transition:border-color 0.15s;" onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'" placeholder="npr. 14a">
     </div>
   </div>
-  <label style="display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:13px;color:#1e293b;"><input type="checkbox" id="mqm-lbl" style="width:18px;height:18px"> Prikaži oznaku na karti (površina / dužina)</label>
   <details id="mqm-izgled" class="mqm-izgled" open><summary>🎨 Izgled na karti</summary>
     <div class="mqm-red"><span>Boja</span><div id="mqm-boje" class="mqm-boje"></div></div>
     <div class="mqm-red"><span>Debljina <b id="mqm-deb-v">4</b> px</span><input type="range" id="mqm-deb" min="1" max="12" step="1" value="4" oninput="_mqmStil('weight',+this.value)"></div>

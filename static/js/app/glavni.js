@@ -26242,7 +26242,7 @@ function _mjtrgTab(t) {
   const panel = document.getElementById('mjtrg-panel');
   // Mjerenje: panel onoliko visok koliko mu sadržaj treba (ranije fiksnih 15vh
   // = ~96px na telefonu, pa je rezultat bio ispod ruba).
-  if (panel) panel.style.maxHeight = isMsr ? 'min(60vh, 440px)' : '65vh';
+  if (panel) panel.style.maxHeight = isMsr ? 'min(78vh, 640px)' : '65vh';
   if (!isMsr) { _tragRegRender(); _msrRegRender(); }
 }
 
@@ -26425,6 +26425,8 @@ function _msrRedraw() {
     }
   }
 
+  _msrOznake(pts, _msrMode, _msrColor).forEach(mk => _msrLayer.addLayer(mk));
+
   // Draggable markeri za tačke — SAMO van "Crtaj" moda. Dok se crta (tačke se
   // ubacuju automatski svakih par metara dok korisnik pomjera mapu), marker
   // po svakoj tačci bi zatrpao samu liniju — u tom modu prikaži samo liniju/
@@ -26516,6 +26518,7 @@ function _msrUpdGlavni() {
 function _msrUpdPanel() {
   _msrUpdUndoBtn();
   _msrUpdGlavni();
+  _msrProfilOsvjezi();
   const totalBox = document.getElementById('msr-total-box');
   if (!totalBox) return;
   const pts = _msrPts;
@@ -26750,7 +26753,6 @@ function _mqmOpen() {
   if (nameEl) nameEl.value = entry.name;
   const odj = document.getElementById('mqm-odjel');
   if (odj) odj.value = entry.odjel;
-  const lb0 = document.getElementById('mqm-lbl'); if (lb0) lb0.checked = false;
   const title = document.getElementById('mqm-title');
   if (title) title.textContent = '📏 Mjerenje završeno — spremi opis (opciono)';
   document.getElementById('mqm-delete-btn').style.display = 'none';  // novo mjerenje — ništa za brisanje
@@ -26791,7 +26793,6 @@ function _mqmSave() {
     m.odjel = (document.getElementById('mqm-odjel')?.value || '').trim();
     m.pts   = _msrPts.slice();
     m.color = _msrColor;
-    m.showLbl = !!document.getElementById('mqm-lbl')?.checked;
     _msrRegSave();
   }
   _mqmClose();
@@ -26935,7 +26936,7 @@ function _msrPopupHtml(m) {
         const ang = (dh!=null&&d>0) ? (Math.atan(dh/d)*180/Math.PI).toFixed(1) : null;
         html += `<div style="font-size:13px;color:#374151;">📏 ${_msrFmt(d)}</div>`;
         if (pct!=null) html += `<div style="font-size:13px;color:#374151;">📐 Nagib: ${pct>0?'+':''}${pct}%</div>`;
-        if (ang!=null) html += `<div style="font-size:13px;color:#374151;">🧭 Azimut: ${ang}°</div>`;
+        if (ang!=null) html += `<div style="font-size:13px;color:#374151;">📐 Ugao: ${ang}°</div>`;
       } else if (mode === 'area' && m.pts.length >= 3) {
         const aM2 = _msrPoligonPovrsina(m.pts);
         html += `<div style="font-size:13px;color:#374151;">📏 Obim: ${_msrFmt(totalDist)}</div>`;
@@ -26952,6 +26953,7 @@ function _msrPopupHtml(m) {
         if (totalUp > 0 || totalDn > 0)
           html += `<div style="font-size:12px;color:#64748b;">⬆ ${Math.round(totalUp)} m &nbsp; ⬇ ${Math.round(totalDn)} m</div>`;
       }
+      if (mode !== 'area') html += `<button onclick="_msrRegProfil('${m.id}')" style="margin-top:8px;width:100%;padding:6px 8px;background:#0f3460;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">📈 Profil terena</button>`;
       html += `<div style="margin-top:10px;display:flex;gap:6px;">
         <button onclick="_msrPosalji('${m.id}')" title="Pošalji kolegu iz šumarije" style="padding:5px 8px;background:#0f766e;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;"><svg class="ic"><use href="#ic-posalji"/></svg></button>
         <button onclick="_msrRegZoom('${m.id}')" style="flex:1;padding:5px 8px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;"><svg class="ic"><use href="#ic-crtaj"/></svg>️ Edituj</button>
@@ -27064,6 +27066,181 @@ function _msrLblLinija(pts) {
   for (let i = 0; i < seg.length; i++) { if (r <= seg[i] || i === seg.length - 1) { const t = seg[i] ? Math.min(1, r / seg[i]) : 0; return [pts[i].lat + (pts[i + 1].lat - pts[i].lat) * t, pts[i].lng + (pts[i + 1].lng - pts[i].lng) * t]; } r -= seg[i]; }
   return [pts[0].lat, pts[0].lng];
 }
+
+// ── Oznake mjerenja na karti (v4.5.6) ───────────────────────────────────────
+// Površina: UVIJEK u hektarima, u sredini poligona. Dužina i nagib: PORED
+// linije (okomito pomjereno za nekoliko piksela, ne preko nje), u kapsuli sa
+// obrisom da se čita na svakoj podlozi. Smjer linije je isti na svakom zumu
+// (Mercator je konformna projekcija), pa se pomak računa jednom pri crtanju.
+function _msrHaTxt(m2) {
+  const ha = m2 / 10000;
+  return (ha >= 1 ? ha.toFixed(2) : ha >= 0.1 ? ha.toFixed(3) : ha.toFixed(4)) + ' ha';
+}
+function _msrNagibTxt(pts) {
+  const a = pts[0], z = pts[pts.length - 1];
+  const d = _msrHaversine(a.lat, a.lng, z.lat, z.lng);
+  if (a.elev == null || z.elev == null || !(d > 0)) return null;
+  const dh = z.elev - a.elev;
+  return { pct: dh / d * 100, ang: Math.atan(dh / d) * 180 / Math.PI, dh, d };
+}
+// Tačka na polovini dužine + indeks segmenta na kojem leži (za smjer pomaka).
+function _msrPolaLinije(pts) {
+  const seg = []; let tot = 0;
+  for (let i = 1; i < pts.length; i++) { const l = _msrHaversine(pts[i-1].lat, pts[i-1].lng, pts[i].lat, pts[i].lng); seg.push(l); tot += l; }
+  let r = tot / 2;
+  for (let i = 0; i < seg.length; i++) {
+    if (r <= seg[i] || i === seg.length - 1) {
+      const t = seg[i] ? Math.min(1, r / seg[i]) : 0;
+      return { lat: pts[i].lat + (pts[i+1].lat - pts[i].lat) * t, lng: pts[i].lng + (pts[i+1].lng - pts[i].lng) * t, i };
+    }
+    r -= seg[i];
+  }
+  return { lat: pts[0].lat, lng: pts[0].lng, i: 0 };
+}
+// Pomak u pikselima okomito na segment, uvijek na stranu "gore" (da tekst ne ide ispod linije).
+function _msrBocniPomak(a, b, hw, hh) {
+  let dx = 0, dy = -1;
+  try {
+    const pa = map.project([a.lat, a.lng], map.getZoom()), pb = map.project([b.lat, b.lng], map.getZoom());
+    dx = pb.x - pa.x; dy = pb.y - pa.y;
+  } catch (e) {}
+  const len = Math.hypot(dx, dy) || 1;
+  let ox = -dy / len, oy = dx / len;
+  if (oy > 0 || (Math.abs(oy) < 1e-6 && ox < 0)) { ox = -ox; oy = -oy; }
+  const px = Math.abs(ox) * hw + Math.abs(oy) * hh + 10; // pola kapsule u smjeru pomaka + razmak
+  return [Math.round(ox * px), Math.round(oy * px)];
+}
+function _msrOznakaMarker(lat, lng, html, boja, ox, oy, klasa) {
+  return L.marker([lat, lng], {
+    icon: L.divIcon({ className: '', iconSize: [0, 0], iconAnchor: [0, 0],
+      html: `<div class="msr-oz ${klasa || ''}" style="--c:${boja};transform:translate(calc(-50% + ${ox}px),calc(-50% + ${oy}px))">${html}</div>` }),
+    interactive: false, pane: 'vlakeLabels', keyboard: false
+  });
+}
+// Vraća niz markera za mjerenje (živo ili sačuvano). Prazan niz kad nema šta pokazati.
+function _msrOznake(pts, mode, boja) {
+  const out = [];
+  if (!pts || pts.length < 2 || typeof L === 'undefined') return out;
+  boja = boja || '#fbbf24';
+  if (mode === 'area') {
+    if (pts.length < 3) return out;
+    const c = _msrLblPoligon(pts);
+    out.push(_msrOznakaMarker(c[0], c[1], _msrHaTxt(_msrPoligonPovrsina(pts)), boja, 0, 0, 'ha'));
+    return out;
+  }
+  if (mode === 'nagib') {
+    const a = pts[0], z = pts[pts.length - 1];
+    const mid = { lat: (a.lat + z.lat) / 2, lng: (a.lng + z.lng) / 2 };
+    const n = _msrNagibTxt(pts);
+    const [ox, oy] = _msrBocniPomak(a, z, 50, 22);
+    if (n) {
+      const znak = n.pct > 0 ? '+' : '';
+      out.push(_msrOznakaMarker(mid.lat, mid.lng,
+        `<b>${znak}${n.pct.toFixed(1)} %</b><small>${znak}${n.ang.toFixed(1)}° · ${_msrFmt(n.d)}</small>`,
+        _gradeColor(Math.abs(n.pct)), ox, oy, 'nagib'));
+    } else {
+      out.push(_msrOznakaMarker(mid.lat, mid.lng, `<b>…</b><small>${_msrFmt(_msrHaversine(a.lat, a.lng, z.lat, z.lng))} · čitam visinu</small>`, boja, ox, oy, 'nagib'));
+    }
+    return out;
+  }
+  const pola = _msrPolaLinije(pts);
+  const [ox, oy] = _msrBocniPomak(pts[pola.i], pts[pola.i + 1], 32, 14);
+  out.push(_msrOznakaMarker(pola.lat, pola.lng, `<b>${_msrFmt(_msrPts2Len(pts))}</b>`, boja, ox, oy, 'dist'));
+  return out;
+}
+
+// ── Profil terena duž izmjerene linije (v4.5.6) ─────────────────────────────
+// Visine ravnomjerno duž linije iz preuzetog modela terena (isti DEM keš kao
+// N.V., radi i bez mreže ako je teren preuzet); samo ako pločica nema, batch
+// upit na mrežu. Boja segmenta = nagib (ista skala kao bojenje vlaka).
+function _msrUzorci(pts) {
+  const len = _msrPts2Len(pts);
+  const n = Math.max(6, Math.min(60, Math.round(len / 8) + 1));
+  const out = []; let seg = 0, pre = 0;
+  const segL = []; for (let i = 1; i < pts.length; i++) segL.push(_msrHaversine(pts[i-1].lat, pts[i-1].lng, pts[i].lat, pts[i].lng));
+  for (let k = 0; k < n; k++) {
+    const target = len * k / (n - 1);
+    while (seg < segL.length - 1 && pre + segL[seg] < target) { pre += segL[seg]; seg++; }
+    const t = segL[seg] ? Math.min(1, Math.max(0, (target - pre) / segL[seg])) : 0;
+    out.push({ la: pts[seg].lat + (pts[seg+1].lat - pts[seg].lat) * t, lo: pts[seg].lng + (pts[seg+1].lng - pts[seg].lng) * t, d: target });
+  }
+  return out;
+}
+async function _msrProfilPodaci(pts) {
+  if (!pts || pts.length < 2) return null;
+  const S = _msrUzorci(pts);
+  let alts = await Promise.all(S.map(p => _msrDemElev(p.la, p.lo).catch(() => null)));
+  if (alts.some(v => v == null)) {
+    const res = await _fetchProfileElev(S.map(p => ({ la: p.la, lo: p.lo }))).catch(() => null);
+    if (res && res.alts && res.alts.length === S.length) alts = res.alts;
+    else if (alts.every(v => v == null)) return null;
+    else { // djelimično: popuni rupe najbližom poznatom visinom
+      let zadnja = alts.find(v => v != null);
+      alts = alts.map(v => { if (v != null) zadnja = v; return zadnja; });
+    }
+  }
+  return { S, alts, len: S[S.length - 1].d };
+}
+function _msrProfilStat(pr) {
+  const { S, alts } = pr;
+  const g = [];
+  for (let i = 1; i < S.length; i++) { const d = S[i].d - S[i-1].d; g.push(d > 0.5 ? (alts[i] - alts[i-1]) / d * 100 : 0); }
+  const glat = g.map((v, i) => (i && i < g.length - 1) ? (g[i-1] + v * 2 + g[i+1]) / 4 : v);
+  const ab = glat.map(Math.abs);
+  return { g: glat, max: ab.length ? Math.max(...ab) : 0, avg: ab.length ? ab.reduce((s, x) => s + x, 0) / ab.length : 0,
+    min: Math.min(...alts), maxAlt: Math.max(...alts) };
+}
+function _msrProfilSvg(pr) {
+  const { S, alts, len } = pr, st = _msrProfilStat(pr);
+  const W = 360, H = 150, pd = { t: 10, r: 8, b: 22, l: 38 }, pw = W - pd.l - pd.r, ph = H - pd.t - pd.b;
+  const rng = (st.maxAlt - st.min) || 1;
+  const sx = i => pd.l + (S[i].d / (len || 1)) * pw, sy = i => pd.t + ph - ((alts[i] - st.min) / rng) * ph;
+  let seg = '', grid = '';
+  for (let t = 0; t <= 2; t++) {
+    const y = pd.t + ph - t / 2 * ph;
+    grid += `<line x1="${pd.l}" y1="${y.toFixed(1)}" x2="${pd.l + pw}" y2="${y.toFixed(1)}" stroke="rgba(148,163,184,.25)"/>` +
+      `<text x="${pd.l - 4}" y="${(y + 3).toFixed(1)}" text-anchor="end" fill="#94a3b8" font-size="9">${Math.round(st.min + t / 2 * rng)}</text>`;
+  }
+  for (let t = 0; t <= 2; t++) grid += `<text x="${(pd.l + t / 2 * pw).toFixed(1)}" y="${H - 6}" text-anchor="${t === 0 ? 'start' : t === 2 ? 'end' : 'middle'}" fill="#94a3b8" font-size="9">${_msrFmt(len * t / 2)}</text>`;
+  for (let i = 1; i < S.length; i++) {
+    seg += `<line x1="${sx(i-1).toFixed(1)}" y1="${sy(i-1).toFixed(1)}" x2="${sx(i).toFixed(1)}" y2="${sy(i).toFixed(1)}" stroke="${_gradeColor(Math.abs(st.g[i-1]))}" stroke-width="3.5" stroke-linecap="round"/>`;
+  }
+  const fill = `${pd.l},${pd.t + ph} ` + S.map((_, i) => `${sx(i).toFixed(1)},${sy(i).toFixed(1)}`).join(' ') + ` ${sx(S.length - 1).toFixed(1)},${pd.t + ph}`;
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;"><polygon points="${fill}" fill="rgba(148,163,184,.12)"/>${grid}${seg}</svg>`;
+}
+function _msrProfilHtml(pr) {
+  const st = _msrProfilStat(pr);
+  const dh = pr.alts[pr.alts.length - 1] - pr.alts[0];
+  const c = v => `<span class="msr-pf-st"><small>${v[0]}</small><b>${v[1]}</b></span>`;
+  return `<div class="msr-pf-t">Profil terena</div>${_msrProfilSvg(pr)}<div class="msr-pf-stats">` +
+    c(['Početak', Math.round(pr.alts[0]) + ' m']) + c(['Kraj', Math.round(pr.alts[pr.alts.length - 1]) + ' m']) +
+    c(['Razlika', (dh > 0 ? '+' : '') + Math.round(dh) + ' m']) + c(['Max nagib', st.max.toFixed(1) + ' %']) + c(['Prosj. nagib', st.avg.toFixed(1) + ' %']) + `</div>`;
+}
+let _msrProfilTok = 0, _msrProfilT = null;
+// Panel: osvježi profil tek kad se tačke prestanu mijenjati (visine su asinhrone).
+function _msrProfilOsvjezi() {
+  const el = document.getElementById('msr-profil');
+  if (!el) return;
+  if ((_msrMode !== 'dist' && _msrMode !== 'nagib') || _msrPts.length < 2) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  clearTimeout(_msrProfilT);
+  const tok = ++_msrProfilTok, pts = _msrPts.slice();
+  _msrProfilT = setTimeout(async () => {
+    let pr = null;
+    try { pr = await _msrProfilPodaci(pts); } catch (e) {}
+    if (tok !== _msrProfilTok) return;
+    if (!pr) { el.style.display = ''; el.innerHTML = '<div class="msr-pf-t">Profil terena</div><div class="msr-pf-nema">Visine nisu dostupne (nema preuzetog modela terena ni veze).</div>'; return; }
+    el.style.display = ''; el.innerHTML = _msrProfilHtml(pr);
+  }, 350);
+}
+async function _msrRegProfil(id) {
+  const m = _msrRegistry.find(x => x.id === id);
+  if (!m || !m.pts || m.pts.length < 2) return;
+  showToast('⏳ Tražim visine terena…');
+  const pr = await _msrProfilPodaci(m.pts).catch(() => null);
+  if (!pr) { showToast('⚠ Visine nisu dostupne (nema preuzetog terena ni veze)'); return; }
+  _renderElevProfile(m.name, pr.S.map(p => ({ la: p.la, lo: p.lo })), pr.alts, 'model terena');
+}
+
 function _msrDrawAllSaved() {
   if (!window.map) return;
   if (!_msrSavedLayer) { _msrSavedLayer = L.layerGroup(); }
@@ -27079,12 +27256,6 @@ function _msrDrawAllSaved() {
     const buildPopup = () => _msrPopupHtml(m);
 
     const gw = m.weight || _lineStyle.msrW || 4, gd = m.dash || null;
-    // Tekstualna oznaka na karti (dužina na sredini linije / površina u centru poligona)
-    const _msrTextMk = (lat, lng, txt) => L.marker([lat, lng], {
-      icon: L.divIcon({ className: '', iconSize: [0,0], iconAnchor: [0,0],
-        html: `<div class="vlaka-lbl" style="transform:translate(-50%,-50%);color:#fff;font-size:11px;font-weight:bold;pointer-events:none;white-space:nowrap;text-shadow:0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;">${txt}</div>` }),
-      interactive: false, pane: 'vlakeLabels'
-    });
     // Klik otvara popup preko EKSPLICITNOG handlera (ne oslanjanjem na bindPopup-ov
     // automatski click) + zaustavlja DOM propagaciju — isti obrazac koji je popravio
     // identičan problem kod tragova (v3.28.2): bez originalEvent.stopPropagation(),
@@ -27104,11 +27275,7 @@ function _msrDrawAllSaved() {
       poly.bindPopup(buildPopup, {maxWidth: 260});
       poly.on('click', _msrOpenPopup(poly));
       _msrSavedLayer.addLayer(poly);
-      if (m.showLbl === true) {
-        const c = _msrLblPoligon(m.pts);
-        const aM2 = _msrPoligonPovrsina(m.pts);
-        _msrSavedLayer.addLayer(_msrTextMk(c[0], c[1], (aM2/10000).toFixed(2) + ' ha'));
-      }
+      _msrOznake(m.pts, 'area', color).forEach(mk => _msrSavedLayer.addLayer(mk));
     } else {
       const drawLL = mode === 'area' ? [...latlngs, latlngs[0]] : latlngs;
       const hit = L.polyline(drawLL, {color:'#000', weight:28, opacity:0.001, lineCap:'round', lineJoin:'round', interactive:true, pane:'tragMsrLines'});
@@ -27119,10 +27286,7 @@ function _msrDrawAllSaved() {
       _msrSavedLayer.addLayer(hit);
       _msrSavedLayer.addLayer(bg);
       _msrSavedLayer.addLayer(fg);
-      if (m.showLbl === true && m.pts.length >= 2) {
-        const midP = _msrLblLinija(m.pts);
-        _msrSavedLayer.addLayer(_msrTextMk(midP[0], midP[1], _msrFmt(_msrPts2Len(m.pts))));
-      }
+      _msrOznake(m.pts, mode, color).forEach(mk => _msrSavedLayer.addLayer(mk));
     }
   });
 }
@@ -27165,7 +27329,6 @@ function _msrRegZoom(id) {
   if (nameEl) nameEl.value = m.name || '';
   const odj = document.getElementById('mqm-odjel');
   if (odj) odj.value = m.odjel || '';
-  const lb = document.getElementById('mqm-lbl'); if (lb) lb.checked = m.showLbl === true;
   const title = document.getElementById('mqm-title');
   if (title) title.textContent = '✏️ Edituj mjerenje — vuci tačke ili dodaj nove';
   document.getElementById('mqm-delete-btn').style.display = '';  // postojeće mjerenje — nudi brisanje odmah
@@ -27191,7 +27354,6 @@ function _msrRegSetMeta(id) {
   m.name  = (document.getElementById('mreg-ei-name-'+id)?.value || m.name).trim() || m.name;
   m.gj    = _gjGetValue('mreg-'+id);
   m.odjel = (document.getElementById('mreg-ei-odjel-'+id)?.value || '').trim();
-  m.showLbl = !!document.getElementById('mreg-ei-lbl-'+id)?.checked;
   _msrRegSave();
   _msrRegRender();
 }
@@ -27216,7 +27378,6 @@ function _msrRegRender() {
         <div class="mf-col"><label>Naziv</label><input id="mreg-ei-name-${m.id}" value="${_escHtml(m.name)}"></div>
         <div class="mf-col"><label>GJ</label>${_gjFieldHtml('mreg-'+m.id, m.gj||'')}</div>
         <div class="mf-col"><label>Odjel</label><input id="mreg-ei-odjel-${m.id}" value="${_escHtml(m.odjel||'')}" placeholder="npr. 14a"></div>
-        <label class="mf-col" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="mreg-ei-lbl-${m.id}" ${m.showLbl===true?'checked':''}> Prikaži oznaku na karti</label>
         <button class="mf-save" onclick="_msrRegSetMeta('${m.id}')"><svg class="ic"><use href="#ic-potvrdi"/></svg> Spremi</button>
       </div>
       <div class="treg-btns">
