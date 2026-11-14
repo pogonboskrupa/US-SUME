@@ -26247,7 +26247,7 @@ function _mjtrgTab(t) {
 }
 
 function _msrFmt(m) {
-  return m >= 1000 ? (m/1000).toFixed(2) + ' km' : Math.round(m) + ' m';
+  return Math.round(m) + ' m'; // dužine uvijek u metrima, bez decimala
 }
 function _msrBearing(lat1, lng1, lat2, lng2) {
   const toR = Math.PI/180;
@@ -26504,7 +26504,7 @@ function _msrUpdGlavni() {
       if (dh != null && d > 0) {
         const pct = dh / d * 100;
         v = (pct > 0 ? '+' : '') + pct.toFixed(1) + ' %';
-        sub = 'dužina ' + _msrFmt(d) + ' · ugao ' + (Math.atan(dh / d) * 180 / Math.PI).toFixed(1) + '°';
+        sub = 'dužina ' + _msrFmt(d) + ' · visinska razlika ' + (dh > 0 ? '+' : '') + Math.round(dh) + ' m';
       } else { v = '…'; sub = 'dužina ' + _msrFmt(d) + ' · čitam visinu'; }
     } else sub += ' · nagib računam iz 2 tačke';
   } else if (n >= 2) {
@@ -26530,17 +26530,15 @@ function _msrUpdPanel() {
     const dist = _msrHaversine(a.lat,a.lng,b.lat,b.lng);
     const dh   = (b.elev != null && a.elev != null) ? b.elev - a.elev : null;
     const pct  = (dh != null && dist > 0) ? (dh/dist*100).toFixed(1) : null;
-    const ang  = (dh != null && dist > 0) ? (Math.atan(dh/dist)*180/Math.PI).toFixed(1) : null;
     document.getElementById('msr-total-dist').textContent = _msrFmt(dist);
     document.getElementById('msr-total-up').textContent   = pct !== null ? (pct>0?'+':'')+pct+' %' : '—';
-    document.getElementById('msr-total-down').textContent = ang !== null ? (ang>0?'+':'')+ang+'°' : '—';
+    document.getElementById('msr-total-down').textContent = dh !== null ? (dh>0?'+':'')+Math.round(dh)+' m' : '—';
     document.getElementById('msr-area-row').style.display = 'none';
     // Labela - promijeni naslove za nagib
     const labels = totalBox.querySelectorAll('[data-lbl]');
     labels.forEach(l => {
       if (l.dataset.lbl==='up')   l.textContent = 'Nagib';
-      // Ovo je ugao nagiba u stepenima (atan(dh/d)), NE azimut — ranije pogrešno nazvano.
-      if (l.dataset.lbl==='down') l.textContent = 'Ugao';
+      if (l.dataset.lbl==='down') l.textContent = 'Visinska razlika';
     });
     return;
   }
@@ -26572,7 +26570,7 @@ function _msrUpdPanel() {
     const areaM2 = _msrPoligonPovrsina(pts);
     areaRow.style.display = '';
     document.getElementById('msr-area-m2').textContent = Math.round(areaM2).toLocaleString('bs');
-    document.getElementById('msr-area-ha').textContent = (areaM2 / 10000).toFixed(4);
+    document.getElementById('msr-area-ha').textContent = (areaM2 / 10000).toFixed(2);
   } else {
     areaRow.style.display = 'none';
   }
@@ -26933,10 +26931,9 @@ function _msrPopupHtml(m) {
         const d = _msrHaversine(a.lat,a.lng,b.lat,b.lng);
         const dh = (a.elev!=null&&b.elev!=null) ? b.elev-a.elev : null;
         const pct = (dh!=null&&d>0) ? (dh/d*100).toFixed(1) : null;
-        const ang = (dh!=null&&d>0) ? (Math.atan(dh/d)*180/Math.PI).toFixed(1) : null;
         html += `<div style="font-size:13px;color:#374151;">📏 ${_msrFmt(d)}</div>`;
         if (pct!=null) html += `<div style="font-size:13px;color:#374151;">📐 Nagib: ${pct>0?'+':''}${pct}%</div>`;
-        if (ang!=null) html += `<div style="font-size:13px;color:#374151;">📐 Ugao: ${ang}°</div>`;
+        if (dh!=null) html += `<div style="font-size:13px;color:#374151;">⛰ Visinska razlika: ${dh>0?'+':''}${Math.round(dh)} m</div>`;
       } else if (mode === 'area' && m.pts.length >= 3) {
         const aM2 = _msrPoligonPovrsina(m.pts);
         html += `<div style="font-size:13px;color:#374151;">📏 Obim: ${_msrFmt(totalDist)}</div>`;
@@ -27074,14 +27071,14 @@ function _msrLblLinija(pts) {
 // (Mercator je konformna projekcija), pa se pomak računa jednom pri crtanju.
 function _msrHaTxt(m2) {
   const ha = m2 / 10000;
-  return (ha >= 1 ? ha.toFixed(2) : ha >= 0.1 ? ha.toFixed(3) : ha.toFixed(4)) + ' ha';
+  return ha.toFixed(2) + ' ha'; // hektari uvijek na dvije decimale
 }
 function _msrNagibTxt(pts) {
   const a = pts[0], z = pts[pts.length - 1];
   const d = _msrHaversine(a.lat, a.lng, z.lat, z.lng);
   if (a.elev == null || z.elev == null || !(d > 0)) return null;
   const dh = z.elev - a.elev;
-  return { pct: dh / d * 100, ang: Math.atan(dh / d) * 180 / Math.PI, dh, d };
+  return { pct: dh / d * 100, dh, d };
 }
 // Tačka na polovini dužine + indeks segmenta na kojem leži (za smjer pomaka).
 function _msrPolaLinije(pts) {
@@ -27136,7 +27133,7 @@ function _msrOznake(pts, mode, boja) {
     if (n) {
       const znak = n.pct > 0 ? '+' : '';
       out.push(_msrOznakaMarker(mid.lat, mid.lng,
-        `<b>${znak}${n.pct.toFixed(1)} %</b><small>${znak}${n.ang.toFixed(1)}° · ${_msrFmt(n.d)}</small>`,
+        `<b>${znak}${n.pct.toFixed(1)} %</b><small>${_msrFmt(n.d)}</small>`,
         _gradeColor(Math.abs(n.pct)), ox, oy, 'nagib'));
     } else {
       out.push(_msrOznakaMarker(mid.lat, mid.lng, `<b>…</b><small>${_msrFmt(_msrHaversine(a.lat, a.lng, z.lat, z.lng))} · čitam visinu</small>`, boja, ox, oy, 'nagib'));
