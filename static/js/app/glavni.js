@@ -31301,7 +31301,11 @@ const _SQL_TILE_OBRUC = 1;
 const _sqlGridObruc = {
   _getTiledPixelBounds(center) {
     const b = L.GridLayer.prototype._getTiledPixelBounds.call(this, center);
-    const p = this.getTileSize().multiplyBy(_SQL_TILE_OBRUC);
+    // Udaljeni zum (karta zumirana ispod nivoa pločica) već traži stotine pločica odjednom — obruč bi to
+    // još povećao i usporio popunjavanje, a rub se tu ionako vidi sitno.
+    let sk = 1;
+    try { sk = this._map.getZoomScale(this._map.getZoom(), this._tileZoom); } catch(e) {}
+    const p = this.getTileSize().multiplyBy(sk >= 1 ? _SQL_TILE_OBRUC : 0);
     return L.bounds(b.min.subtract(p), b.max.add(p));
   }
 };
@@ -32185,29 +32189,46 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       // ide starim putem, koji potvrdi "nema" (negativni keš) i nacrta uvećanog roditelja.
       const nUrl = (window.NativeOfflineMaps && NativeOfflineMaps.tileUrl) ? NativeOfflineMaps.tileUrl(name) : null;
       if (nUrl && !_sqlTileNeg.has(name + '/' + z + '/' + x + '/' + y)) {
-        _wTileSlot(_pri).then(pusti => {
-          if (!pusti) { _doneP(); return; }
-          const rt0 = _now();
-          let gotovo = false;
-          const kraj = () => { if (gotovo) return false; gotovo = true; clearTimeout(tm); pusti(); return true; };
-          const tm = setTimeout(() => { if (kraj()) { img.onload = img.onerror = null; img.removeAttribute('src'); _tileProf.timeout++; _doneP(); } }, 20000);
-          img.onload = () => {
-            if (!kraj()) return;
-            const dt = _now() - rt0; _tileProf.reads++; _tileProf.readSum += dt; if (dt > _tileProf.readMax) _tileProf.readMax = dt;
-            _doneP();
-          };
-          // Greška native <img> je skoro uvijek 404 (pločice nema — rijetko pokrivena karta: ~23 % čitanja
-          // na terenu). Ranije se ista pločica tražila još jednom (fetch) samo da se potvrdi "nema", pa tek
-          // onda roditelj — dvostruko mjesto u redu za svaku praznu pločicu. Sad odmah roditelj + negativni keš.
-          img.onerror = () => {
-            if (!kraj()) return; img.onerror = null; img.removeAttribute('src');
-            _tileProf.nullData++;
-            if (_sqlTileNeg.size >= _SQL_TILE_NEG_MAX) _sqlTileNeg.clear();
-            _sqlTileNeg.add(name + '/' + z + '/' + x + '/' + y);
-            _roditelj();
-          };
-          img.src = nUrl + '/' + z + '/' + x + '/' + y;
-        });
+        // v4.5.9: <img> ne razlikuje 404 (pločice nema u karti) od 500 (čitanje palo, npr. preopterećeno
+        // pri udaljenom zumu sa stotinama pločica) niti od pločice koja se ne može dekodirati, a negativni
+        // keš je TRAJAN — jedan prolazan pad je pločicu činio praznom do ponovnog pokretanja. Sad se greška
+        // provjerava pravim zahtjevom: u negativni keš ide SAMO potvrđen 404; sve drugo se ponovi.
+        const negK = name + '/' + z + '/' + x + '/' + y, tUrl = nUrl + '/' + z + '/' + x + '/' + y;
+        const nPokusaj = (n) => {
+          _wTileSlot(_pri).then(pusti => {
+            if (!pusti) { _doneP(); return; }
+            const rt0 = _now();
+            let gotovo = false;
+            const kraj = () => { if (gotovo) return false; gotovo = true; clearTimeout(tm); pusti(); return true; };
+            const tm = setTimeout(() => { if (kraj()) {
+              img.onload = img.onerror = null; img.removeAttribute('src');
+              if (n < 2) { setTimeout(() => nPokusaj(n + 1), 300); return; }
+              _tileProf.timeout++; _doneP();
+            } }, 20000);
+            img.onload = () => {
+              if (!kraj()) return;
+              const dt = _now() - rt0; _tileProf.reads++; _tileProf.readSum += dt; if (dt > _tileProf.readMax) _tileProf.readMax = dt;
+              _doneP();
+            };
+            img.onerror = () => {
+              if (!kraj()) return; img.onerror = null; img.removeAttribute('src');
+              _tileProf.nullData++;
+              const potvrdi = (typeof fetch === 'function')
+                ? fetch(tUrl).then(r => r.status === 404 ? 'nema' : (r.ok ? 'ima' : 'greska'), () => 'greska')
+                : Promise.resolve('nema');
+              potvrdi.then(st => {
+                if (st === 'nema') {
+                  if (_sqlTileNeg.size >= _SQL_TILE_NEG_MAX) _sqlTileNeg.clear();
+                  _sqlTileNeg.add(negK);
+                  _roditelj();
+                } else if (n < 2) { setTimeout(() => nPokusaj(n + 1), 300 * (n + 1)); }
+                else _roditelj();   // prolazna greška: roditelj za sada, ali BEZ trajnog "nema"
+              });
+            };
+            img.src = tUrl;
+          });
+        };
+        nPokusaj(0);
         return img;
       }
       _tryRead(0);

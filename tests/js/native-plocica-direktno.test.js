@@ -4,9 +4,9 @@ const src=require('./_izvor').izvor();
 const nat=fs.readFileSync(__dirname+'/../../static/js/native-offline-maps.js','utf8');
 assert(/function tileUrl\(name\)/.test(nat)&&/!e\.pages&&e\.nativeId\?'\/offline-maps\/'\+e\.nativeId:null/.test(nat),'tileUrl samo za native kartu bez straničnog čitača');
 const sloj=src.slice(src.indexOf('function _sqlmapCreateLayerW'),src.indexOf('// ── Prikaz slojeva'));
-assert(/NativeOfflineMaps\.tileUrl\(name\)/.test(sloj)&&/img\.src = nUrl \+ '\/' \+ z/.test(sloj),'pločica ide direktno u img');
+assert(/NativeOfflineMaps\.tileUrl\(name\)/.test(sloj)&&/tUrl = nUrl \+ '\/' \+ z/.test(sloj)&&/img\.src = tUrl/.test(sloj),'pločica ide direktno u img');
 assert(/!_sqlTileNeg\.has\(/.test(sloj),'poznato nepostojeća pločica ne ide na mrežu');
-assert(/img\.onerror = \(\) => \{\s*if \(!kraj\(\)\) return;[\s\S]{0,200}_sqlTileNeg\.add\([\s\S]{0,80}_roditelj\(\);/.test(sloj),'greška native pločice: odmah negativni keš + roditelj, bez ponovnog čitanja');
+assert(/img\.onerror = \(\) => \{\s*if \(!kraj\(\)\) return;[\s\S]{0,700}status === 404[\s\S]{0,500}_sqlTileNeg\.add\([\s\S]{0,120}_roditelj\(\);/.test(sloj),'greška native pločice: negativni keš samo uz potvrđen 404 (v4.5.9), pa roditelj');
 assert(/const lim = Math\.max\(_W_TILE_MAX_INFLIGHT/.test(src||sloj)||true);
 // _wTileSlot: ograničenje istovremenih i oslobađanje
 const ex=n=>{const i=src.indexOf('function '+n+'(');let d=0,j=src.indexOf('{',i);for(let k=j;k<src.length;k++){if(src[k]==='{')d++;else if(src[k]==='}'&&--d===0)return src.slice(i,k+1);}};
