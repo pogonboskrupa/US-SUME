@@ -1637,3 +1637,25 @@ body.ima-primljeno #menu-btn::before{content:attr(data-primljeno);position:absol
 #foto-fullscreen-akcije{position:relative;z-index:3}
 #foto-fullscreen-akcije .fz-obrisi{color:#fecaca;border-color:#dc2626;background:rgba(220,38,38,.28)}
 #foto-fullscreen-akcije .fz-savjet{flex-basis:100%;text-align:center;color:#94a3b8;font:11px system-ui;margin-top:2px}
+
+/* "Moja lokacija" v4.5.1: kompaktan modal. Isključena: Uključi lokaciju + Trag/Mjerenja.
+   Uključena: red pločica Trag/Mjerenja/Slika/Tačka (nizak) + donji red Šumski/Kompas/Radijus
+   (20 % veći, tri jednake kolone preko cijele širine). Bez reda koordinata. */
+html #ab-loc-popup .abp-head {padding:0 2px 8px;}
+html #ab-loc-popup .abp-centar {flex:0 0 auto;position:relative;width:40px;height:40px;border-radius:50%;border:1.5px solid var(--field-border);background:transparent;color:var(--field-ink);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;}
+html #ab-loc-popup .abp-centar .ic {width:20px;height:20px;margin:0;}
+html #ab-loc-popup .abp-centar.prati {background:rgba(34,197,94,.18);border-color:#4ade80;}
+html #ab-loc-popup.gps-off .abp-centar {display:none;}
+html .abp-tiles {display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+html .abp-tile2 {display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:48px;padding:4px 2px;border-radius:12px;border:1.5px solid var(--field-border);background:var(--field-card);color:var(--field-ink);font:700 11.5px system-ui;cursor:pointer;min-width:0;}
+html .abp-tile2 .ic {width:20px;height:20px;margin:0;}
+html .abp-tile2 span {white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+html .abp-tile2.abp-trag {background:#c2410c;border-color:#9a3412;color:#fff;}
+html .abp-tile2.abp-trag.on {background:#b91c1c;border-color:#991b1b;}
+html #ab-loc-popup.gps-off .abp-samo-gps {display:none;}
+html #ab-loc-popup.gps-off .abp-tiles {grid-template-columns:1fr 1fr;}
+html #ab-loc-popup.gps-off .abp-tile2 {flex-direction:row;gap:8px;min-height:46px;font-size:14px;}
+html .abp-chips.abp-donji {display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px;}
+html .abp-donji .abp-chip {min-height:53px;font-size:15px;padding:6px 4px;}
+html #ab-loc-popup.gps-off .abp-donji {display:none;}
+html #ab-loc-popup .abp-ukljuci {min-height:48px;margin-bottom:8px;}

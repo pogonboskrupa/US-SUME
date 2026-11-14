@@ -15669,7 +15669,7 @@ function _updGpsSwitch() {
   // trag je mogao biti započet negdje drugo (Tragovi tab), pa bi "Snimi
   // trag" ovdje TIHO drugi put pokrenulo/prekinulo snimanje da tekst laže.
   const tt = document.getElementById('ab-loc-trag-txt');
-  if (tt) tt.textContent = _tragOn ? 'Završi trag' : 'Snimi trag';
+  if (tt) tt.textContent = !gpsOn ? 'Tragovi' : _tragOn ? 'Završi trag' : 'Snimi trag';
   // Boje nosi CSS (.abp-trag / .on) — prate dnevni i tamni prikaz.
   const tbtn = document.getElementById('ab-loc-trag');
   if (tbtn) tbtn.classList.toggle('on', !!_tragOn);
@@ -18329,6 +18329,17 @@ function _locPopupUslikaj() {
   const pop = document.getElementById('ab-loc-popup');
   if (pop) pop.style.display = 'none';
   startLocPhoto();
+}
+// Tile "Trag": s uključenom lokacijom snima/završava trag, bez nje otvara listu tragova.
+function _locTragKlik() { if (gpsOn) _locPopupSnimiTrag(); else _locPopupTragovi('trg'); }
+// Tile "Mjerenja": odmah nudi izbor udaljenost / nagib / površina (isti meni kao dugme Izmjeri).
+function _locPopupMjerenja() {
+  const pop = document.getElementById('ab-loc-popup'); if (pop) pop.style.display = 'none';
+  const m = document.getElementById('ab-izmjeri-menu'); if (m) m.style.display = 'block';
+}
+function _locPopupTacka() {
+  const pop = document.getElementById('ab-loc-popup'); if (pop) pop.style.display = 'none';
+  addTacka();
 }
 function _locPopupSnimiTrag() {
   document.getElementById('ab-loc-popup').style.display = 'none';

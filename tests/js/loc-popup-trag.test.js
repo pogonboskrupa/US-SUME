@@ -88,7 +88,7 @@ function makeSwitch({ tragOn }) {
   };
   const sandbox = {
     document: { getElementById: (id) => els[id] || null },
-    gpsOn: false, _compassConeOn: false, _radiusOn: false, _forestMode: false,
+    gpsOn: true, _compassConeOn: false, _radiusOn: false, _forestMode: false,
     _tragOn: tragOn,
     // v1.6.6: stanje dugmeta Lokacija je izdvojeno u _updLocBtn (vidi
     // lokacija-dugme.test.js) — ovdje se testira samo "Snimi trag".
@@ -128,13 +128,30 @@ t('nedostajući elementi (npr. popup nikad otvoren, DOM još nije parsiran) ne b
   assert.doesNotThrow(() => api._updGpsSwitch());
 });
 
-t('Moja lokacija: Uslikaj pored Tragova i Mjerenja zatvara popup i pokreće sliku', () => {
+t('Moja lokacija: pločice Trag/Mjerenja/Slika/Tačka, donji red Šumski/Kompas/Radijus, bez reda koordinata', () => {
   const html = fs.readFileSync(__dirname + '/../../index.html', 'utf8');
-  const lista = html.slice(html.indexOf('class="abp-chips abp-lista"'), html.indexOf('</div>', html.indexOf('class="abp-chips abp-lista"')));
-  assert(/ab-loc-tragovi/.test(lista) && /ab-loc-mjerenja/.test(lista) && /id="ab-loc-foto" onclick="_locPopupUslikaj\(\)"/.test(lista), 'tri radnje u istom redu');
-  let slikano = 0; const pop = { style: { display: 'block' } };
-  const f = new Function('document', 'startLocPhoto', extractFn('_locPopupUslikaj') + '\nreturn _locPopupUslikaj;')({ getElementById: () => pop }, () => { slikano++; });
-  f(); assert.equal(pop.style.display, 'none'); assert.equal(slikano, 1);
+  const pop = html.slice(html.indexOf('id="ab-loc-popup"'), html.indexOf('id="ab-centar"'));
+  const tiles = pop.slice(pop.indexOf('class="abp-tiles"'), pop.indexOf('class="abp-chips abp-donji"'));
+  for (const id of ['ab-loc-trag', 'ab-loc-mjerenja', 'ab-loc-foto', 'ab-loc-tacka']) assert(tiles.includes('id="' + id + '"'), id);
+  assert(/id="ab-loc-foto" onclick="_locPopupUslikaj\(\)"/.test(tiles));
+  const donji = pop.slice(pop.indexOf('class="abp-chips abp-donji"'));
+  for (const id of ['forest-switch', 'compass-switch', 'radius-switch']) assert(donji.includes('id="' + id + '"'), id);
+  assert(!/abp-koord|id="abp-koord/.test(pop), 'nema reda koordinata');
+  let slikano = 0; const p = { style: { display: 'block' } };
+  const f = new Function('document', 'startLocPhoto', extractFn('_locPopupUslikaj') + '\nreturn _locPopupUslikaj;')({ getElementById: () => p }, () => { slikano++; });
+  f(); assert.equal(p.style.display, 'none'); assert.equal(slikano, 1);
+});
+
+t('Moja lokacija: Trag bez GPS-a otvara Tragove, sa GPS-om snima; Mjerenja odmah nudi izbor mjerenja', () => {
+  const calls = []; let gps = false;
+  const els = { 'ab-loc-popup': { style: { display: 'block' } }, 'ab-izmjeri-menu': { style: { display: 'none' } } };
+  const doc = { getElementById: id => els[id] || null };
+  const src = extractFn('_locTragKlik') + extractFn('_locPopupMjerenja') + '\nreturn { _locTragKlik, _locPopupMjerenja };';
+  const api = new Function('document', '_locPopupSnimiTrag', '_locPopupTragovi', 'gpsGet', src.replace(/\bgpsOn\b/g, 'gpsGet()'))(doc, () => calls.push('snimi'), t => calls.push('lista:' + t), () => gps);
+  gps = false; api._locTragKlik(); gps = true; api._locTragKlik();
+  assert.deepEqual(calls, ['lista:trg', 'snimi']);
+  api._locPopupMjerenja();
+  assert.equal(els['ab-loc-popup'].style.display, 'none'); assert.equal(els['ab-izmjeri-menu'].style.display, 'block');
 });
 
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');

@@ -98,7 +98,7 @@ t('Moja lokacija: tačka u boji preciznosti i starost fiksa', () => {
 t('Moja lokacija: bez GPS-a popup nudi samo "Uključi lokaciju"', () => {
   const e = locStatus({ gpsOn: false, lastP: null, fixT: 0 });
   assert.ok(e['ab-loc-popup'].classList.has('gps-off')); assert.strictEqual(e['gps-age'].textContent, '');
-  assert.ok(/#ab-loc-popup\.gps-off :is\(\.abp-acts,\.abp-red1\) \{display:none;\}/.test(CSS));
+  assert.ok(/#ab-loc-popup\.gps-off \.abp-samo-gps \{display:none;\}/.test(CSS) && /#ab-loc-popup\.gps-off \.abp-donji \{display:none;\}/.test(CSS));
   const p = HTML.slice(HTML.indexOf('id="ab-loc-popup"'), HTML.indexOf('id="ab-centar"'));
   assert.ok(/class="abp-ukljuci" onclick="toggleGPS\(\)"/.test(p));
   for (const id of ['gps-switch', 'compass-switch', 'radius-switch', 'forest-switch', 'ab-loc-trag', 'ab-loc-trag-txt', 'gps-info']) assert.ok(p.includes('id="' + id + '"'), id);
