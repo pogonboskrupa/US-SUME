@@ -7680,6 +7680,7 @@ function _restoreTacke() {
 }
 
 // ── Izmjeri dugme — popup meni ──
+var _izmjeriOtvorenT = 0;
 function _izmjeriToggle() {
   const menu = document.getElementById('ab-izmjeri-menu');
   if (!menu) return;
@@ -7705,6 +7706,7 @@ function _izmjeriPick(mode) {
   }
 }
 document.addEventListener('click', function(e) {
+  if (Date.now() - _izmjeriOtvorenT < 450) return;
   if (!e.target.closest('#ab-izmjeri-wrap')) {
     const m = document.getElementById('ab-izmjeri-menu');
     if (m) m.style.display = 'none';
@@ -18334,10 +18336,18 @@ function _locPopupUslikaj() {
 function _locTragKlik() { if (gpsOn) _locPopupSnimiTrag(); else _locPopupTragovi('trg'); }
 // Tile "Mjerenja": odmah nudi izbor udaljenost / nagib / površina (isti meni kao dugme Izmjeri).
 function _locPopupMjerenja(ev) {
-  // Globalni 'click' osluškivač zatvara #ab-izmjeri-menu za svaki klik van #ab-izmjeri-wrap — bez ovoga se meni zatvori istog trena.
+  // Globalni 'click' osluškivač (vidi _izmjeriOtvorenT) zatvara #ab-izmjeri-menu za svaki klik van #ab-izmjeri-wrap.
+  // Na dodirnom uređaju klik može stići i poslije skrivanja popupa, pa se meni otvara tek poslije tog klika
+  // i dobija kratku zaštitu od zatvaranja.
   if (ev && ev.stopPropagation) ev.stopPropagation();
   const pop = document.getElementById('ab-loc-popup'); if (pop) pop.style.display = 'none';
-  const m = document.getElementById('ab-izmjeri-menu'); if (m) m.style.display = 'block';
+  const otvori = () => {
+    const m = document.getElementById('ab-izmjeri-menu'); if (!m) return;
+    _izmjeriOtvorenT = Date.now();
+    m.style.display = 'block';
+  };
+  otvori();
+  setTimeout(otvori, 60);
 }
 function _locPopupTacka() {
   const pop = document.getElementById('ab-loc-popup'); if (pop) pop.style.display = 'none';

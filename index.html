@@ -5910,7 +5910,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.5.2';
+const APP_VER = 'v4.5.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6139,6 +6139,7 @@ function _loadLocalVlake() {
   <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg>Server</div>
   <button type="button" class="mdrop-item" id="mdrop-server"  onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg></span>Pošalji na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;flex-shrink:0;white-space:nowrap;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;white-space:nowrap;display:inline-block;"></span></span></button>
   <button type="button" class="mdrop-item" id="mdrop-primljeni" onclick="closeMenuDropdown();primljeniOtvori()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-folders"/></svg></span>Primljeni podaci<span id="mdrop-primljeni-cnt" style="display:none;margin-left:auto;padding-left:8px;flex-shrink:0;"><span style="background:#22c55e;color:#04210f;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;display:inline-block;"></span></span></button>
+  <button type="button" id="menu-azuriraj" class="mdrop-item mdrop-azur" onclick="closeMenuDropdown();azurirajAplikaciju()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-update"/></svg></span>Ažuriraj aplikaciju<span class="mdrop-azur-nova" hidden></span></button>
 </section><div id="spd-menu-launch" hidden aria-label="ŠPD prečice">
     <button type="button" onclick="SpdProfile.open()"><svg class="ic" aria-hidden="true"><use href="#ic-korisnik"/></svg><span>Moj ŠPD profil<small>Zapisi, karte i sigurnosna kopija</small></span>›</button>
     <button type="button" onclick="closeMenuDropdown();switchTab('teren')">Otvori Teren</button>
@@ -6176,7 +6177,6 @@ function _loadLocalVlake() {
   <button type="button" class="mdrop-item" id="menu-gj-item" style="display:none;" onclick="closeMenuDropdown();gjAdminOtvori()"><span class="mdrop-ico" aria-hidden="true">🌲</span>Gospodarske jedinice</button>
   <button type="button" class="mdrop-item" id="menu-debug-item" style="display:none;color:#f87171;" onclick="closeMenuDropdown();if(sbProfile?.is_admin)switchTab('debug')"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-debug"/></svg></span>DEBUG</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();promijeniPin()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-pin"/></svg></span>Promijeni PIN</button>
-  <button type="button" id="menu-azuriraj" class="mdrop-item mdrop-azur" onclick="closeMenuDropdown();azurirajAplikaciju()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-update"/></svg></span>Ažuriraj aplikaciju<span class="mdrop-azur-nova" hidden></span></button>
   <button type="button" class="mdrop-item" id="menu-prebaci-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();racuniPrebaci()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-users"/></svg></span><span id="menu-prebaci-txt">Prebaci na profil administratora</span></button>
   <button type="button" class="mdrop-item" id="menu-dijag-item" style="display:none;color:#38bdf8;" onclick="closeMenuDropdown();dijagOtvori()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-debug"/></svg></span>Dijagnostika</button>
   <button type="button" class="mdrop-item" id="menu-apk-download" style="color:#38bdf8;" onclick="closeMenuDropdown();preuzmiApkAdmin()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-load"/></svg></span><span>Preuzmi APK fajl<small>Najnovija verzija · odmah preuzima</small></span></button>
@@ -7817,8 +7817,8 @@ function _loadLocalVlake() {
       <div class="abp-tiles">
         <button type="button" id="ab-loc-trag" class="abp-tile2 abp-trag" onclick="_locTragKlik()" title="Snimanje traga / lista tragova">
           <svg class="ic"><use href="#ic-trag"/></svg><span id="ab-loc-trag-txt">Tragovi</span></button>
-        <button type="button" class="abp-tile2" id="ab-loc-mjerenja" onclick="_locPopupMjerenja(event)" title="Mjerenje: udaljenost, nagib, površina">
-          <svg class="ic"><use href="#ic-uglomjer"/></svg><span>Mjerenja</span></button>
+        <button type="button" class="abp-tile2" id="ab-loc-mjerenja" onclick="_locPopupMjerenja(event)" title="Izmjeri: udaljenost, nagib, površina">
+          <svg class="ic"><use href="#ic-uglomjer"/></svg><span>Izmjeri</span></button>
         <button type="button" class="abp-tile2 abp-samo-gps" id="ab-loc-foto" onclick="_locPopupUslikaj()" title="Uslikaj fotografiju na ovoj lokaciji">
           <svg class="ic"><use href="#ic-kamera"/></svg><span>Slika</span></button>
         <button type="button" class="abp-tile2 abp-samo-gps" id="ab-loc-tacka" onclick="_locPopupTacka()" title="Označi tačku na ovoj lokaciji">

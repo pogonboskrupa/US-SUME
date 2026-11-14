@@ -5046,3 +5046,7 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 ### "Moja lokacija" — Mjerenja ne reaguju, zaglavlje, donji red (v4.5.2)
 - **Mjerenja nisu reagovala**: `_locPopupMjerenja` otvara `#ab-izmjeri-menu`, ali globalni `document` `click` osluškivač zatvara taj meni za svaki klik van `#ab-izmjeri-wrap` — isti klik koji ga je otvorio ga je odmah i zatvarao. Funkcija sad prima `event` i zove `stopPropagation()`. Test to čuva.
 - Zaglavlje: `Prati me` (`#abp-prati`, `_pratiToggle`, klasa `prati` se prebacuje u `_pratiPostavi`) + `Centriraj` + prekidač. Donji red 30 % niži (37 px) sa ikonama uz natpis (stablo/kompas/buffer iz sprite-a).
+
+### "Izmjeri" u modalu lokacije, "Ažuriraj aplikaciju" treća u Meniju (v4.5.3)
+- Pločica "Mjerenja" u `#ab-loc-popup` se zove **Izmjeri** (id `ab-loc-mjerenja` isti). Na stvarnom telefonu nije reagovala iako u emulaciji (miš i dodir) radi: `_locPopupMjerenja` sad otvara `#ab-izmjeri-menu` odmah i ponovo poslije 60 ms, a globalni zatvarač menija ignoriše klikove 450 ms poslije otvaranja (`_izmjeriOtvorenT`). Uzrok na uređaju NIJE potvrđen — ako se ponovi, provjeriti da li je instalirana verzija ≥ v4.5.3.
+- Meni → Server sekcija: Pošalji na server, Primljeni podaci, **Ažuriraj aplikaciju** (treća). Test: `tests/js/meni-azuriraj-treci.test.js`.

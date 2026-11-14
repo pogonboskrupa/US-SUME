@@ -1,0 +1,10 @@
+const assert = require('assert'); const { izvor } = require('./_izvor');
+const html = izvor();
+const ids = ['mdrop-server', 'mdrop-primljeni', 'menu-azuriraj'].map(i => html.indexOf('id="' + i + '"'));
+assert(ids.every(i => i > 0), 'sve tri stavke postoje');
+assert(ids[0] < ids[1] && ids[1] < ids[2], 'Ažuriraj aplikaciju je treća, iza Primljenih podataka');
+const sljedeca = html.indexOf('class="mdrop-item', ids[2] + 20);
+assert(!/id="(mdrop-[a-z]+|menu-[a-z-]+)"/.test(html.slice(ids[1] + 30, ids[2])), 'između Primljenih i Ažuriraj nema drugih stavki');
+const pop = html.slice(html.indexOf('id="ab-loc-popup"'), html.indexOf('id="ab-centar"'));
+assert(/id="ab-loc-mjerenja"[^>]*>\s*<svg[^>]*><use[^>]*><\/svg><span>Izmjeri<\/span>/.test(pop), 'pločica se zove Izmjeri');
+console.log('meni-azuriraj-treci: ok');
