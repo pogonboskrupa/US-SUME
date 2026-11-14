@@ -5910,7 +5910,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.5.3';
+const APP_VER = 'v4.5.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7755,7 +7755,9 @@ function _loadLocalVlake() {
       <span class="ab-ico"><svg class="ic"><use href="#ic-uglomjer"/></svg></span>
       <span>Izmjeri</span>
     </button>
-    <!-- Podmeni — široka traka iznad donje trake (v1.6.10): četiri pločice u
+  </div>
+  <!-- Podmeni je SESTRA wrap-a, ne dijete: wrap je display:none kad postoji aktivan projekat, a meni (fixed) se otvara i iz modala Moja lokacija. -->
+  <!-- Podmeni — široka traka iznad donje trake (v1.6.10): četiri pločice u
          jednom redu umjesto uske visoke liste. -->
     <div id="ab-izmjeri-menu" class="ab-pop" style="display:none;">
       <div class="abp-tiles">
@@ -7795,7 +7797,6 @@ function _loadLocalVlake() {
         </button>
       </div>
     </div>
-  </div>
   <div id="ab-loc-wrap" style="position:relative;display:flex;align-items:center;justify-content:center;">
     <button id="ab-loc" onclick="_toggleLocPopup()" title="Moja lokacija">
       <span class="ab-ico"><svg class="dm-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-location"/></svg><span class="ab-acc" id="ab-loc-acc"></span></span>

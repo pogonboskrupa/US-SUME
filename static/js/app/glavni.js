@@ -7707,7 +7707,7 @@ function _izmjeriPick(mode) {
 }
 document.addEventListener('click', function(e) {
   if (Date.now() - _izmjeriOtvorenT < 450) return;
-  if (!e.target.closest('#ab-izmjeri-wrap')) {
+  if (!e.target.closest('#ab-izmjeri-wrap') && !e.target.closest('#ab-izmjeri-menu')) {
     const m = document.getElementById('ab-izmjeri-menu');
     if (m) m.style.display = 'none';
   }

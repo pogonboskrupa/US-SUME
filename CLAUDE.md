@@ -5050,3 +5050,7 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 ### "Izmjeri" u modalu lokacije, "Ažuriraj aplikaciju" treća u Meniju (v4.5.3)
 - Pločica "Mjerenja" u `#ab-loc-popup` se zove **Izmjeri** (id `ab-loc-mjerenja` isti). Na stvarnom telefonu nije reagovala iako u emulaciji (miš i dodir) radi: `_locPopupMjerenja` sad otvara `#ab-izmjeri-menu` odmah i ponovo poslije 60 ms, a globalni zatvarač menija ignoriše klikove 450 ms poslije otvaranja (`_izmjeriOtvorenT`). Uzrok na uređaju NIJE potvrđen — ako se ponovi, provjeriti da li je instalirana verzija ≥ v4.5.3.
 - Meni → Server sekcija: Pošalji na server, Primljeni podaci, **Ažuriraj aplikaciju** (treća). Test: `tests/js/meni-azuriraj-treci.test.js`.
+
+### "Izmjeri" iz modala lokacije nije radilo uz aktivan projekat (v4.5.4)
+- Pravi uzrok (v4.5.1–v4.5.3 su ga promašile): `#ab-izmjeri-menu` je bio DIJETE `#ab-izmjeri-wrap`, a `_updFabVisibility` stavlja wrap na `display:none` kad postoji aktivan projekat (`!hasProj`) ili tokom snimanja. Meni je `position:fixed`, ali ga skriveni roditelj skriva i takvog — pločica je "otvarala" nevidljiv meni. U Playwright testovima nije bilo aktivnog projekta pa se nije vidjelo. Meni je sada SESTRA wrap-a (direktno dijete `#action-bar`), a zatvarač ne zatvara klik unutar menija. Test: `tests/js/izmjeri-meni-sestra.test.js`.
+- **Pouka**: popup koji se otvara iz drugog mjesta ne smije živjeti unutar elementa koji ima vlastitu logiku vidljivosti.
