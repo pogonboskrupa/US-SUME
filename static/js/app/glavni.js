@@ -22496,7 +22496,7 @@ async function _localKmlRestore() {
         layer.onlyPolygon=globalThis.GithubLayers?.defaultOnlyPolygon(layer)??layer.onlyPolygon;
         // Kamionski putevi sa servera: klik zadano isključen, osim ako ga je korisnik sam uključio (klikRucno).
         layer.klikRucno=data.klikRucno===true;
-        if(!layer.klikRucno&&globalThis.GithubLayers?.role(layer)==='roads')layer.klikOff=true;
+        if(!layer.klikRucno&&globalThis.GithubLayers?.klikOffZadano(layer))layer.klikOff=true;
         kmlLs.push(layer);
         if (zapelo && layer.vis && content.length >= _KML_PO_DIJELOVIMA_MIN) { layer.vis = false; sakriveni.push(layer.name); }
         if(layer.vis&&(!layer.onlyPolygon||globalThis.GithubLayers?.selecting()))grp.addTo(map);
@@ -27106,10 +27106,26 @@ function _msrUgao(a, b) {
   if (u > 90) u -= 180; else if (u <= -90) u += 180;
   return Math.round(u * 10) / 10;
 }
+// Veličina oznaka prati razmjeru: pri zumu >= 17 pun (1), pri zumu 13 i manje pola. Jedna CSS varijabla na pane-u
+// oznaka (ne na cijeloj karti — inače bi se stil preračunavao i za sve pločice), pa se markeri ne grade ponovo.
+let _msrSkalaOn = false, _msrSkalaK = 0;
+function _msrSkala() {
+  try {
+    const z = map.getZoom();
+    const k = Math.round(Math.max(0.5, Math.min(1, 0.5 + (z - 13) * 0.125)) * 100) / 100;
+    if (k === _msrSkalaK) return;
+    const pane = map.getPane('vlakeLabels');
+    if (!pane) return;
+    pane.style.setProperty('--msr-k', k);
+    _msrSkalaK = k;
+    if (!_msrSkalaOn) { _msrSkalaOn = true; map.on('zoom zoomend', _msrSkala); }
+  } catch (e) {}
+}
 function _msrOznakaMarker(lat, lng, html, boja, ugao, pomak, klasa) {
+  _msrSkala();
   return L.marker([lat, lng], {
     icon: L.divIcon({ className: '', iconSize: [0, 0], iconAnchor: [0, 0],
-      html: `<div class="msr-oz ${klasa || ''}" style="--c:${boja};transform:translate(-50%,-50%) rotate(${ugao}deg) translateY(${-pomak}px)">${html}</div>` }),
+      html: `<div class="msr-oz ${klasa || ''}" style="--c:${boja};transform:translate(-50%,-50%) scale(var(--msr-k,1)) rotate(${ugao}deg) translateY(${-pomak}px)">${html}</div>` }),
     interactive: false, pane: 'vlakeLabels', keyboard: false
   });
 }
