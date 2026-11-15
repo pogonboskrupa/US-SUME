@@ -31330,7 +31330,18 @@ let _W_TILE_NATIVE_MAX = (typeof _renderCfg!=='undefined' && _renderCfg.lite) ? 
 // i (2) učitava se obruč od _SQL_TILE_OBRUC pločica oko prikaza, da rub bude
 // spreman prije nego uđe u vidno polje.
 const _SQL_TILE_OBRUC = 1;
+const _SQL_DALEKO_NIVOA = 2;   // sloj traži pločice najviše 2 zuma ispod najnižeg nivoa u fajlu
 const _sqlGridObruc = {
+  // v4.6.6: fajl nema nivoe ispod minNative (npr. z12–17), a Leaflet ispod toga traži pločice z12 umanjene
+  // 2^d puta — na 1:500 000 to je više stotina do hiljada čitanja odjednom. Red se ne stigne ispuniti pa
+  // karta izgleda kao da joj pločice nedostaju (i trokira). Daleko ispod fajla sloj više ne traži ništa.
+  _update(center) {
+    try {
+      const mz = this.options.sqlMinZoom;
+      if (mz != null && this._map && this._map.getZoom() < mz) { this._removeAllTiles(); return; }
+    } catch (e) {}
+    return L.GridLayer.prototype._update.call(this, center);
+  },
   _getTiledPixelBounds(center) {
     const b = L.GridLayer.prototype._getTiledPixelBounds.call(this, center);
     // Udaljeni zum (karta zumirana ispod nivoa pločica) već traži stotine pločica odjednom — obruč bi to
@@ -31527,7 +31538,7 @@ function _sqlmapCreateLayerMain(name, fmt, meta) {
       return img;
     }
   }));
-  const layer = new MTileLayer(Object.assign({}, _SQL_GRID_OPC, {minNativeZoom:minNative, maxNativeZoom:maxNative,opacity:typeof _sqlMapOpacity==='function'?_sqlMapOpacity(name):1,zIndex:typeof _sqlMapZIndex==='function'?_sqlMapZIndex(name):1}));
+  const layer = new MTileLayer(Object.assign({}, _SQL_GRID_OPC, {minNativeZoom:minNative, maxNativeZoom:maxNative, sqlMinZoom:Math.max(0,minNative-_SQL_DALEKO_NIVOA),opacity:typeof _sqlMapOpacity==='function'?_sqlMapOpacity(name):1,zIndex:typeof _sqlMapZIndex==='function'?_sqlMapZIndex(name):1}));
   return layer;
 }
 
@@ -32273,11 +32284,24 @@ function _sqlmapCreateLayerW(name, fmt, meta) {
       return img;
     }
   }));
-  const layer = new WTileLayer(Object.assign({}, _SQL_GRID_OPC, {minNativeZoom:minNative, maxNativeZoom:maxNative,opacity:typeof _sqlMapOpacity==='function'?_sqlMapOpacity(name):1,zIndex:typeof _sqlMapZIndex==='function'?_sqlMapZIndex(name):1}));
+  const layer = new WTileLayer(Object.assign({}, _SQL_GRID_OPC, {minNativeZoom:minNative, maxNativeZoom:maxNative, sqlMinZoom:Math.max(0,minNative-_SQL_DALEKO_NIVOA),opacity:typeof _sqlMapOpacity==='function'?_sqlMapOpacity(name):1,zIndex:typeof _sqlMapZIndex==='function'?_sqlMapZIndex(name):1}));
   return layer;
 }
 
 // ── Prikaz slojeva ────────────────────────────────────────────────────────────
+// Obavijest kad je karta predaleko za offline kartu (jednom po približavanju/udaljavanju, najviše na 60 s).
+let _sqlDalekoT = 0;
+function _sqlDalekoProvjeri() {
+  try {
+    const z = map.getZoom();
+    const daleko = _sqlLayers.filter(l => l.visible && l.layer && l.layer.options.sqlMinZoom != null && z < l.layer.options.sqlMinZoom);
+    if (!daleko.length) return;
+    const t = Date.now(); if (t - _sqlDalekoT < 60000) return; _sqlDalekoT = t;
+    showToast('Offline karta je dostupna od zuma ' + (daleko[0].layer.options.minNativeZoom - _SQL_DALEKO_NIVOA) + ' (približi kartu).');
+  } catch (e) {}
+}
+try { map.on('zoomend', _sqlDalekoProvjeri); } catch (e) {}
+
 function _sqlmapRenderLayers() {
   const el = document.getElementById('sqlmap-layers');
   if (!el) return;

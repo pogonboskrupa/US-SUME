@@ -37,3 +37,13 @@ console.log('OK kamionski-klik-skala-oznaka');
   assert(/async function _msrDemElevTacka\(lat, lng\)/.test(src),'jedna tacka ostaje');
   console.log('ok v4.6.5 glađenje');
 }
+
+// v4.6.6: offline karta ne traži pločice daleko ispod najnižeg nivoa u fajlu.
+{
+  const src=require('fs').readFileSync(require('path').join(__dirname,'../../static/js/app/glavni.js'),'utf8');
+  const assert=require('assert');
+  assert(/sqlMinZoom:Math\.max\(0,minNative-_SQL_DALEKO_NIVOA\)/.test(src)&&src.split('sqlMinZoom:Math.max').length===3,'oba sloja imaju sqlMinZoom');
+  assert(/_update\(center\) \{\s*try \{\s*const mz = this\.options\.sqlMinZoom/.test(src),'_update preskace daleki zum');
+  assert(!/minZoom:Math\.max\(0,minNative/.test(src.replace(/sqlMinZoom/g,'')),'nema Leaflet minZoom (ogranicio bi odzumiravanje mape)');
+  console.log('ok v4.6.6 daleki zum');
+}
