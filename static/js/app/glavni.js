@@ -27094,23 +27094,22 @@ function _msrPolaLinije(pts) {
   }
   return { lat: pts[0].lat, lng: pts[0].lng, i: 0 };
 }
-// Pomak u pikselima okomito na segment, uvijek na stranu "gore" (da tekst ne ide ispod linije).
-function _msrBocniPomak(a, b, hw, hh) {
-  let dx = 0, dy = -1;
+// Ugao segmenta na ekranu (stepeni, u (-90,90] da tekst nikad nije naopako) i pomak "iznad" linije
+// mjeren u rotiranom okviru. Ugao u Mercator pikselima ne zavisi od zuma, pa se računa jednom pri crtanju.
+function _msrUgao(a, b) {
+  let dx = 1, dy = 0;
   try {
     const pa = map.project([a.lat, a.lng], map.getZoom()), pb = map.project([b.lat, b.lng], map.getZoom());
     dx = pb.x - pa.x; dy = pb.y - pa.y;
   } catch (e) {}
-  const len = Math.hypot(dx, dy) || 1;
-  let ox = -dy / len, oy = dx / len;
-  if (oy > 0 || (Math.abs(oy) < 1e-6 && ox < 0)) { ox = -ox; oy = -oy; }
-  const px = Math.abs(ox) * hw + Math.abs(oy) * hh + 10; // pola kapsule u smjeru pomaka + razmak
-  return [Math.round(ox * px), Math.round(oy * px)];
+  let u = Math.atan2(dy, dx) * 180 / Math.PI;
+  if (u > 90) u -= 180; else if (u <= -90) u += 180;
+  return Math.round(u * 10) / 10;
 }
-function _msrOznakaMarker(lat, lng, html, boja, ox, oy, klasa) {
+function _msrOznakaMarker(lat, lng, html, boja, ugao, pomak, klasa) {
   return L.marker([lat, lng], {
     icon: L.divIcon({ className: '', iconSize: [0, 0], iconAnchor: [0, 0],
-      html: `<div class="msr-oz ${klasa || ''}" style="--c:${boja};transform:translate(calc(-50% + ${ox}px),calc(-50% + ${oy}px))">${html}</div>` }),
+      html: `<div class="msr-oz ${klasa || ''}" style="--c:${boja};transform:translate(-50%,-50%) rotate(${ugao}deg) translateY(${-pomak}px)">${html}</div>` }),
     interactive: false, pane: 'vlakeLabels', keyboard: false
   });
 }
@@ -27129,20 +27128,20 @@ function _msrOznake(pts, mode, boja) {
     const a = pts[0], z = pts[pts.length - 1];
     const mid = { lat: (a.lat + z.lat) / 2, lng: (a.lng + z.lng) / 2 };
     const n = _msrNagibTxt(pts);
-    const [ox, oy] = _msrBocniPomak(a, z, 50, 22);
+    const ug = _msrUgao(a, z);
     if (n) {
       const znak = n.pct > 0 ? '+' : '';
       out.push(_msrOznakaMarker(mid.lat, mid.lng,
         `<b>${znak}${n.pct.toFixed(1)} %</b><small>${_msrFmt(n.d)}</small>`,
-        _gradeColor(Math.abs(n.pct)), ox, oy, 'nagib'));
+        _gradeColor(Math.abs(n.pct)), ug, 30, 'nagib'));
     } else {
-      out.push(_msrOznakaMarker(mid.lat, mid.lng, `<b>…</b><small>${_msrFmt(_msrHaversine(a.lat, a.lng, z.lat, z.lng))} · čitam visinu</small>`, boja, ox, oy, 'nagib'));
+      out.push(_msrOznakaMarker(mid.lat, mid.lng, `<b>…</b><small>${_msrFmt(_msrHaversine(a.lat, a.lng, z.lat, z.lng))} · čitam visinu</small>`, boja, ug, 30, 'nagib'));
     }
     return out;
   }
   const pola = _msrPolaLinije(pts);
-  const [ox, oy] = _msrBocniPomak(pts[pola.i], pts[pola.i + 1], 32, 14);
-  out.push(_msrOznakaMarker(pola.lat, pola.lng, `<b>${_msrFmt(_msrPts2Len(pts))}</b>`, boja, ox, oy, 'dist'));
+  const ug = _msrUgao(pts[pola.i], pts[pola.i + 1]);
+  out.push(_msrOznakaMarker(pola.lat, pola.lng, `<b>${_msrFmt(_msrPts2Len(pts))}</b>`, boja, ug, 22, 'dist'));
   return out;
 }
 

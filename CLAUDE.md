@@ -5083,3 +5083,9 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 
 ### CI trka u testu hladnog restarta (v4.6.1)
 - Release v4.6.0 nije nastao jer je `tests/browser/device-workflow-273.py` pao samo na CI-ju (lokalno 3/3 prolazi): obnova sačuvanog prikaza poslije hladnog restarta je asinhrona, a test je prikaz čitao jednom, odmah. Sad čeka (do 8 s) da se centar/zum poklope s očekivanim pa tek onda tvrdi. Nema izmjene app koda.
+
+### Trokiranje riješeno; labele mjerenja paralelno s linijom (v4.6.2)
+- **Trokiranje na udaljenom zumu offline karte (v4.6.0/v4.6.1) potvrđeno riješeno na telefonu** — ostaje kako jeste (keepBuffer 1 dok je `getZoomScale < 1`, jedan ponovni pokušaj čitanja).
+- **Otvoreno (kasnije)**: na razmjeri ~1:500 000 offline karta nema svih pločica. Na toj razmjeri nije bitno za rad, pa nije hitno; kad se radi, krenuti od `_tileProf` brojki iz admin Debuga (`nullData` = pločice stvarno nema u fajlu, naspram `timeout`/`err`).
+- **Oznake dužine i nagiba su zarotirane paralelno s linijom** (`_msrUgao` zamijenila `_msrBocniPomak`): CSS `translate(-50%,-50%) rotate(ugao) translateY(-pomak)`, pomak je mjeren u rotiranom okviru pa oznaka uvijek stoji IZNAD linije, a ugao je u (−90°, 90°] da tekst nije naopako. Ugao u Mercator pikselima ne zavisi od zuma. Oznaka površine (`ha`) ostaje uspravna u sredini poligona. Za nagib se koristi pravac prva→zadnja tačka (kao i dotad), za dužinu segment u kojem je polovina linije.
+- **Pravilo skrivanja oznaka na razmjeri krupnijoj od 1:25 000 vlada** za vlake/tragove (`hideVlake`/`hideFT`, ~13096); oznake mjerenja ga nisu mijenjale.
