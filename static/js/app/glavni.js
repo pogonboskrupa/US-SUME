@@ -21672,6 +21672,7 @@ function _kmlHitTest(latlng, onlyPolygons) {
       }
 
       // Linija — tolerancija u pikselima (isti prag kao nevidljivi hit-sloj)
+      if (l._kmlKlikOff) continue;
       try {
         if (_kmlRingDistPx(l.getLatLngs(), cp) <= TOL_LINE) return l;
       } catch(e) {}
@@ -22061,6 +22062,8 @@ function applyKmlStyle(i) {
     traziTacku(k.grp);
   }
   const sakrijPoligone = k._imaTacke === true && k.poligoniVidljivi !== true;
+  // Zadano isključen klik (kamionski putevi) važi za SVE slojeve fajla, bez obzira kojim putem je učitan.
+  if (k.klikRucno !== true && k.klikOff !== true && globalThis.GithubLayers?.klikOffZadano?.(k)) k.klikOff = true;
   const styleLayer = l => {
     // SHP GeoJSON i MultiGeometry sadrže dodatne grupe; stilizuj stvarne elemente.
     if (l.eachLayer && !l._kmlIsPolygon && !l._kmlIsPoint) { l.eachLayer(styleLayer); return; }
@@ -22092,6 +22095,7 @@ function applyKmlStyle(i) {
       lo.fillOpacity = l._kmlIsPoint ? op : 0;
       if (l._kmlIsPoint) { lo.radius = k.ptR || 3; lo.weight = 1.5; lo.dashArray = null; }
     }
+    if (!l._kmlIsPoint && !l._kmlIsPolygon) { l._kmlKlikOff = k.klikOff === true; l.options.interactive = !l._kmlKlikOff; }
     l.setStyle(lo);
     if(l._kmlIsPolygon&&l._path)l._path.style.pointerEvents='all';
   };
