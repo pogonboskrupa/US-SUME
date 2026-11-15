@@ -28,3 +28,12 @@ console.log('OK kamionski-klik-skala-oznaka');
   assert(/if \(l\._kmlKlikOff\) continue;/.test(src),'hit-test preskače linije sa isključenim klikom');
   console.log('ok v4.6.4 linije');
 }
+
+// v4.6.5: visina za nagib mjerenja je prosjek devet DEM uzoraka.
+{
+  const src=require('fs').readFileSync(require('path').join(__dirname,'../../static/js/app/glavni.js'),'utf8');
+  const assert=require('assert');
+  assert(/async function _msrDemElev\(lat, lng\) \{\s*const c = await _msrDemElevTacka/.test(src),'_msrDemElev uprosjecuje');
+  assert(/async function _msrDemElevTacka\(lat, lng\)/.test(src),'jedna tacka ostaje');
+  console.log('ok v4.6.5 glađenje');
+}

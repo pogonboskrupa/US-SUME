@@ -26368,7 +26368,20 @@ function _withTimeout(promise, ms = 12000) {
 // ~30 m). Open-Meteo je mreža od ~90 m — na dionici od 93 m obje tačke padnu u
 // iste/susjedne ćelije pa je nagib bio višestruko podcijenjen.
 const _msrDemTiles = new Map();
+// Visina tačke je prosjek devet uzoraka (centar + osam na 30 m): izvorni DEM ima ~30 m i šum od nekoliko
+// metara po ćeliji, a na kratkoj dionici bi se taj šum pretvorio u lažan nagib.
+const _MSR_DEM_R_M = 30;
 async function _msrDemElev(lat, lng) {
+  const c = await _msrDemElevTacka(lat, lng);
+  if (c == null) return null;
+  const dLat = _MSR_DEM_R_M / 111320, dLng = _MSR_DEM_R_M / (111320 * Math.cos(lat * Math.PI / 180));
+  const pom = [[1,0],[-1,0],[0,1],[0,-1],[.7071,.7071],[.7071,-.7071],[-.7071,.7071],[-.7071,-.7071]];
+  const v = await Promise.all(pom.map(([a, b]) => _msrDemElevTacka(lat + a * dLat, lng + b * dLng).catch(() => null)));
+  let zbir = c, n = 1;
+  for (const x of v) if (x != null) { zbir += x; n++; }
+  return zbir / n;
+}
+async function _msrDemElevTacka(lat, lng) {
   const z = 14;
   const fx = _termLon2x(lng, z), fy = _termLat2y(lat, z);
   const tx = Math.floor(fx), ty = Math.floor(fy), k = tx + '/' + ty;
