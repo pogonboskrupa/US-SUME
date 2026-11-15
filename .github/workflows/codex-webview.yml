@@ -121,10 +121,9 @@ jobs:
             -Dorg.gradle.internal.repository.max.retries=6 \
             -Dorg.gradle.internal.repository.initial.backoff=3000 \
             assembleDebug
-      - name: Provjeri sadržaj APK-a (index.html, GRANICE.kml) i ispiši veličinu
-        # copy-assets.sh kopira GRANICE.kml sa "|| true" (ne ruši build ako fajl
-        # nedostaje) — to znači da APK može biti "uspješno" izgrađen a da mu
-        # ipak fali ključni sadržaj (mala, tiho nepotpuna karta na terenu).
+      - name: Provjeri sadržaj APK-a (index.html) i ispiši veličinu
+        # GRANICE.kml se više ne pakuje u APK (v4.6.7) — dolazi sa GitHub releasea.
+        # Provjera i dalje gleda STVARNI APK da build ne prođe tiho nepotpun.
         # Provjera raspakuje STVARNI APK i gleda šta je unutra, ne pretpostavlja
         # na osnovu toga da je gradle vratio exit 0.
         run: |
@@ -142,7 +141,7 @@ jobs:
           echo "Veličina raspakovanog APK-a: $(du -sh /tmp/apk-check | cut -f1)"
 
           MISSING=0
-          for f in assets/index.html assets/GRANICE.kml; do
+          for f in assets/index.html; do
             if [ ! -s "/tmp/apk-check/$f" ]; then
               echo "NEDOSTAJE ili je prazan: $f"
               MISSING=1
