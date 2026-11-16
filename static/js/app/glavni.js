@@ -2260,47 +2260,86 @@ async function doRegister() {
 }
 
 // --- Logout ---
-// --- Self-service: promijeni vlastiti PIN (ulogovan korisnik) ---
-// Ne treba RPC — sesija autorizuje sb.auth.updateUser; radi i bez migracije.
-async function promijeniPin() {
-  if (!sbUser) { showToast('Prvo se prijavite'); return; }
-  if (!navigator.onLine) { showToast('⚠ Promjena PIN-a traži internet'); return; }
-  const izbor = await _dlgActions('🔑 Nalog', [{ label: 'Promijeni PIN' }, { label: 'Uredi ime i prezime' }, { label: 'Odustani' }]);
-  if (izbor == null || izbor < 0 || izbor > 1) return;
-  if (izbor === 1) { await urediImePrezime(); return; }
-  const p1 = await _dlgPrompt('Novi PIN (4–6 cifara)', '', { title: '🔑 Promijeni PIN', inputType: 'password', inputMode: 'numeric', okLabel: 'Dalje' });
-  if (p1 === null) return;
-  const pin = String(p1).trim();
-  if (!/^\d{4,6}$/.test(pin)) { showToast('PIN mora biti 4–6 cifara'); return; }
-  const p2 = await _dlgPrompt('Ponovite novi PIN', '', { title: '🔑 Potvrdi PIN', inputType: 'password', inputMode: 'numeric', okLabel: 'Sačuvaj' });
-  if (p2 === null) return;
-  if (String(p2).trim() !== pin) { showToast('PIN-ovi se ne poklapaju'); return; }
-  const { error } = await sb.auth.updateUser({ password: pin.padEnd(6, '0') });
-  if (error) { showToast('Greška: ' + error.message); return; }
-  // Ako je "zapamti me" bio uključen, ažuriraj sačuvani PIN da auto-login radi
-  const saved = _loadSavedUser();
-  if (saved) { saved.pin = pin; localStorage.setItem(_SAVED_USER_KEY, JSON.stringify(saved)); }
-  showToast('✅ PIN promijenjen');
+// --- Moj nalog (v4.7.0): ime/prezime i PIN u jednom modalu, otvara se klikom na ime u Meniju ---
+// promijeniPin ostaje kao ulaz (ŠPD profil, stari pozivi) i samo otvara modal.
+function promijeniPin() { nalogOtvori(); }
+function _nalogInicijali(p) {
+  const a = String(p?.ime || '').trim(), b = String(p?.prezime || '').trim();
+  return ((a[0] || '') + (b[0] || '')).toUpperCase() || '?';
 }
+function _nalogEl(id) { return document.getElementById(id); }
+function _nalogPoruka(id, tekst, ok) {
+  const e = _nalogEl(id); if (!e) return;
+  e.textContent = tekst || ''; e.dataset.stanje = tekst ? (ok ? 'ok' : 'greska') : '';
+}
+function _nalogOffline() { return navigator.onLine === false; }
+function nalogOtvori() {
+  if (!sbUser || !sbProfile) { showToast('Prvo se prijavite'); return; }
+  const m = _nalogEl('nalog-modal'); if (!m) return;
+  try { closeMenuDropdown(); } catch (e) {}
+  _nalogEl('nalog-ime').value = sbProfile.ime || '';
+  _nalogEl('nalog-prezime').value = sbProfile.prezime || '';
+  for (const id of ['nalog-pin1', 'nalog-pin2']) _nalogEl(id).value = '';
+  _nalogPoruka('nalog-ime-msg', ''); _nalogPoruka('nalog-pin-msg', '');
+  _nalogEl('nalog-ini').textContent = _nalogInicijali(sbProfile);
+  const uloga = _nalogEl('menu-user-role'); _nalogEl('nalog-uloga').textContent = uloga ? uloga.textContent : '';
+  _nalogEl('nalog-offline').hidden = !_nalogOffline();
+  m.hidden = false;
+  setTimeout(() => { try { _nalogEl('nalog-ime').focus(); } catch (e) {} }, 60);
+}
+function nalogZatvori() { const m = _nalogEl('nalog-modal'); if (m) m.hidden = true; }
+function nalogPinPrikazi() {
+  const ids = ['nalog-pin1', 'nalog-pin2'], skriven = _nalogEl(ids[0]).classList.contains('pin-maska');
+  for (const id of ids) _nalogEl(id).classList.toggle('pin-maska', !skriven);
+  _nalogEl('nalog-pin-prikazi').textContent = skriven ? 'Sakrij PIN' : 'Prikaži PIN';
+}
+async function nalogSacuvajIme() {
+  const btn = _nalogEl('nalog-ime-btn');
+  if (_nalogOffline()) { _nalogPoruka('nalog-ime-msg', 'Nema interneta. Pokušaj kad dobiješ vezu.', false); return; }
+  const i = _nalogEl('nalog-ime').value.trim(), p = _nalogEl('nalog-prezime').value.trim();
+  btn.disabled = true;
+  try {
+    const err = await urediImePrezime(i, p);
+    if (err) { _nalogPoruka('nalog-ime-msg', err, false); return; }
+    _nalogPoruka('nalog-ime-msg', 'Ime je sačuvano.', true);
+    _nalogEl('nalog-ini').textContent = _nalogInicijali(sbProfile);
+  } finally { btn.disabled = false; }
+}
+async function nalogSacuvajPin() {
+  const btn = _nalogEl('nalog-pin-btn');
+  if (_nalogOffline()) { _nalogPoruka('nalog-pin-msg', 'Nema interneta. Pokušaj kad dobiješ vezu.', false); return; }
+  const p1 = _nalogEl('nalog-pin1').value.trim(), p2 = _nalogEl('nalog-pin2').value.trim();
+  if (!/^\d{4,6}$/.test(p1)) { _nalogPoruka('nalog-pin-msg', 'PIN mora imati 4–6 cifara.', false); return; }
+  if (p1 !== p2) { _nalogPoruka('nalog-pin-msg', 'PIN-ovi se ne poklapaju.', false); return; }
+  btn.disabled = true;
+  try {
+    const { error } = await _withTimeout(sb.auth.updateUser({ password: p1.padEnd(6, '0') }), 15000).catch(e => ({ error: e }));
+    if (error) { _nalogPoruka('nalog-pin-msg', 'Greška: ' + (error.message || error), false); return; }
+    // Sačuvani PIN (auto-login) i offline provjera moraju dobiti NOVI PIN, inače bi offline prijava starim PIN-om i dalje prolazila.
+    const saved = _loadSavedUser();
+    if (saved) { saved.pin = p1; try { localStorage.setItem(_SAVED_USER_KEY, JSON.stringify(saved)); } catch (e) {} }
+    try { await _offCredSpremi(sbProfile.ime || '', sbProfile.prezime || '', p1, sbUser.id); } catch (e) {}
+    for (const id of ['nalog-pin1', 'nalog-pin2']) _nalogEl(id).value = '';
+    _nalogPoruka('nalog-pin-msg', 'PIN je promijenjen.', true);
+    showToast('✅ PIN promijenjen');
+  } finally { btn.disabled = false; }
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && _nalogEl('nalog-modal') && !_nalogEl('nalog-modal').hidden) nalogZatvori(); });
 
 // Ime i prezime: login_email se ne mijenja pa PIN važi dalje. Offline prijava pamti staro ime
 // do prve online prijave pod novim imenom (hash ključa uključuje ime).
-async function urediImePrezime() {
-  if (!sbUser || !sbProfile) { showToast('Prvo se prijavite'); return; }
-  const ime = await _dlgPrompt('Ime', sbProfile.ime || '', { title: '✏ Ime i prezime', okLabel: 'Dalje' });
-  if (ime === null) return;
-  const prezime = await _dlgPrompt('Prezime', sbProfile.prezime || '', { title: '✏ Ime i prezime', okLabel: 'Sačuvaj' });
-  if (prezime === null) return;
-  const i = String(ime).trim(), p = String(prezime).trim();
-  if (i.length < 2) { showToast('Ime mora imati bar 2 znaka'); return; }
-  if (i === sbProfile.ime && p === (sbProfile.prezime || '')) { showToast('Nema promjene'); return; }
+// Vraća tekst greške ili null kad je sačuvano.
+async function urediImePrezime(ime, prezime) {
+  if (!sbUser || !sbProfile) return 'Prvo se prijavi.';
+  const i = String(ime || '').trim(), p = String(prezime || '').trim();
+  if (i.length < 2) return 'Ime mora imati bar 2 znaka.';
+  if (i === sbProfile.ime && p === (sbProfile.prezime || '')) return 'Nema promjene.';
   try {
     const r = await _withTimeout(sb.rpc('promijeni_svoje_ime', { p_ime: i, p_prezime: p }), 15000);
     if (r.error) throw r.error;
   } catch (e) {
     const m = String(e?.message || e);
-    showToast(/promijeni_svoje_ime|PGRST202|does not exist/i.test(m) ? '⚠ Server još nema ovu mogućnost — admin treba pokrenuti migraciju 20261110_promjena_imena.sql' : '⚠ ' + m);
-    return;
+    return /promijeni_svoje_ime|PGRST202|does not exist/i.test(m) ? 'Server još nema ovu mogućnost: admin treba pokrenuti migraciju 20261110_promjena_imena.sql.' : m;
   }
   sbProfile.ime = i; sbProfile.prezime = p;
   try { _OL.save(_OL.PROFILE, sbProfile); } catch (e) {}
@@ -2309,6 +2348,7 @@ async function urediImePrezime() {
   try { if (typeof _primijeniUlogeUI === 'function') _primijeniUlogeUI(sbProfile); } catch (e) {}
   try { _menuIdentityRender(); } catch (e) {}
   showToast('✅ Ime promijenjeno: ' + i + ' ' + p);
+  return null;
 }
 
 async function doLogout() {
@@ -13214,6 +13254,10 @@ function _menuIdentityRender() {
   const p = sbUser && sbProfile?.id === sbUser.id ? sbProfile : null;
   const name = document.getElementById('menu-user-label');
   if (name) name.textContent = p ? [p.ime,p.prezime].filter(Boolean).join(' ').trim() || 'Korisnik' : sbUser ? (sbProfile ? 'Profil nije dostupan' : 'Učitavam profil…') : 'Nije prijavljen';
+  const ini = document.getElementById('menu-user-ini');
+  if (ini) ini.textContent = p ? _nalogInicijali(p) : '?';
+  const ubtn = document.getElementById('menu-user-btn');
+  if (ubtn) ubtn.disabled = !p;
   const role = document.getElementById('menu-user-role');
   if (role) role.textContent = p ? [p.is_admin ? 'Administrator' : typeof isVodeci === 'function' && isVodeci() ? 'Vodeći projektant' : typeof isSpdField === 'function' && isSpdField() ? 'Terenski korisnik' : 'Projektant',p.sumarija].filter(Boolean).join(' · ') : '';
   const version = document.getElementById('menu-app-ver');

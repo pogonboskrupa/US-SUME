@@ -5910,7 +5910,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.6.9';
+const APP_VER = 'v4.7.0';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6134,7 +6134,7 @@ function _loadLocalVlake() {
 
 <!-- Glavni Meni: korisnik i verzija su na kraju skrolabilnog sadržaja. -->
 <div id="menu-dropdown" aria-label="Glavni Meni" style="display:none;">
-  <div class="mdrop-top"><div><b>Meni</b><small id="menu-context">Alati, projekti i aplikacija</small></div><button type="button" onclick="closeMenuDropdown()" aria-label="Zatvori Meni">✕</button></div>
+  <div class="mdrop-top"><b>Meni</b><button type="button" class="mdrop-user" id="menu-user-btn" onclick="nalogOtvori()" aria-label="Moj nalog: uredi ime i promijeni PIN"><i id="menu-user-ini" aria-hidden="true">?</i><span id="menu-user-label">Nije prijavljen</span><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button type="button" class="mdrop-x" onclick="closeMenuDropdown()" aria-label="Zatvori Meni">✕</button></div>
   <div class="mdrop-scroll"><section class="mdrop-section mdrop-server-section">
   <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg>Server</div>
   <button type="button" class="mdrop-item" id="mdrop-server"  onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg></span>Pošalji na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;flex-shrink:0;white-space:nowrap;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;white-space:nowrap;display:inline-block;"></span></span></button>
@@ -6176,7 +6176,6 @@ function _loadLocalVlake() {
   <button type="button" class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-users"/></svg></span>Admin — korisnici</button>
   <button type="button" class="mdrop-item" id="menu-gj-item" style="display:none;" onclick="closeMenuDropdown();gjAdminOtvori()"><span class="mdrop-ico" aria-hidden="true">🌲</span>Gospodarske jedinice</button>
   <button type="button" class="mdrop-item" id="menu-debug-item" style="display:none;color:#f87171;" onclick="closeMenuDropdown();if(sbProfile?.is_admin)switchTab('debug')"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-debug"/></svg></span>DEBUG</button>
-  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();promijeniPin()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-pin"/></svg></span>Promijeni PIN</button>
   <button type="button" class="mdrop-item" id="menu-prebaci-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();racuniPrebaci()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-users"/></svg></span><span id="menu-prebaci-txt">Prebaci na profil administratora</span></button>
   <button type="button" class="mdrop-item" id="menu-dijag-item" style="display:none;color:#38bdf8;" onclick="closeMenuDropdown();dijagOtvori()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-debug"/></svg></span>Dijagnostika</button>
   <button type="button" class="mdrop-item" id="menu-apk-download" style="color:#38bdf8;" onclick="closeMenuDropdown();preuzmiApkAdmin()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-load"/></svg></span><span>Preuzmi APK fajl<small>Najnovija verzija · odmah preuzima</small></span></button>
@@ -6185,10 +6184,35 @@ function _loadLocalVlake() {
   <button type="button" class="mdrop-item" style="color:#f87171;" onclick="closeMenuDropdown();doLogout()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-logout"/></svg></span>Odjava</button>
   </section></div>
   <footer class="mdrop-footer">
-    <div class="mdrop-account"><span>Prijavljeni korisnik</span><strong id="menu-user-label">Nije prijavljen</strong><small id="menu-user-role"></small></div>
+    <div class="mdrop-account"><small id="menu-user-role"></small></div>
     <div class="mdrop-brand"><img src="icon-192.png" width="44" height="44" alt="Logo aplikacije DENDRO MAP"><div><b>DENDRO MAP</b><span id="menu-app-ver"></span></div></div>
   </footer>
   </div>
+</div>
+
+<div id="nalog-modal" class="nalog-bg" hidden role="dialog" aria-modal="true" aria-labelledby="nalog-naslov" onclick="if(event.target===this)nalogZatvori()">
+  <section class="nalog-sheet">
+    <header class="nalog-head"><i id="nalog-ini" class="nalog-av" aria-hidden="true">?</i><div><h2 id="nalog-naslov">Moj nalog</h2><small id="nalog-uloga"></small></div><button type="button" class="nalog-x" onclick="nalogZatvori()" aria-label="Zatvori">✕</button></header>
+    <p id="nalog-offline" class="nalog-upoz" hidden>Nema interneta. Promjena imena i PIN-a traži vezu sa serverom.</p>
+    <div class="nalog-body">
+      <form class="nalog-kartica" onsubmit="nalogSacuvajIme();return false" autocomplete="off">
+        <h3>Ime i prezime</h3>
+        <label for="nalog-ime">Ime</label><input id="nalog-ime" class="nalog-in" type="text" maxlength="40" autocomplete="off" data-lpignore="true" data-1p-ignore="true" enterkeyhint="next">
+        <label for="nalog-prezime">Prezime</label><input id="nalog-prezime" class="nalog-in" type="text" maxlength="40" autocomplete="off" data-lpignore="true" data-1p-ignore="true" enterkeyhint="done">
+        <p class="nalog-nap">Prijava i dalje radi istim PIN-om. Offline prijava novim imenom počinje poslije prve prijave sa internetom.</p>
+        <p id="nalog-ime-msg" class="nalog-msg" role="status" aria-live="polite"></p>
+        <button type="submit" id="nalog-ime-btn" class="nalog-btn">Sačuvaj ime</button>
+      </form>
+      <form class="nalog-kartica" onsubmit="nalogSacuvajPin();return false" autocomplete="off">
+        <h3>Promjena PIN-a</h3>
+        <label for="nalog-pin1">Novi PIN (4–6 cifara)</label><input id="nalog-pin1" class="nalog-in pin-maska" type="text" inputmode="numeric" maxlength="6" autocomplete="off" data-lpignore="true" data-1p-ignore="true" enterkeyhint="next">
+        <label for="nalog-pin2">Ponovi novi PIN</label><input id="nalog-pin2" class="nalog-in pin-maska" type="text" inputmode="numeric" maxlength="6" autocomplete="off" data-lpignore="true" data-1p-ignore="true" enterkeyhint="done">
+        <button type="button" class="nalog-link" id="nalog-pin-prikazi" onclick="nalogPinPrikazi()">Prikaži PIN</button>
+        <p id="nalog-pin-msg" class="nalog-msg" role="status" aria-live="polite"></p>
+        <button type="submit" id="nalog-pin-btn" class="nalog-btn">Promijeni PIN</button>
+      </form>
+    </div>
+  </section>
 </div>
 
 <div id="department-report" class="dr-modal" hidden role="dialog" aria-modal="true" aria-labelledby="dr-title" onclick="if(event.target===this)DepartmentReport.close()">
@@ -7889,6 +7913,7 @@ function _loadLocalVlake() {
 <div id="explorer-top" hidden>
   <div><span id="ex-mode">EXPLORER 3D · PRATI ME</span><b id="ex-gps">Tražim GPS signal</b></div>
   <button type="button" onclick="Explorer.requestCompass()" aria-label="Kompas"><span id="ex-north" aria-hidden="true">↑</span><small>S</small></button>
+  <button id="ex-relief" type="button" aria-pressed="false" onclick="_exReljef()" aria-label="Sjenčenje reljefa" title="Reljef: sjenčenje terena">⛰</button>
   <button type="button" onclick="stopTackaNav()" aria-label="Završi navigaciju">×</button>
 </div>
 <div id="explorer-you" hidden aria-hidden="true"><span></span><b>TI</b></div>
@@ -7898,7 +7923,7 @@ function _loadLocalVlake() {
   <div class="ex-guidance"><div><div id="tnp-air">—</div><small id="ex-distance-label">Do cilja · zračna udaljenost</small></div><div class="ex-direction"><svg id="ex-direction-arrow" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 27V5M6 15L16 5l10 10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
   <div class="ex-live"><b id="ex-instruction">Čekam GPS signal</b><span id="ex-heading">Smjer nije dostupan</span></div>
   <div id="tnp-road" hidden></div><div id="tnp-elev" style="display:none;"></div>
-  <div class="ex-actions"><label class="ex-toggle" for="ex-follow"><input id="ex-follow" type="checkbox" checked onchange="Explorer.setExplorerEnabled(this.checked)"><span>Explorer 3D</span></label><button id="ex-overview" type="button" onclick="Explorer.overview()" aria-label="Pregled cijelog puta do cilja">Pregled</button><button id="ex-relief" type="button" aria-pressed="false" onclick="_exReljef()" aria-label="Sjenčenje reljefa">Reljef</button><button id="ex-gps-start" type="button" hidden onclick="startGPS();Explorer.refresh()">Uključi GPS</button><button id="ex-stop-compact" type="button" onclick="stopTackaNav()" aria-label="Završi navigaciju">×</button><div class="ex-zoom"><button type="button" onclick="Explorer.zoom(-1)" aria-label="Umanji kartu">−</button><button type="button" onclick="Explorer.zoom(1)" aria-label="Uvećaj kartu">+</button></div></div>
+  <div class="ex-actions"><label class="ex-toggle" for="ex-follow"><input id="ex-follow" type="checkbox" checked onchange="Explorer.setExplorerEnabled(this.checked)"><span>Explorer 3D</span></label><button id="ex-overview" type="button" onclick="Explorer.overview()" aria-label="Pregled cijelog puta do cilja">Pregled</button><button id="ex-gps-start" type="button" hidden onclick="startGPS();Explorer.refresh()">Uključi GPS</button><button id="ex-stop-compact" type="button" onclick="stopTackaNav()" aria-label="Završi navigaciju">×</button><div class="ex-zoom"><button type="button" onclick="Explorer.zoom(-1)" aria-label="Umanji kartu">−</button><button type="button" onclick="Explorer.zoom(1)" aria-label="Uvećaj kartu">+</button></div></div>
 </div>
 
 <!-- Tačka modal — unos naziva -->

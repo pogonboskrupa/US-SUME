@@ -11,7 +11,7 @@ assert(/dispAngle\+=\(\(angle-prevAngle\+540\)%360\)-180/.test(ex), 'neprekinut 
 assert(/dm<80/.test(ex) && /sameView/.test(ex), 'veliki skok, zum i resize ostaju trenutni');
 assert(/resize\(\)\{if\(!world\)return;world\.classList\.remove\('ex-glide'\)/.test(ex), 'resize bez klizanja');
 assert(!/setInterval\([^)]*glide/i.test(ex) && !/requestAnimationFrame\([^)]*glide/i.test(ex), 'nema JS petlje po frejmu za klizanje');
-assert(/id="ex-relief"[^>]*onclick="_exReljef\(\)"/.test(html), 'dugme Reljef u Exploreru');
+assert(/id="ex-relief"[^>]*onclick="_exReljef\(\)"/.test(html) && html.indexOf('id="ex-relief"') < html.indexOf('id="explorer-you"'), 'dugme Reljef u gornjoj traci Explorera (ne širi donji panel)');
 assert(/function _exReljef\(\)\s*\{\s*_instToggle\('elev', !_ovlState\.elev\)/.test(src), 'Reljef koristi postojeći sloj elev');
 assert(/isRelief: \(\) => !!_ovlState\.elev/.test(src), 'stanje dugmeta prati sloj');
 assert(/_ovlState = \{ elev: false/.test(src), 'sjenčenje je zadano isključeno (bez troška)');
