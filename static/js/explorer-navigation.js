@@ -12,8 +12,8 @@ function perspective(p,pitch,depth){const c=Math.cos(pitch),s=Math.sin(pitch),k=
 function unperspective(p,pitch,depth){const c=Math.cos(pitch),s=Math.sin(pitch),y=p.y/(c+p.y*s/depth);return {x:p.x*(1-y*s/depth),y};}
 function camera(map){
  const container=map.getContainer(),originalSize=map.getSize,originalMouse=map.mouseEventToContainerPoint;
- let world=null,anchor=null,side=0,size=null,angle=0,handlers=[],changing=false,pitch=48*Math.PI/180,depth=900,revision=0;
- function transform(){if(world)world.style.transform='perspective('+depth+'px) rotateX(48deg) rotate('+(-angle)+'deg)';}
+ let world=null,anchor=null,side=0,size=null,angle=0,dispAngle=0,handlers=[],changing=false,pitch=48*Math.PI/180,depth=900,revision=0;
+ function transform(){if(world)world.style.transform='perspective('+depth+'px) rotateX(48deg) rotate('+(-dispAngle)+'deg)';}
  function measure(){size=originalSize.call(map);depth=Math.max(900,size.y*2.5);
   const corners=[[-size.x/2,-size.y/2],[size.x/2,-size.y/2],[-size.x/2,size.y/2],[size.x/2,size.y/2]];
   side=Math.ceil(2*Math.max(...corners.map(([x,y])=>{const p=unperspective({x,y},pitch,depth);return Math.hypot(p.x,p.y);}))+32);revision++;if(world){world.style.width=world.style.height=side+'px';world.style.left=(size.x-side)/2+'px';world.style.top=(size.y-side)/2+'px';transform();}}
@@ -33,18 +33,21 @@ function camera(map){
    handlers.forEach(x=>x.h?.disable());events.forEach(e=>container.addEventListener(e,block,{capture:true,passive:false}));
    changing=true;try{map.setView(center,map.getZoom(),{animate:false,reset:true});}finally{changing=false;}
   },
-  update(pos,heading,y){
+  update(pos,heading,y,glideMs){
    if(!world)return;
-   angle=norm(heading||0);transform();
+   // Glatko klizanje: CSS tranzicija (compositor) umjesto setView po frejmu — nula JS-a između GPS fiksova.
+   // dispAngle je neprekinut ugao (bez skoka 359°→1°) samo za tranziciju; matematika ostaje na norm(angle).
+   const prevAngle=angle;angle=norm(heading||0);dispAngle+=((angle-prevAngle+540)%360)-180;
+   world.style.setProperty('--ex-dur',(glideMs>0?Math.round(glideMs):0)+'ms');world.classList.toggle('ex-glide',glideMs>0);transform();
    const v=rotate(unperspective({x:0,y:y-size.y/2},pitch,depth),angle*Math.PI/180),p=map.project([pos.la,pos.lo],map.getZoom());
    changing=true;try{map.setView(map.unproject(root.L.point(p.x-v.x,p.y-v.y),map.getZoom()),map.getZoom(),{animate:false});}finally{changing=false;}
   },
-  resize(){if(!world)return;const center=map.getCenter();map._sizeChanged=true;measure();changing=true;try{map.setView(center,map.getZoom(),{animate:false,reset:true});}finally{changing=false;}},
+  resize(){if(!world)return;world.classList.remove('ex-glide');const center=map.getCenter();map._sizeChanged=true;measure();changing=true;try{map.setView(center,map.getZoom(),{animate:false,reset:true});}finally{changing=false;}},
   screenPoint(ll){const p=map.latLngToContainerPoint(ll);if(!world)return p;const v=perspective(rotate({x:p.x-side/2,y:p.y-side/2},-angle*Math.PI/180),pitch,depth);return root.L.point(v.x+size.x/2,v.y+size.y/2);},
   stop(){
    if(!world)return;
    const center=map.getCenter();map.stop();map.getSize=originalSize;map.mouseEventToContainerPoint=originalMouse;
-   anchor.parentNode.insertBefore(map._mapPane,anchor);anchor.remove();world.remove();world=null;angle=0;
+   anchor.parentNode.insertBefore(map._mapPane,anchor);anchor.remove();world.remove();world=null;angle=0;dispAngle=0;
    events.forEach(e=>container.removeEventListener(e,block,true));handlers.forEach(x=>{if(x.enabled)x.h?.enable();});handlers=[];
    map.invalidateSize({animate:false,pan:false});map.setView(center,map.getZoom(),{animate:false,reset:true});
   }
@@ -52,7 +55,7 @@ function camera(map){
 }
 function create(options){
  const map=options.map,view=camera(map),g=id=>document.getElementById(id);
- let target=null,follow=true,visible=true,timer=null,goal=null,course=null,previous=null,lastView=0,lastCamera=null,pending=null,deferred=null,session=0,blocked=false,chrome=null,fieldRoom=0,overlays=[];
+ let target=null,follow=true,visible=true,timer=null,goal=null,course=null,previous=null,lastView=0,lastCamera=null,lastPosT=0,lastPosEnd=0,lastGlide=0,pending=null,deferred=null,session=0,blocked=false,chrome=null,fieldRoom=0,overlays=[];
  const preferenceKey='tvlake_explorer_view_v1';
  function preference(){try{return root.localStorage.getItem(preferenceKey)!=='false';}catch(e){return true;}}
  const ui=(id,text)=>{const el=g(id);if(el&&el.textContent!==String(text))el.textContent=text;};
@@ -128,6 +131,7 @@ function create(options){
    options.onBearing?.(b);
   }else{if(arrow)arrow.style.opacity='.25';ui('ex-instruction',!gps?'Uključi GPS za praćenje':!fresh?'Čekam novu GPS poziciju':'Okreni telefon ili kreni za smjer');}
   if(g('ex-follow'))g('ex-follow').checked=follow;
+  const rel=g('ex-relief');if(rel){let on=false;try{on=!!options.isRelief?.();}catch(e){}rel.setAttribute('aria-pressed',on?'true':'false');}
   ui('ex-mode',follow?(gps&&fresh&&valid?'EXPLORER 3D · PRATI ME':'EXPLORER 3D · ČEKAM GPS'):'NAVIGACIJA · PREGLED KARTE');
   const start=g('ex-gps-start');if(start)start.hidden=gps;
   const usable=visible&&!blocked,y=usable?layout():0;
@@ -137,11 +141,18 @@ function create(options){
   if(usable&&follow&&now-lastView>=250){
    lastView=now;const angle=h?.value??view.angle;
    const changed=!view.active||!lastCamera||lastCamera.revision!==view.revision||distance(cameraPos,lastCamera)>=1||Math.abs((angle-lastCamera.angle+540)%360-180)>=1.5||lastCamera.zoom!==map.getZoom()||Math.abs(lastCamera.y-y)>1;
-   if(changed){if(!view.active)view.start();view.update(cameraPos,angle,y);lastCamera={la:cameraPos.la,lo:cameraPos.lo,angle,y,zoom:map.getZoom(),revision:view.revision};}
+   if(changed){
+    const dm=lastCamera?distance(cameraPos,lastCamera):0,sameView=view.active&&lastCamera&&lastCamera.revision===view.revision&&lastCamera.zoom===map.getZoom()&&Math.abs(lastCamera.y-y)<=1;
+    // Pomak pozicije: klizi onoliko koliko je trajao interval između fiksova (kamera stiže baš kad stigne sljedeći fiks).
+    // Samo okret: završava zajedno sa klizanjem koje je u toku. Veliki skokovi (>80 m), zum i resize ostaju trenutni.
+    let glide=0;
+    if(sameView&&dm<80)glide=dm>=1?Math.max(300,Math.min(1500,now-lastPosT)):Math.max(250,lastPosEnd-now);
+    if(dm>=1||!lastCamera){lastPosT=now;lastPosEnd=now+glide;}
+    if(!view.active)view.start();view.update(cameraPos,angle,y,glide);lastGlide=glide;lastCamera={la:cameraPos.la,lo:cameraPos.lo,angle,y,zoom:map.getZoom(),revision:view.revision};}
   }else if(usable&&follow&&deferred==null){
    deferred=root.setTimeout(()=>{deferred=null;render();},Math.max(1,250-(now-lastView)));
   }
-  const you=g('explorer-you');if(you){you.hidden=!(usable&&fieldRoom>=20&&follow&&fresh&&valid&&gps&&view.active);if(!you.hidden){const p=view.screenPoint([pos.la,pos.lo]),r=map.getContainer().getBoundingClientRect();you.style.left=(r.left+p.x)+'px';you.style.top=(r.top+p.y)+'px';you.dataset.heading=h?'known':'none';}}
+  const you=g('explorer-you');if(you){you.hidden=!(usable&&fieldRoom>=20&&follow&&fresh&&valid&&gps&&view.active);if(!you.hidden){const p=view.screenPoint([pos.la,pos.lo]),r=map.getContainer().getBoundingClientRect();you.style.transition=lastGlide>0?'left '+Math.round(lastGlide)+'ms linear,top '+Math.round(lastGlide)+'ms linear':'none';you.style.left=(r.left+p.x)+'px';you.style.top=(r.top+p.y)+'px';you.dataset.heading=h?'known':'none';}}
   if(g('ex-north'))g('ex-north').style.transform='rotate('+(-view.angle)+'deg)';
  }
  function schedule(){if(target&&pending==null)pending=root.requestAnimationFrame(render);}

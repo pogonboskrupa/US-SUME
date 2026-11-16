@@ -12,6 +12,7 @@ PARALELNO=(
   tests/browser/labele-vlaka.py
   tests/browser/offline-import-240.py
   tests/browser/explorer-full-239.py
+  tests/browser/explorer-glide.py
   tests/browser/explorer-239.py
   tests/browser/access-238.py
   tests/browser/overlays-237.py

@@ -11438,6 +11438,7 @@ window.Explorer = ExplorerNavigation.create({
   getPosition: () => lastP ? {...lastP,ts:_onPLastFixTs || 0} : null,
   getCompass: () => ({value:_compassHeading == null ? null : (_compassHeading + (screen.orientation?.angle || window.orientation || 0) + 360) % 360,ts:_compassLastUpdT}),
   isGpsOn: () => gpsOn,
+  isRelief: () => !!_ovlState.elev,
   onBearing: value => { _navLastBrng=value; if (_activeTab==='teren') _updateNavArrows(); },
   toast: showToast
 });
@@ -22702,6 +22703,8 @@ function _instToggle(id, on) {
   _demLegendUpdate();
 }
 
+// Explorer: sjenčenje terena (postojeći sloj 'elev') daje utisak reljefa na nagnutoj 3D karti. Ugašeno zadano, bez troška dok je isključeno.
+function _exReljef() { _instToggle('elev', !_ovlState.elev); try { window.Explorer?.refresh(); } catch (e) {} }
 function _demLegMin() { try { const m = JSON.parse(localStorage.getItem(_DEM_LEG_MIN_KEY) || '{}'); return m && typeof m === 'object' ? m : {}; } catch (e) { return {}; } }
 function _demLegMinToggle(id) { const m = _demLegMin(); m[id] = !m[id]; try { localStorage.setItem(_DEM_LEG_MIN_KEY, JSON.stringify(m)); } catch (e) {} _demLegendUpdate(); }
 function _demLegX(id) { _instToggle(id, false); }
