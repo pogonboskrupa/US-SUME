@@ -26246,7 +26246,7 @@ function _mjtrgTab(t) {
   const panel = document.getElementById('mjtrg-panel');
   // Mjerenje: panel onoliko visok koliko mu sadržaj treba (ranije fiksnih 15vh
   // = ~96px na telefonu, pa je rezultat bio ispod ruba).
-  if (panel) panel.style.maxHeight = isMsr ? 'min(78vh, 640px)' : '65vh';
+  if (panel) panel.style.maxHeight = isMsr ? 'min(60vh, 440px)' : '65vh';
   if (!isMsr) { _tragRegRender(); _msrRegRender(); }
 }
 
@@ -26535,7 +26535,6 @@ function _msrUpdGlavni() {
 function _msrUpdPanel() {
   _msrUpdUndoBtn();
   _msrUpdGlavni();
-  _msrProfilOsvjezi();
   const totalBox = document.getElementById('msr-total-box');
   if (!totalBox) return;
   const pts = _msrPts;
@@ -27250,6 +27249,9 @@ let _msrProfilTok = 0, _msrProfilT = null;
 function _msrProfilOsvjezi() {
   const el = document.getElementById('msr-profil');
   if (!el) return;
+  // Profil se NE prikazuje u panelu tokom mjerenja (činio ga je previsokim) —
+  // otvara se iz popupa sačuvanog mjerenja (_msrRegProfil).
+  el.style.display = 'none'; el.innerHTML = ''; return;
   if ((_msrMode !== 'dist' && _msrMode !== 'nagib') || _msrPts.length < 2) { el.style.display = 'none'; el.innerHTML = ''; return; }
   clearTimeout(_msrProfilT);
   const tok = ++_msrProfilTok, pts = _msrPts.slice();

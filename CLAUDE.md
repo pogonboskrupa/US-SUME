@@ -5109,3 +5109,6 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 - Fajl od 13,2 MB (~2,9 MB komprimirano u APK-u) se pakovao u `assets/`, a **nijedan runtime kod ga nije čitao**: granice se uvoze kroz katalog "KML sa servera" (`KmlDownloads` → GitHub release, uloga `boundaries`), `autoLoadAllKmlBuckets` je prazna funkcija, a JS/sw.js/Java ne spominju `GRANICE.kml` kao asset. Provjereno grep-om prije brisanja.
 - Uklonjeno: fajl iz repoa, stavka iz `android/assets-manifest.json` (`assets.py` bi inače pao na "Nedostaje obavezni fajl"), i CI provjera sadržaja APK-a (`assets/GRANICE.kml`; ostaje `assets/index.html`). Browser testovi koji mockiraju rutu `GRANICE.kml` su ostali — mock bez zahtjeva je bezopasan.
 - **Posljedica**: svježe instaliran APK bez interneta nema granice dok se jednom ne preuzmu (Dodaj fajl → KML sa servera); već preuzete ostaju lokalno.
+
+### Profil terena nije više u panelu mjerenja (v4.6.8)
+- Na zahtjev: profil u panelu (`#msr-profil`) činio je modal previsokim. `_msrUpdPanel` više ne zove `_msrProfilOsvjezi` (funkcija ostaje, ali odmah sakriva element), a visina panela mjerenja je vraćena na `min(60vh, 440px)` (v4.5.6 ju je podigla na 78vh samo zbog profila). Profil se otvara iz popupa sačuvanog mjerenja (klik na mjerenje → "📈 Profil terena" → `_msrRegProfil`).

@@ -16,6 +16,6 @@ const pts = [{lat:44,lng:16},{lat:44,lng:16.001},{lat:44,lng:16.01}];
 const pola = f._msrPolaLinije(pts); ok(pola.i === 1 && pola.lng > 16.004 && pola.lng < 16.006, 'pola dužine na drugom segmentu');
 const S = f._msrUzorci(pts); ok(S.length >= 6 && S[0].d === 0 && Math.abs(S[S.length-1].d - f._msrPts2Len(pts)) < 1, 'uzorci od početka do kraja');
 const st = f._msrProfilStat({ S: [{d:0},{d:10},{d:20}], alts: [100,102,110] }); ok(st.max > 0 && st.min === 100 && st.maxAlt === 110, 'statistika profila');
-ok(/_msrProfilOsvjezi\(\);/.test(pick('_msrUpdPanel')), 'panel osvježava profil');
+ok(!/_msrProfilOsvjezi\(\);/.test(pick('_msrUpdPanel')), 'panel NE crta profil (previsok modal)');
 ok(/Profil terena/.test(pick('_msrPopupHtml')), 'popup ima profil za dist/nagib');
 console.log('ok');
