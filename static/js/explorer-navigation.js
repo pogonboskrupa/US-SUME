@@ -146,7 +146,7 @@ function create(options){
     // Pomak pozicije: klizi onoliko koliko je trajao interval između fiksova (kamera stiže baš kad stigne sljedeći fiks).
     // Samo okret: završava zajedno sa klizanjem koje je u toku. Veliki skokovi (>80 m), zum i resize ostaju trenutni.
     let glide=0;
-    if(sameView&&dm<80)glide=dm>=1?Math.max(300,Math.min(1500,now-lastPosT)):Math.max(250,lastPosEnd-now);
+    if(sameView&&dm<80)glide=dm>=1?Math.max(300,Math.min(1500,now-lastPosT)):(lastPosEnd>now?lastPosEnd-now:0);
     if(dm>=1||!lastCamera){lastPosT=now;lastPosEnd=now+glide;}
     if(!view.active)view.start();view.update(cameraPos,angle,y,glide);lastGlide=glide;lastCamera={la:cameraPos.la,lo:cameraPos.lo,angle,y,zoom:map.getZoom(),revision:view.revision};}
   }else if(usable&&follow&&deferred==null){
