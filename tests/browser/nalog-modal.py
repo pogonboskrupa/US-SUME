@@ -18,11 +18,12 @@ def fn(name):
    if d==0:break
   k+=1
  return source[i:k+1]
-names=['promijeniPin','_nalogInicijali','_nalogEl','_nalogPoruka','_nalogOffline','nalogOtvori','nalogZatvori','nalogPinPrikazi','nalogSacuvajIme','nalogSacuvajPin','urediImePrezime','_menuIdentityRender','closeMenuDropdown']
+names=['promijeniPin','_nalogInicijali','_nalogEl','_nalogPoruka','_nalogOffline','nalogOtvori','nalogZatvori','nalogPinPrikazi','nalogSacuvajIme','nalogSacuvajPin','urediImePrezime','_menuIdentityRender','closeMenuDropdown','_nalogPripadnostPripremi','nalogSacuvajPripadnost','_jeTerenski','_pripSumarije','_pripadnostOpcije','_pripadnostGreska','_escHtml']
 esc=re.search(r"document\.addEventListener\('keydown', e => \{ if \(e\.key === 'Escape' && _nalogEl.*?\}\);",source)[0]
 js='''let sbUser={id:'U1'},sbProfile={id:'U1',ime:'Emina',prezime:'Projektant',sumarija:'Bos.Krupa'},APP_VER='v-test',calls=[];
 const showToast=t=>calls.push(t),SpdProfile={sync(){}},isVodeci=()=>false,isSpdField=()=>false,_OL={save(){},PROFILE:'p'},_SAVED_USER_KEY='k',_loadSavedUser=()=>null,_primijeniUlogeUI=()=>{},_withTimeout=(p)=>p,_offCredSpremi=async()=>{};
-const sb={rpc:async(n,a)=>{calls.push('rpc:'+n+':'+a.p_ime+' '+a.p_prezime);return {error:null}},auth:{updateUser:async o=>{calls.push('pin:'+o.password);return {error:null}}}};
+const _SUMARIJE=['ŠPD US ŠUME','ŠUMARIJA CAZIN','ŠUMARIJA KLJUČ'],_profileSave=()=>{};
+const sb={rpc:async(n,a)=>{calls.push('rpc:'+n+':'+('p_sumarija' in a?a.p_sumarija:a.p_ime+' '+a.p_prezime));return {error:null}},auth:{updateUser:async o=>{calls.push('pin:'+o.password);return {error:null}}}};
 '''+'\n'.join(fn(n) for n in names)+'''
 '''+esc+'''
 document.getElementById('auth-screen').style.display='none';
@@ -72,6 +73,14 @@ async def main():
    await page.fill('#nalog-pin2','1234');await page.click('#nalog-pin-btn');await page.wait_for_function("document.getElementById('nalog-pin-msg').dataset.stanje==='ok'")
    assert 'pin:123400' in await page.evaluate('calls');assert await page.locator('#nalog-pin1').input_value()==''
    await page.click('#nalog-pin-prikazi');assert await page.locator('#nalog-pin1').evaluate('e=>!e.classList.contains("pin-maska")')
+   # Pripadnost šumariji: projektant je ne vidi, terenski profil bira i čuva
+   assert await page.locator('#nalog-prip-kartica').is_hidden()
+   await page.evaluate("sbProfile.sumarija='ŠPD US ŠUME';nalogZatvori();nalogOtvori()")
+   assert await page.locator('#nalog-prip-kartica').is_visible()
+   opc=await page.locator('#nalog-prip option').all_inner_texts();assert opc==['— nije odabrano —','ŠUMARIJA CAZIN','ŠUMARIJA KLJUČ'],opc
+   await page.select_option('#nalog-prip','ŠUMARIJA CAZIN');await page.click('#nalog-prip-btn');await page.wait_for_function("document.getElementById('nalog-prip-msg').dataset.stanje==='ok'")
+   assert 'rpc:postavi_svoju_pripadnost:ŠUMARIJA CAZIN' in await page.evaluate('calls') and await page.evaluate('sbProfile.pripadnost')=='ŠUMARIJA CAZIN'
+   await page.evaluate("sbProfile.sumarija='Bos.Krupa'")
    sh=await page.locator('.nalog-sheet').bounding_box();assert sh['x']>=-1 and sh['x']+sh['width']<=w+1,sh
    await page.screenshot(path=str(out/f'nalog-modal-{w}-{tema}.png'))
    # offline traka i zatvaranje

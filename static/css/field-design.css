@@ -1730,3 +1730,65 @@ html[data-field-theme=day] .nalog-link {color:#0369a1;}
 .nalog-btn {width:100%;min-height:50px;margin-top:6px;border:0;border-radius:13px;background:#15724f;color:#fff;font:800 15px system-ui;cursor:pointer;}
 .nalog-btn:disabled {opacity:.55;cursor:default;}
 .nalog-btn:focus-visible,.nalog-x:focus-visible,.nalog-link:focus-visible {outline:3px solid #38bdf8;outline-offset:2px;}
+
+/* v4.7.4: Prati me = oker, Centriraj = tirkiz. Svijetla nijansa dok je lokacija uključena,
+   jača boja kad je uključeno (Prati me aktivan / karta stoji na mojoj poziciji). */
+html #ab-loc-popup .abp-hb.abp-prati {background:#fbefcf;border-color:#e3c987;color:#7a5a12;}
+html #ab-loc-popup .abp-hb.abp-prati.prati {background:#c9961f;border-color:#a87b12;color:#fff;}
+html #ab-loc-popup .abp-hb.abp-centar {background:#d5f5f0;border-color:#8fdccf;color:#0f6b61;}
+html #ab-loc-popup .abp-hb.abp-centar.centrirano {background:#0d9488;border-color:#0f766e;color:#fff;}
+
+/* v4.7.4: Grupe korisnika — kartice (Grupe / Zadane / Terenski), pretraga, članovi po vrsti.
+   Terenski = oker, projektant = tirkiz (iste boje kao Prati me / Centriraj). */
+#grupe-panel .grp-tabovi{display:flex;gap:6px;padding:10px 14px 0;background:var(--field-card,#0f172a)}
+#grupe-panel .grp-tab{flex:1;min-height:44px;display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid var(--field-border,#334155);border-bottom:0;border-radius:12px 12px 0 0;background:transparent;color:var(--field-muted,#94a3b8);font:700 13px system-ui;cursor:pointer;padding:0 6px;white-space:nowrap}
+#grupe-panel .grp-tab b{font-size:11px;padding:1px 7px;border-radius:99px;background:rgba(148,163,184,.18);color:inherit}
+#grupe-panel .grp-tab b.upoz{background:#c9961f;color:#fff}
+#grupe-panel .grp-tab.on{background:var(--field-bg,#111c30);color:var(--field-ink,#f1f5f9);border-color:#22c55e}
+#grupe-panel .grp-trazi-wrap{padding:10px 14px 0}
+#grupe-panel #grp-trazi{width:100%;box-sizing:border-box;min-height:44px;padding:0 12px;border-radius:12px;border:1px solid var(--field-border,#334155);background:var(--field-card,#0f172a);color:var(--field-ink,#f1f5f9);font:600 15px system-ui}
+#grupe-panel .grp-chip{display:inline-flex;align-items:baseline;gap:5px}
+#grupe-panel .grp-chip small{font-size:10.5px;opacity:.75}
+#grupe-panel .grp-chip.ter{border-color:#c9961f;background:rgba(201,150,31,.14)}
+#grupe-panel .grp-chip.pro{border-color:#0d9488;background:rgba(13,148,136,.14)}
+#grupe-panel .grp-kartica>header i{font-style:normal;font-weight:700}
+#grupe-panel .grp-kartica>header i.ter{color:#e3b54a}#grupe-panel .grp-kartica>header i.pro{color:#2dd4bf}
+#grupe-panel .grp-vise{min-height:30px;padding:2px 10px;border-radius:99px;border:1px dashed var(--field-border,#334155);background:transparent;color:var(--field-muted,#94a3b8);font:600 12px system-ui;cursor:pointer}
+#grupe-panel .grp-ter{border-left-color:#c9961f}
+#grupe-panel .grp-bez{border-left-color:#f59e0b;background:rgba(245,158,11,.08)}
+#grupe-panel .grp-ter-red{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--field-border,#334155)}
+#grupe-panel .grp-ter-red:first-of-type{border-top:0}
+#grupe-panel .grp-ter-red span{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#grupe-panel .grp-ter-red select{flex:0 0 52%;min-height:40px;border-radius:10px;border:1px solid var(--field-border,#334155);background:var(--field-card,#0f172a);color:var(--field-ink,#f1f5f9);font:600 13px system-ui;padding:0 6px}
+/* Uređivač grupe (ranije sav inline stil) */
+.gu-bg{position:fixed;inset:0;z-index:999960;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center}
+.gu-box{background:var(--field-card,#0f172a);color:var(--field-ink,#e8f0ea);width:100%;max-width:560px;max-height:92vh;display:flex;flex-direction:column;gap:8px;border-radius:18px 18px 0 0;padding:14px 14px calc(12px + env(safe-area-inset-bottom,0px));box-sizing:border-box}
+.gu-naslov{font:800 16px system-ui}
+.gu-polje{width:100%;box-sizing:border-box;min-height:44px;font:600 16px system-ui;padding:0 10px;border-radius:10px;border:1px solid var(--field-border,#476);background:var(--field-bg,#111c30);color:inherit}
+.gu-red{display:flex;gap:8px}.gu-red>*{flex:1;min-width:0}
+.gu-vrsta{display:flex;gap:6px}
+.gu-vrsta button{flex:1;min-height:38px;border-radius:99px;border:1px solid var(--field-border,#476);background:transparent;color:inherit;font:700 13px system-ui;cursor:pointer}
+.gu-vrsta button.on{background:#15724f;border-color:#15724f;color:#fff}
+.gu-vrsta button.ter.on{background:#c9961f;border-color:#a87b12}
+.gu-vrsta button.pro.on{background:#0d9488;border-color:#0f766e}
+.gu-dugme{min-height:44px;padding:0 12px;border-radius:10px;border:1px solid var(--field-border,#476);background:transparent;color:inherit;font:600 13px system-ui;cursor:pointer}
+.gu-opa{border-color:#b91c1c;color:#fca5a5}
+.gu-lista{overflow-y:auto;flex:1;min-height:150px;display:flex;flex-direction:column;gap:3px}
+.gu-stavka{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border-radius:10px;border:1px solid transparent;background:rgba(148,163,184,.08);color:inherit;min-height:46px;cursor:pointer;font:600 14px system-ui}
+.gu-stavka.on{background:rgba(21,114,79,.32);border-color:#22c55e}
+.gu-kv{flex:0 0 22px;height:22px;border-radius:6px;border:2px solid var(--field-border,#64748b);display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff}
+.gu-stavka.on .gu-kv{background:#16a34a;border-color:#16a34a}
+.gu-ime{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gu-stavka small,.gu-t-ter,.gu-t-pro{flex:0 0 auto;font:700 11px system-ui;padding:2px 8px;border-radius:99px}
+.gu-stavka small.ter,.gu-t-ter{color:#e3b54a;background:rgba(201,150,31,.16)}
+.gu-stavka small.pro,.gu-t-pro{color:#2dd4bf;background:rgba(13,148,136,.16)}
+.gu-prazno{opacity:.6;padding:14px}
+.gu-spremi{min-height:48px;border-radius:12px;border:0;background:#15724f;color:#fff;font:800 15px system-ui;cursor:pointer}
+.gu-odustani{min-height:40px;border:0;background:transparent;color:inherit;opacity:.7;cursor:pointer}
+html[data-field-theme=day] .gu-stavka small.ter,html[data-field-theme=day] .gu-t-ter,html[data-field-theme=day] #grupe-panel .grp-kartica>header i.ter{color:#7a5a12}
+html[data-field-theme=day] .gu-stavka small.pro,html[data-field-theme=day] .gu-t-pro,html[data-field-theme=day] #grupe-panel .grp-kartica>header i.pro{color:#0f6b61}
+/* Kartica korisnika (admin): pripadnost terenskog profila */
+.adm-prip{font-size:11px;color:#e3b54a;margin-bottom:2px}
+.adm-prip.nema{color:#f59e0b}
+.adm-prip-izbor{display:flex;flex-direction:column;gap:4px;margin-bottom:8px;font-size:11px;color:#e3b54a}
+.adm-prip-izbor select{padding:6px 8px;background:#0f172a;border:1px solid #c9961f;border-radius:6px;color:#e2e8f0;font-size:12px}

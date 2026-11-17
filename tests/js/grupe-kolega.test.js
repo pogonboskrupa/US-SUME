@@ -30,7 +30,7 @@ assert(/if \(isAdmin\(\)\) h \+= '<button[^']*grupeAdminOtvori\(\)/.test(src), '
 const html = fs.readFileSync(__dirname + '/../../index.html', 'utf8');
 assert(/id="admin-grupe-btn" onclick="grupeAdminOtvori\(\)"/.test(html), 'zasebna sekcija u admin panelu (Korisnici)');
 assert(/function grupeAdminOtvori\(\) \{\s*if \(!isAdmin\(\)\)/.test(src), 'sekcija samo za admina');
-assert(/function _grupePanelRender/.test(src)&&/Terenski \(/.test(src)&&/Projektanti \(/.test(src)&&/Uredi članove/.test(src), 'panel: članovi podijeljeni na terenske i projektante, uređivanje');
+assert(/function _grupePanelRender/.test(src)&&/grp-chip ' \+ \(o\.t \? 'ter' : 'pro'\)/.test(src)&&/ ter\.<\/i>/.test(src)&&/Uredi članove/.test(src), 'panel: članovi obojeni po vrsti (terenski/projektant), broj po vrsti, uređivanje');
 // Primljeno: pretraga i filter po vrsti
 {
   const s0 = src.indexOf('function _primListaHtml'), s1 = src.indexOf('function _primFiltriraj');
@@ -60,7 +60,7 @@ console.log('OK grupe kolega');
   assert(/from public\.kolege_zadane z where z\.korisnik_id = auth\.uid\(\) and z\.kolega_id = p_to/.test(z), 'slanje dozvoljeno zadanim kolegama');
   assert(/function _zadaneUredi/.test(src) && /async function _zadaneUredi\(korisnikId\)\s*\{\s*if \(!isAdmin\(\)\) return;/.test(src), 'uređivanje samo admin');
   assert(/admin_zadane_spremi/.test(src) && /admin_zadane_lista/.test(src) && /Zadane kolege po korisniku/.test(src) && /_korisnikJedan\(svi/.test(src));
-  assert(/_zadaneAdminUcitaj\(true\)\.then\(\(\) => _grupePanelRender\(\)\)/.test(src), 'panel učitava zadane');
+  assert(/_zadaneAdminUcitaj\(true\)\.then\(\(\) => _grupePanelRender\(true\)\)/.test(src), 'panel učitava zadane');
 }
 {
   const d = fs.readFileSync(__dirname + '/../../supabase/migrations/20261117_zadane_dvosmjerno.sql', 'utf8');

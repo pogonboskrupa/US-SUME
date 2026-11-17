@@ -5910,7 +5910,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.7.3';
+const APP_VER = 'v4.7.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6193,7 +6193,7 @@ function _loadLocalVlake() {
 <div id="nalog-modal" class="nalog-bg" hidden role="dialog" aria-modal="true" aria-labelledby="nalog-naslov" onclick="if(event.target===this)nalogZatvori()">
   <section class="nalog-sheet">
     <header class="nalog-head"><i id="nalog-ini" class="nalog-av" aria-hidden="true">?</i><div><h2 id="nalog-naslov">Moj nalog</h2><small id="nalog-uloga"></small></div><button type="button" class="nalog-x" onclick="nalogZatvori()" aria-label="Zatvori">✕</button></header>
-    <p id="nalog-offline" class="nalog-upoz" hidden>Nema interneta. Promjena imena i PIN-a traži vezu sa serverom.</p>
+    <p id="nalog-offline" class="nalog-upoz" hidden>Nema interneta. Promjene u nalogu traže vezu sa serverom.</p>
     <div class="nalog-body">
       <form class="nalog-kartica" onsubmit="nalogSacuvajIme();return false" autocomplete="off">
         <h3>Ime i prezime</h3>
@@ -6202,6 +6202,13 @@ function _loadLocalVlake() {
         <p class="nalog-nap">Prijava i dalje radi istim PIN-om. Offline prijava novim imenom počinje poslije prve prijave sa internetom.</p>
         <p id="nalog-ime-msg" class="nalog-msg" role="status" aria-live="polite"></p>
         <button type="submit" id="nalog-ime-btn" class="nalog-btn">Sačuvaj ime</button>
+      </form>
+      <form id="nalog-prip-kartica" class="nalog-kartica" hidden onsubmit="nalogSacuvajPripadnost();return false" autocomplete="off">
+        <h3>Pripadnost šumariji</h3>
+        <label for="nalog-prip">Šumarija u kojoj radiš</label><select id="nalog-prip" class="nalog-in"></select>
+        <p class="nalog-nap">Samo oznaka — adminu pomaže da te poveže sa kolegama iz iste šumarije. Ne mijenja šta vidiš u aplikaciji.</p>
+        <p id="nalog-prip-msg" class="nalog-msg" role="status" aria-live="polite"></p>
+        <button type="submit" id="nalog-prip-btn" class="nalog-btn">Sačuvaj pripadnost</button>
       </form>
       <form class="nalog-kartica" onsubmit="nalogSacuvajPin();return false" autocomplete="off">
         <h3>Promjena PIN-a</h3>

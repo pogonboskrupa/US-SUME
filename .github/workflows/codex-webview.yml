@@ -56,6 +56,7 @@ jobs:
           psql -h localhost -U postgres -d codex_fixture -f tests/sql/doz-atomic-delete-272.sql
           psql -h localhost -U postgres -d codex_fixture -f tests/sql/user-activity-273.sql
           psql -h localhost -U postgres -d codex_fixture -f tests/sql/verzija-aplikacije.sql
+          psql -h localhost -U postgres -d codex_fixture -f tests/sql/pripadnost-sumarija.sql
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
