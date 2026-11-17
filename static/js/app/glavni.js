@@ -2285,6 +2285,7 @@ function nalogOtvori() {
   const uloga = _nalogEl('menu-user-role'); _nalogEl('nalog-uloga').textContent = uloga ? uloga.textContent : '';
   _nalogEl('nalog-offline').hidden = !_nalogOffline();
   _nalogPripadnostPripremi();
+  _nalogRmPripremi();
   m.hidden = false;
   setTimeout(() => { try { _nalogEl('nalog-ime').focus(); } catch (e) {} }, 60);
 }
@@ -2368,6 +2369,147 @@ async function _admPripIzbor(uid, sel, ime) {
   const ok = await adminSetPripadnost(uid, sel.value, ime);
   sel.disabled = false;
   if (ok && typeof _adminRenderUsers === 'function') _adminRenderUsers();
+}
+// ── Radno mjesto korisnika (v4.7.5) ─────────────────────────────────────────
+// Samo oznaka (korisnici.radno_mjesto, migracija 20261124) — adminu pomaže pri
+// povezivanju kolega i pregledu. Korisnik čuva KOD mjesta; spisak je tabela
+// radna_mjesta (admin dodaje nova, sklanja stara). Zadani spisak = početni
+// sadržaj tabele, važi dok server ne odgovori.
+const _RADNA_MJESTA_ZADANA = [
+  ['upravnik', 'Upravnik šumarije'], ['pomocnik', 'Pomoćnik upravnika'], ['tehnolog', 'Tehnolog'],
+  ['posl_isk', 'Poslovođa iskorištavanja'], ['posl_uzg', 'Poslovođa uzgoja'],
+  ['primac', 'Primač šume na panju'], ['otpremac', 'Otpremač'], ['radnik_primka', 'Radnik u primci'],
+  ['teren', 'Terenski radnik']
+];
+const _RM_LISTA_KEY = 'tvlake_radna_mjesta_lista_v1';
+let _rmSpisak = (() => { try { const a = JSON.parse(localStorage.getItem(_RM_LISTA_KEY) || 'null'); return Array.isArray(a) && a.length ? a : null; } catch (e) { return null; } })();
+// [{kod, naziv, aktivno}] — sa servera (tabela radna_mjesta) ili zadano dok server ne odgovori.
+function _rmSvi() { return _rmSpisak || _RADNA_MJESTA_ZADANA.map(([kod, naziv]) => ({ kod, naziv, aktivno: true })); }
+function _rmLista() { return _rmSvi().filter(r => r.aktivno !== false).map(r => [r.kod, r.naziv]); }
+function _rmNaziv(kod) { const r = kod && _rmSvi().find(x => x.kod === kod); return r ? r.naziv : (kod ? 'Nepoznato radno mjesto' : ''); }
+function _rmOpcije(izabrano) {
+  const l = _rmLista();
+  // Sklonjeno mjesto koje korisnik već ima ostaje vidljivo kao izabrano.
+  if (izabrano && !l.some(x => x[0] === izabrano)) l.push([izabrano, _rmNaziv(izabrano) + ' (sklonjeno)']);
+  return '<option value="">— nije odabrano —</option>' + l.map(([k, n]) =>
+    '<option value="' + _escHtml(k) + '"' + (k === izabrano ? ' selected' : '') + '>' + _escHtml(n) + '</option>').join('');
+}
+async function _rmListaUcitaj() {
+  if (typeof sb === 'undefined' || !sb || !sbUser || sbUser._cachedStub || navigator.onLine === false) return _rmSvi();
+  try {
+    const r = await _withTimeout(sb.from('radna_mjesta').select('kod,naziv,redoslijed,aktivno').order('redoslijed').order('naziv'), 10000);
+    if (r.error) throw r.error;
+    if (Array.isArray(r.data) && r.data.length) {
+      _rmSpisak = r.data.map(x => ({ kod: x.kod, naziv: x.naziv, aktivno: x.aktivno !== false }));
+      try { localStorage.setItem(_RM_LISTA_KEY, JSON.stringify(_rmSpisak)); } catch (e) {}
+    }
+  } catch (e) {}
+  return _rmSvi();
+}
+function _rmGreska(e) {
+  const m = String(e?.message || e);
+  return /PGRST202|does not exist|radno_mjesto|radna_mjesta/i.test(m) && !/Nepoznato|samo/i.test(m) ? 'Server još nema ovu opciju — admin treba pokrenuti migraciju 20261124_radno_mjesto.sql.'
+    : (typeof _isNetworkErr === 'function' && _isNetworkErr(e)) ? 'Nema veze sa serverom. Pokušaj kad dobiješ signal.' : m;
+}
+function _nalogRmPripremi() {
+  const s = _nalogEl('nalog-rm'); if (!s) return;
+  s.innerHTML = _rmOpcije(sbProfile.radno_mjesto || '');
+  _nalogPoruka('nalog-rm-msg', '');
+  // Svjež spisak sa servera (admin je možda dodao novo mjesto); izbor se ne gubi.
+  _rmListaUcitaj().then(() => { if (document.activeElement !== s) s.innerHTML = _rmOpcije(s.value || sbProfile.radno_mjesto || ''); }).catch(() => {});
+}
+async function nalogSacuvajRadnoMjesto() {
+  const btn = _nalogEl('nalog-rm-btn');
+  if (_nalogOffline()) { _nalogPoruka('nalog-rm-msg', 'Nema interneta. Pokušaj kad dobiješ vezu.', false); return; }
+  const v = _nalogEl('nalog-rm').value || null;
+  btn.disabled = true;
+  try {
+    const r = await _withTimeout(sb.rpc('postavi_svoje_radno_mjesto', { p_rm: v }), 15000).catch(e => ({ error: e }));
+    if (r.error) { _nalogPoruka('nalog-rm-msg', _rmGreska(r.error), false); return; }
+    sbProfile.radno_mjesto = v;
+    try { _profileSave(sbProfile); } catch (e) {}
+    _nalogPoruka('nalog-rm-msg', v ? 'Sačuvano: ' + _rmNaziv(v) + '.' : 'Radno mjesto je uklonjeno.', true);
+  } finally { btn.disabled = false; }
+}
+// Admin: id → kod radnog mjesta. Keš na telefonu (Grupe rade i bez veze);
+// undefined = migracija nije pokrenuta (ne znamo), '' = nije odabrano.
+const _RM_KES_KEY = 'tvlake_radno_mjesto_v1';
+let _rmMapa = null, _rmGreskaTxt = '';
+function _rmKes() { try { const o = JSON.parse(localStorage.getItem(_RM_KES_KEY) || 'null'); return o && typeof o === 'object' ? o : null; } catch (e) { return null; } }
+function _rmZa(id) { const m = _rmMapa || _rmKes(); return m && id in m ? (m[id] || '') : undefined; }
+async function _rmUcitaj(force) {
+  if (!isAdmin()) return _rmMapa || {};
+  if (_rmMapa && !force) return _rmMapa;
+  if (!_rmMapa) _rmMapa = _rmKes();
+  if (!sb || !sbUser || sbUser._cachedStub) return _rmMapa || {};
+  try {
+    const r = await _withTimeout(sb.rpc('admin_radna_mjesta_lista'), 12000);
+    if (r.error) throw r.error;
+    const m = {}; (r.data || []).forEach(x => { m[x.id] = x.radno_mjesto || ''; });
+    _rmMapa = m; _rmGreskaTxt = '';
+    try { localStorage.setItem(_RM_KES_KEY, JSON.stringify(m)); } catch (e) {}
+  } catch (e) { _rmGreskaTxt = _rmGreska(e); }
+  return _rmMapa || {};
+}
+async function adminSetRadnoMjesto(uid, vrijednost, ime) {
+  if (!isAdmin()) return false;
+  const v = vrijednost || null;
+  if (!(typeof _kontaktiSesija === 'function' ? await _kontaktiSesija() : true)) return false;
+  try {
+    const r = await _withTimeout(sb.rpc('admin_set_radno_mjesto', { p_user: uid, p_rm: v }), 15000);
+    if (r.error) throw r.error;
+    _rmMapa = Object.assign({}, _rmMapa || _rmKes() || {}, { [uid]: v || '' });
+    try { localStorage.setItem(_RM_KES_KEY, JSON.stringify(_rmMapa)); } catch (e) {}
+    const u = (typeof _adminUsers !== 'undefined' && _adminUsers || []).find(x => x.id === uid); if (u) u.radno_mjesto = v || '';
+    if (uid === sbUser?.id && sbProfile) { sbProfile.radno_mjesto = v; try { _profileSave(sbProfile); } catch (e) {} }
+    showToast('✓ ' + (ime || 'Korisnik') + ': ' + (v ? _rmNaziv(v) : 'bez radnog mjesta'));
+    return true;
+  } catch (e) { showToast('⚠ ' + _rmGreska(e)); return false; }
+}
+async function _admRmIzbor(uid, sel, ime) {
+  sel.disabled = true;
+  const ok = await adminSetRadnoMjesto(uid, sel.value, ime);
+  sel.disabled = false;
+  if (ok && typeof _adminRenderUsers === 'function') _adminRenderUsers();
+}
+// Admin: dodavanje novog radnog mjesta i sklanjanje postojećeg sa spiska za izbor.
+// Sklonjeno mjesto korisnici koji ga već imaju zadržavaju (ne briše se iz tabele).
+async function _rmUpravljaj() {
+  if (!isAdmin()) return;
+  document.getElementById('rm-upravljaj')?.remove();
+  await _rmListaUcitaj();
+  const bg = document.createElement('div');
+  bg.id = 'rm-upravljaj'; bg.className = 'gu-bg';
+  const box = document.createElement('div'); box.className = 'gu-box';
+  bg.appendChild(box); document.body.appendChild(bg);
+  const zatvori = () => { bg.remove(); if (typeof _adminRenderUsers === 'function') _adminRenderUsers(); };
+  const greska = e => showToast('⚠ ' + _rmGreska(e));
+  const crtaj = () => {
+    const l = _rmLista(), broj = k => (typeof _adminUsers !== 'undefined' && _adminUsers || []).filter(u => u.radno_mjesto === k).length;
+    box.innerHTML = '<div class="gu-naslov">💼 Radna mjesta</div>' +
+      '<p class="rm-pomoc">Spisak iz kojeg korisnici biraju u Moj nalog, a ti u kartici korisnika. Sklonjeno mjesto ostaje onima koji ga već imaju.</p>' +
+      '<div class="gu-red"><input id="rm-novo" class="gu-polje" maxlength="60" autocomplete="off" placeholder="Novo radno mjesto (npr. Lugar)"><button type="button" id="rm-dodaj" class="gu-dugme">➕ Dodaj</button></div>' +
+      '<div class="gu-lista rm-lista">' + l.map(([k, n]) => '<div class="rm-red"><span>' + _escHtml(n) + ' <small>' + broj(k) + '</small></span><button type="button" class="gu-dugme gu-opa" data-k="' + _escHtml(k) + '">Skloni</button></div>').join('') + '</div>' +
+      '<button type="button" id="rm-x" class="gu-odustani">Zatvori</button>';
+    const dodaj = async () => {
+      const n = box.querySelector('#rm-novo').value.trim();
+      if (n.length < 2) { showToast('Upiši naziv radnog mjesta'); return; }
+      if (!(typeof _kontaktiSesija === 'function' ? await _kontaktiSesija() : true)) return;
+      try { const r = await _withTimeout(sb.rpc('admin_radno_mjesto_dodaj', { p_naziv: n }), 15000); if (r.error) throw r.error;
+        showToast('✓ Dodano: ' + n); await _rmListaUcitaj(); crtaj(); } catch (e) { greska(e); }
+    };
+    box.querySelector('#rm-dodaj').onclick = dodaj;
+    box.querySelector('#rm-novo').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); dodaj(); } };
+    box.querySelector('#rm-x').onclick = zatvori;
+    box.querySelectorAll('.rm-red button[data-k]').forEach(b => { b.onclick = async () => {
+      const k = b.dataset.k, n = _rmNaziv(k);
+      if (!await _dlgConfirm('Skloniti „' + n + '“ sa spiska? Korisnici koji ga već imaju zadržavaju ga.', { title: 'Skloni radno mjesto', okLabel: 'Skloni' })) return;
+      try { const r = await _withTimeout(sb.rpc('admin_radno_mjesto_skloni', { p_kod: k }), 15000); if (r.error) throw r.error;
+        showToast('Sklonjeno: ' + n); await _rmListaUcitaj(); crtaj(); } catch (e) { greska(e); }
+    }; });
+  };
+  bg.addEventListener('click', e => { if (e.target === bg) zatvori(); });
+  crtaj();
 }
 function nalogZatvori() { const m = _nalogEl('nalog-modal'); if (m) m.hidden = true; }
 function nalogPinPrikazi() {
@@ -3104,10 +3246,11 @@ async function adminLoadUsers() {
   const active=new Map(actRows.map(a=>[a.user_id,a]));
   // Stara admin_get_user_activity (bez migracije verzije) ne vraća kolonu.
   const bezVerzije=!!activity.error||(actRows.length>0&&!('app_version' in actRows[0]));
-  const prip = await _pripUcitaj(true).catch(() => ({}));
+  const [prip, rm] = await Promise.all([_pripUcitaj(true).catch(() => ({})), _rmUcitaj(true).catch(() => ({})), _rmListaUcitaj().catch(() => {})]);
   if(sbUser?.id!==owner||adminLoadUsers._seq!==seq)return;
   _adminUsers = (data || []).map(u=>{const a=active.get(u.id);return {...u,
     pripadnost: _jeTerenski(u) ? (u.id in prip ? prip[u.id] : undefined) : null,
+    radno_mjesto: u.id in rm ? rm[u.id] : undefined,
     last_active_at:activity.error?undefined:a?.last_active_at||null,
     // undefined = podatak o verziji ne postoji na serveru, null = korisnik još nije javio
     app_version:bezVerzije?undefined:a?.app_version||null,
@@ -3178,9 +3321,11 @@ function _admFiltriraj(users, f) {
   const sum = (f && f.sum) || '';
   const ime = ((f && f.ime) || '').trim().toLowerCase();
   const st  = (f && f.status) || 'sve';
+  const rm  = (f && f.rm) || '';
   const sada = (f && f.sada) || Date.now();
   return (users || []).filter(u => {
     if (sum && u.sumarija !== sum) return false;
+    if (rm === '-' ? (u.radno_mjesto === undefined || !!u.radno_mjesto) : (rm && u.radno_mjesto !== rm)) return false;
     if (ime && !((u.ime || '') + ' ' + (u.prezime || '')).toLowerCase().includes(ime)) return false;
     if (st === 'sve') return true;
     if (st === 'neaktivni') return _admJeNeaktivan(u, sada);
@@ -3358,6 +3503,8 @@ function _admLS(k, zadano) { try { return localStorage.getItem(k) || zadano; } c
 let _admStatusFilter = _admLS('tvlake_adm_status', 'sve');
 let _admSort         = _admLS('tvlake_adm_sort',   'ime');
 let _admPrikaz       = _admLS('tvlake_adm_prikaz', 'aktivnost');   // 'aktivnost' | 'sumarije'
+let _admRmFilter     = _admLS('tvlake_adm_rm', '');                // kod radnog mjesta, '-' = bez, '' = sva
+function _admPostaviRm(v) { _admRmFilter = v || ''; try { localStorage.setItem('tvlake_adm_rm', _admRmFilter); } catch(e) {} _adminRenderUsers(); }
 const _admSumZatvorene = new Set((() => { try { return JSON.parse(localStorage.getItem('tvlake_adm_sum_zatvorene') || '[]'); } catch(e) { return []; } })());
 const _admOtvorene   = new Set();   // kartice kojima su otvorene dodatne kontrole
 
@@ -3413,9 +3560,9 @@ function _adminRenderUsers() {
 
   const filterSum  = document.getElementById('admin-filter-sum')?.value || '';
   const filterName = document.getElementById('admin-filter-name')?.value || '';
-  const sve = _admFiltriraj(_adminUsers, { sum: filterSum, ime: filterName });
+  const sve = _admFiltriraj(_adminUsers, { sum: filterSum, ime: filterName, rm: _admRmFilter });
   const rows = _admSortiraj(
-    _admFiltriraj(_adminUsers, { sum: filterSum, ime: filterName, status: _admStatusFilter }),
+    _admFiltriraj(_adminUsers, { sum: filterSum, ime: filterName, rm: _admRmFilter, status: _admStatusFilter }),
     _admSort);
 
   // Sažetak se računa nad OPSEGOM (šumarija + ime), ne nad statusnim filterom —
@@ -3429,7 +3576,7 @@ function _adminRenderUsers() {
 
   const traka = `
     <div style="font-size:12px;color:#94a3b8;margin-bottom:8px;">
-      <b style="color:#e2e8f0;">${_admBrojRijec(s.ukupno,'korisnik','korisnika')}</b>${filterSum||filterName?' <span style="color:#64748b;">(od '+_adminUsers.length+')</span>':''}
+      <b style="color:#e2e8f0;">${_admBrojRijec(s.ukupno,'korisnik','korisnika')}</b>${filterSum||filterName||_admRmFilter?' <span style="color:#64748b;">(od '+_adminUsers.length+')</span>':''}
       ${s.ceka ? ` · <span style="color:#fbbf24;font-weight:700;">${s.ceka} ${s.ceka===1?'čeka':'čekaju'} odobrenje</span>` : ''}
       ${s.opozvan ? ` · <span style="color:#f87171;">${s.opozvan} opozvano</span>` : ''}
       ${s.neaktivni ? ` · <span style="color:#7f8ea3;">${s.neaktivni} neaktivnih</span>` : ''}
@@ -3448,6 +3595,11 @@ function _adminRenderUsers() {
       ${s.neaktivni ? chip('neaktivni','Neaktivni ('+s.neaktivni+')','#94a3b8') : ''}
       ${s.admin ? chip('admin','★ Admini ('+s.admin+')','#fbbf24') : ''}
     </div>
+    <label class="adm-rm-filter">💼 Radno mjesto
+      <select onchange="_admPostaviRm(this.value)">
+        <option value="">Sva radna mjesta</option>${_rmLista().map(([k,n]) => `<option value="${_escHtml(k)}"${_admRmFilter===k?' selected':''}>${_escHtml(n)} (${_adminUsers.filter(u=>u.radno_mjesto===k).length})</option>`).join('')}
+        <option value="-"${_admRmFilter==='-'?' selected':''}>Bez radnog mjesta (${_adminUsers.filter(u=>u.radno_mjesto==='').length})</option>
+      </select><button type="button" onclick="_rmUpravljaj()" title="Dodaj novo ili skloni radno mjesto">⚙ Spisak</button></label>
     <div style="display:${_admPrikaz==='sumarije'?'flex':'none'};gap:6px;align-items:center;margin-bottom:12px;">
       <span style="font-size:11px;color:#64748b;white-space:nowrap;">Poredaj:</span>
       <select onchange="_admPostaviSort(this.value)" style="flex:1;padding:5px 8px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#cbd5e1;font-size:12px;">
@@ -3559,6 +3711,7 @@ function _admKarticaHtml(u, saSumarijom) {
         ${nm || '<span style="color:#64748b;">(bez imena)</span>'}${statusChip}${neakt}
       </div>
       ${saSumarijom ? `<div style="font-size:11px;color:#4ade80;margin-bottom:2px;">🌲 ${_escHtml(u.sumarija || '—')}</div>` : ''}
+      ${u.radno_mjesto === undefined ? '' : `<div class="adm-rm${u.radno_mjesto ? '' : ' nema'}">💼 ${u.radno_mjesto ? _escHtml(_rmNaziv(u.radno_mjesto) || u.radno_mjesto) : 'Radno mjesto nije odabrano'}</div>`}
       ${_jeTerenski(u) ? `<div class="adm-prip${u.pripadnost ? '' : ' nema'}">📍 ${u.pripadnost ? 'Pripada: ' + _escHtml(u.pripadnost) : u.pripadnost === undefined ? 'Pripadnost: podatak nije dostupan' : 'Pripadnost šumariji nije odabrana'}</div>` : ''}
       <div style="font-size:11px;color:#64748b;margin-bottom:${u.is_admin ? '0' : '8px'};">
         ${u.created_at ? fmtDateShort(u.created_at) : '—'}
@@ -3585,6 +3738,8 @@ function _admKarticaHtml(u, saSumarijom) {
             <svg class="ic"><use href="#ic-prebaci"/></svg> Prebaci
           </button>
         </div>
+        <label class="adm-prip-izbor adm-rm-izbor">💼 Radno mjesto
+          <select onchange="_admRmIzbor('${uid}',this,'${nmJs}')">${_rmOpcije(u.radno_mjesto || '')}</select></label>
         ${_jeTerenski(u) ? `<label class="adm-prip-izbor">📍 Pripadnost šumariji (terenski profil)
           <select onchange="_admPripIzbor('${uid}',this,'${nmJs}')">${_pripadnostOpcije(u.pripadnost || '')}</select></label>` : ''}
         <button onclick="adminAzurirajKorisnika('${uid}')" title="Pošalji obavijest o novoj verziji u Primljene podatke ovog korisnika"
@@ -39351,6 +39506,7 @@ function grupeAdminOtvori() {
   _grupeAdminUcitaj(true).then(() => _grupePanelRender(true)).catch(() => {});
   _zadaneAdminUcitaj(true).then(() => _grupePanelRender(true)).catch(() => {});
   _pripUcitaj(true).then(() => _grupePanelRender(true)).catch(() => {});
+  _rmUcitaj(true).catch(() => {});
   _primaociSvi().then(l => { _grpKorisnici = l || []; _grupePanelRender(true); }).catch(() => { _grpKorisnici = []; _grupePanelRender(true); });
 }
 // ── Admin: Gospodarske jedinice po šumarijama ─────────────────────────────────
@@ -39411,7 +39567,8 @@ function _korOznaka(k) {
 }
 function _grpChip(c) {
   const o = _korOznaka(c);
-  return '<span class="grp-chip ' + (o.t ? 'ter' : 'pro') + '" title="' + _escHtml(o.txt) + '">' + _escHtml(c.ime || 'Korisnik') + '<small>' + _escHtml(o.t ? (o.sum ? _sumKratko(o.sum) : 'teren') : _sumKratko(o.sum)) + '</small></span>';
+  const rm = typeof _rmZa === 'function' ? _rmNaziv(_rmZa(c.id) || '') : '';
+  return '<span class="grp-chip ' + (o.t ? 'ter' : 'pro') + '" title="' + _escHtml(o.txt + (rm ? ' · ' + rm : '')) + '">' + _escHtml(c.ime || 'Korisnik') + '<small>' + _escHtml(o.t ? (o.sum ? _sumKratko(o.sum) : 'teren') : _sumKratko(o.sum)) + '</small></span>';
 }
 function _grpChipovi(id, cl) {
   const MAX = 12, otv = _grpOtvorene.has(id), ter = cl.filter(_jeTerenski), pro = cl.filter(c => !_jeTerenski(c));
@@ -39599,7 +39756,7 @@ async function _grupaUredi(id) {
   const gr = id ? (_grupeAdmin || _grupeAdminKes() || []).find(x => x.id === id) : null;
   if (id && !gr) return;
   const svi = await _primaociSvi();
-  await _pripUcitaj().catch(() => {});
+  await Promise.all([_pripUcitaj().catch(() => {}), _rmUcitaj().catch(() => {}), _rmListaUcitaj().catch(() => {})]);
   const izabrani = new Set((gr?.clanovi || []).map(c => c.id));
   const pocetni = new Set(izabrani);
   // Članovi grupe koji nisu u spisku (npr. neodobreni) ostaju sačuvani
@@ -39615,6 +39772,7 @@ async function _grupaUredi(id) {
       '<input id="gr-naziv" class="gu-polje" maxlength="80" placeholder="Naziv grupe (npr. Ekipa Cazin)" value="' + _escHtml(gr?.naziv || '') + '">' +
       '<div class="gu-red"><input id="gr-trazi" class="gu-polje" type="search" autocomplete="off" placeholder="Traži ime">' +
       '<select id="gr-sum" class="gu-polje"><option value="">Sve šumarije</option>' + _pripSumarije().map(x => '<option value="' + _escHtml(x) + '">' + _escHtml(_sumKratko(x)) + '</option>').join('') + '<option value="-">Terenski bez pripadnosti</option></select></div>' +
+      '<select id="gr-rm" class="gu-polje" aria-label="Radno mjesto"><option value="">Sva radna mjesta</option>' + _rmLista().map(([k, n]) => '<option value="' + _escHtml(k) + '">' + _escHtml(n) + '</option>').join('') + '<option value="-">Bez radnog mjesta</option></select>' +
       '<div class="gu-vrsta" role="group" aria-label="Vrsta korisnika"><button type="button" data-v="" class="on">Svi</button><button type="button" data-v="t" class="ter">Terenski</button><button type="button" data-v="p" class="pro">Projektanti</button><button type="button" data-v="i">Izabrani</button></div>' +
       '<div class="gu-red"><button type="button" id="gr-sve" class="gu-dugme">Dodaj sve prikazane</button><button type="button" id="gr-ukloni" class="gu-dugme">Ukloni sve prikazane</button></div>' +
       '<div id="gr-lista" class="gu-lista"></div>' +
@@ -39625,24 +39783,25 @@ async function _grupaUredi(id) {
     const q = s => box.querySelector(s), kraj = v => { bg.remove(); res(v); };
     let vrsta = '';
     const vidljivi = () => {
-      const t = q('#gr-trazi').value.trim().toLowerCase(), s = q('#gr-sum').value;
-      return svi.filter(k => { const o = _korOznaka(k);
+      const t = q('#gr-trazi').value.trim().toLowerCase(), s = q('#gr-sum').value, rf = q('#gr-rm').value;
+      return svi.filter(k => { const o = _korOznaka(k), rm = _rmZa(k.id) || '';
+        if (rf === '-' ? rm : (rf && rm !== rf)) return false;
         if (vrsta === 't' && !o.t) return false;
         if (vrsta === 'p' && o.t) return false;
         if (vrsta === 'i' && !izabrani.has(k.id)) return false;
         if (s === '-' ? !(o.t && !o.sum) : (s && o.sum !== s)) return false;
-        return !t || (k.ime + ' ' + o.txt).toLowerCase().includes(t);
+        return !t || (k.ime + ' ' + o.txt + ' ' + _rmNaziv(rm)).toLowerCase().includes(t);
       }).sort((x, y) => (pocetni.has(y.id) ? 1 : 0) - (pocetni.has(x.id) ? 1 : 0));
     };
     const crtaj = () => {
       q('#gr-lista').innerHTML = vidljivi().map(k => {
         const on = izabrani.has(k.id), o = _korOznaka(k);
-        return '<button type="button" data-i="' + _escHtml(k.id) + '" aria-pressed="' + on + '" class="gu-stavka' + (on ? ' on' : '') + '"><span class="gu-kv">' + (on ? '✓' : '') + '</span><span class="gu-ime">' + _escHtml(k.ime) + '</span><small class="' + (o.t ? 'ter' : 'pro') + '">' + _escHtml(o.txt) + '</small></button>';
+        return '<button type="button" data-i="' + _escHtml(k.id) + '" aria-pressed="' + on + '" class="gu-stavka' + (on ? ' on' : '') + '"><span class="gu-kv">' + (on ? '✓' : '') + '</span><span class="gu-ime">' + _escHtml(k.ime) + (_rmZa(k.id) ? '<em class="gu-rm">' + _escHtml(_rmNaziv(_rmZa(k.id))) + '</em>' : '') + '</span><small class="' + (o.t ? 'ter' : 'pro') + '">' + _escHtml(o.txt) + '</small></button>';
       }).join('') || '<div class="gu-prazno">Nema rezultata</div>';
       const nt = svi.filter(k => izabrani.has(k.id) && _jeTerenski(k)).length;
       q('#gr-spremi').textContent = '💾 Spremi (' + izabrani.size + ' ' + (izabrani.size === 1 ? 'član' : 'članova') + (izabrani.size ? ' · ' + nt + ' ter. · ' + (izabrani.size - nt) + ' proj.' : '') + ')';
     };
-    q('#gr-trazi').addEventListener('input', crtaj); q('#gr-sum').addEventListener('change', crtaj);
+    q('#gr-trazi').addEventListener('input', crtaj); q('#gr-sum').addEventListener('change', crtaj); q('#gr-rm').addEventListener('change', crtaj);
     q('.gu-vrsta').addEventListener('click', e => { const b = e.target.closest('button[data-v]'); if (!b) return; vrsta = b.dataset.v; box.querySelectorAll('.gu-vrsta button').forEach(x => x.classList.toggle('on', x === b)); crtaj(); });
     q('#gr-sve').addEventListener('click', () => { vidljivi().forEach(k => izabrani.add(k.id)); crtaj(); });
     q('#gr-ukloni').addEventListener('click', () => { vidljivi().forEach(k => izabrani.delete(k.id)); crtaj(); });

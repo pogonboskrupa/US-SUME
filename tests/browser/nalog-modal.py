@@ -18,12 +18,13 @@ def fn(name):
    if d==0:break
   k+=1
  return source[i:k+1]
-names=['promijeniPin','_nalogInicijali','_nalogEl','_nalogPoruka','_nalogOffline','nalogOtvori','nalogZatvori','nalogPinPrikazi','nalogSacuvajIme','nalogSacuvajPin','urediImePrezime','_menuIdentityRender','closeMenuDropdown','_nalogPripadnostPripremi','nalogSacuvajPripadnost','_jeTerenski','_pripSumarije','_pripadnostOpcije','_pripadnostGreska','_escHtml']
+names=['promijeniPin','_nalogInicijali','_nalogEl','_nalogPoruka','_nalogOffline','nalogOtvori','nalogZatvori','nalogPinPrikazi','nalogSacuvajIme','nalogSacuvajPin','urediImePrezime','_menuIdentityRender','closeMenuDropdown','_nalogPripadnostPripremi','nalogSacuvajPripadnost','_jeTerenski','_pripSumarije','_pripadnostOpcije','_pripadnostGreska','_escHtml','_nalogRmPripremi','nalogSacuvajRadnoMjesto','_rmSvi','_rmLista','_rmNaziv','_rmOpcije','_rmListaUcitaj','_rmGreska']
 esc=re.search(r"document\.addEventListener\('keydown', e => \{ if \(e\.key === 'Escape' && _nalogEl.*?\}\);",source)[0]
 js='''let sbUser={id:'U1'},sbProfile={id:'U1',ime:'Emina',prezime:'Projektant',sumarija:'Bos.Krupa'},APP_VER='v-test',calls=[];
 const showToast=t=>calls.push(t),SpdProfile={sync(){}},isVodeci=()=>false,isSpdField=()=>false,_OL={save(){},PROFILE:'p'},_SAVED_USER_KEY='k',_loadSavedUser=()=>null,_primijeniUlogeUI=()=>{},_withTimeout=(p)=>p,_offCredSpremi=async()=>{};
 const _SUMARIJE=['ŠPD US ŠUME','ŠUMARIJA CAZIN','ŠUMARIJA KLJUČ'],_profileSave=()=>{};
-const sb={rpc:async(n,a)=>{calls.push('rpc:'+n+':'+('p_sumarija' in a?a.p_sumarija:a.p_ime+' '+a.p_prezime));return {error:null}},auth:{updateUser:async o=>{calls.push('pin:'+o.password);return {error:null}}}};
+const _RADNA_MJESTA_ZADANA=[['upravnik','Upravnik šumarije'],['teren','Terenski radnik']];let _rmSpisak=null;
+const sb={from:()=>({select(){return this},order(){return this},then(r){return Promise.resolve({data:[{kod:'upravnik',naziv:'Upravnik šumarije',aktivno:true},{kod:'teren',naziv:'Terenski radnik',aktivno:true},{kod:'rm_lugar',naziv:'Lugar',aktivno:true},{kod:'stari',naziv:'Stari naziv',aktivno:false}],error:null}).then(r)}}),rpc:async(n,a)=>{calls.push('rpc:'+n+':'+('p_sumarija' in a?a.p_sumarija:'p_rm' in a?a.p_rm:a.p_ime+' '+a.p_prezime));return {error:null}},auth:{updateUser:async o=>{calls.push('pin:'+o.password);return {error:null}}}};
 '''+'\n'.join(fn(n) for n in names)+'''
 '''+esc+'''
 document.getElementById('auth-screen').style.display='none';
@@ -81,6 +82,18 @@ async def main():
    await page.select_option('#nalog-prip','ŠUMARIJA CAZIN');await page.click('#nalog-prip-btn');await page.wait_for_function("document.getElementById('nalog-prip-msg').dataset.stanje==='ok'")
    assert 'rpc:postavi_svoju_pripadnost:ŠUMARIJA CAZIN' in await page.evaluate('calls') and await page.evaluate('sbProfile.pripadnost')=='ŠUMARIJA CAZIN'
    await page.evaluate("sbProfile.sumarija='Bos.Krupa'")
+   # Radno mjesto: svi korisnici; spisak sa servera (admin dodao Lugar, sklonio Stari naziv)
+   assert await page.locator('#nalog-rm-kartica').is_visible()
+   await page.wait_for_function("document.querySelectorAll('#nalog-rm option').length===4")
+   opc=await page.locator('#nalog-rm option').all_inner_texts();assert opc==['— nije odabrano —','Upravnik šumarije','Terenski radnik','Lugar'],opc
+   await page.select_option('#nalog-rm','teren');await page.click('#nalog-rm-btn');await page.wait_for_function("document.getElementById('nalog-rm-msg').dataset.stanje==='ok'")
+   assert 'rpc:postavi_svoje_radno_mjesto:teren' in await page.evaluate('calls') and await page.evaluate('sbProfile.radno_mjesto')=='teren'
+   assert 'Terenski radnik' in await page.locator('#nalog-rm-msg').inner_text()
+   # sklonjeno mjesto koje korisnik već ima ostaje izabrano
+   await page.evaluate("sbProfile.radno_mjesto='stari';nalogZatvori();nalogOtvori()")
+   await page.wait_for_function("document.querySelectorAll('#nalog-rm option').length===5")
+   assert (await page.locator('#nalog-rm').evaluate('e=>e.options[e.selectedIndex].text'))=='Stari naziv (sklonjeno)'
+   await page.evaluate("sbProfile.radno_mjesto=null")
    sh=await page.locator('.nalog-sheet').bounding_box();assert sh['x']>=-1 and sh['x']+sh['width']<=w+1,sh
    await page.screenshot(path=str(out/f'nalog-modal-{w}-{tema}.png'))
    # offline traka i zatvaranje

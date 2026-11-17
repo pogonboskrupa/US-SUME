@@ -44,7 +44,7 @@ t('Moj nalog: kartica pripadnosti samo za terenski profil, čuva preko RPC-a', (
   const html = fs.readFileSync(__dirname + '/../../index.html', 'utf8');
   assert(/<form id="nalog-prip-kartica" class="nalog-kartica" hidden onsubmit="nalogSacuvajPripadnost\(\);return false"/.test(html));
   assert(/<select id="nalog-prip" class="nalog-in">/.test(html));
-  assert(/_nalogPripadnostPripremi\(\);\s*m\.hidden = false;/.test(fn('nalogOtvori')));
+  assert(/_nalogPripadnostPripremi\(\);\s*_nalogRmPripremi\(\);\s*m\.hidden = false;/.test(fn('nalogOtvori')));
   assert(/f\.hidden = !teren/.test(fn('_nalogPripadnostPripremi')));
   const s = fn('nalogSacuvajPripadnost');
   assert(/sb\.rpc\('postavi_svoju_pripadnost', \{ p_sumarija: v \}\)/.test(s) && /_profileSave\(sbProfile\)/.test(s) && /_nalogOffline\(\)/.test(s));

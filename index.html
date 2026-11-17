@@ -5910,7 +5910,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.7.4';
+const APP_VER = 'v4.7.5';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6202,6 +6202,13 @@ function _loadLocalVlake() {
         <p class="nalog-nap">Prijava i dalje radi istim PIN-om. Offline prijava novim imenom počinje poslije prve prijave sa internetom.</p>
         <p id="nalog-ime-msg" class="nalog-msg" role="status" aria-live="polite"></p>
         <button type="submit" id="nalog-ime-btn" class="nalog-btn">Sačuvaj ime</button>
+      </form>
+      <form id="nalog-rm-kartica" class="nalog-kartica" onsubmit="nalogSacuvajRadnoMjesto();return false" autocomplete="off">
+        <h3>Radno mjesto</h3>
+        <label for="nalog-rm">Na kojem radnom mjestu radiš</label><select id="nalog-rm" class="nalog-in"></select>
+        <p class="nalog-nap">Samo oznaka — adminu pomaže da te poveže sa kolegama. Ne mijenja šta vidiš u aplikaciji.</p>
+        <p id="nalog-rm-msg" class="nalog-msg" role="status" aria-live="polite"></p>
+        <button type="submit" id="nalog-rm-btn" class="nalog-btn">Sačuvaj radno mjesto</button>
       </form>
       <form id="nalog-prip-kartica" class="nalog-kartica" hidden onsubmit="nalogSacuvajPripadnost();return false" autocomplete="off">
         <h3>Pripadnost šumariji</h3>
