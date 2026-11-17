@@ -334,6 +334,7 @@ function _localLayerPatchFeature(k,pmIndex,name,description,owner=sbUser?.id) {
         if(!layer){await _localKmlRestore();layer=kmlLs.find(k=>!k._key&&(k._origName||k.name)===name);}
         if(sbUser?.id!==owner)throw Error('Nalog je promijenjen; otvaranje je prekinuto');
         if(!layer)throw Error('Sloj nije moguće prikazati');
+        if(layer._lijeno&&typeof _kmlLijenoUcitaj==='function')await _kmlLijenoUcitaj(layer,false);
         layer.vis=true;layer.grp.addTo(map);_localKmlSaveAll(false);rndGraniceModal();
         const bounds=layer.grp.getBounds();if(bounds.isValid())map.fitBounds(bounds,{padding:[20,20]});closeLayerImport();closeLayerSheet();
       }else{
@@ -390,7 +391,7 @@ function _localLayerPatchFeature(k,pmIndex,name,description,owner=sbUser?.id) {
   // Klik na kamionske puteve je zadano isključen — i za fajl sa servera i za ručno uvezen (po nazivu).
   function klikOffZadano(k){return role(k)==='roads'||/kamionsk/.test(normal([k?._origName,k?.name].join(' ')));}
   function layers(type){return typeof kmlLs==='undefined'?[]:kmlLs.filter(k=>k.grp&&role(k)===type);}
-  function isBoundary(k){if(!k?.grp||!(role(k)==='boundaries'||/granic|boundary/.test(normal([k._origName,k.name].join(' ')))))return false;let found=false;const walk=g=>g.eachLayer?.(l=>{if(l._kmlIsPolygon)found=true;else if(l.eachLayer)walk(l);});walk(k.grp);return found;}
+  function isBoundary(k){if(!k?.grp||!(role(k)==='boundaries'||/granic|boundary/.test(normal([k._origName,k.name].join(' ')))))return false;if(k._lijeno)return true;/* još neučitane granice (_kmlLijenoUcitaj) */let found=false;const walk=g=>g.eachLayer?.(l=>{if(l._kmlIsPolygon)found=true;else if(l.eachLayer)walk(l);});walk(k.grp);return found;}
   // Preuzete granice počinju u režimu izbora poligona pri svakom učitavanju aplikacije.
   // Promjena tokom iste sesije ostaje na snazi; ostali slojevi pamte svoj izbor.
   function defaultOnlyPolygon(k){return !!k?._driveSource?.id&&isBoundary(k)?true:k?.onlyPolygon===true;}

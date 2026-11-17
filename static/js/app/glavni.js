@@ -21473,6 +21473,26 @@ function _kmlGrupa() {
 // paketima uz predah za iscrtavanje ekrana između njih. Ako dio ne može samostalno (npr. prefiks
 // imenskog prostora), pada na staro, cjelovito parsiranje.
 const _KML_PO_DIJELOVIMA_MIN = 1200000;
+// Placemark veći od ovoga sa više geometrija (MultiGeometry) se obrađuje po komadima geometrija,
+// uz predah između: 400 poligona u jednom Placemark-u je bio jedan pkml poziv od ~145 ms (CPU 4×),
+// na telefonu ~500 ms. Svi komadi nose ISTI pmOffset — indeks Placemarka u izvoru (_kmlPmIndex)
+// ostaje isti, pa uređivanje/brisanje pojedinačnog poligona i dalje pogađa pravi zapis.
+const _KML_VELIKI_PM = 150000;
+function _kmlRazbijPm(pm, maxB) {
+  const GEO = /<(Polygon|LineString|Point)[\s>][\s\S]*?<\/\1>/g;
+  const mg = pm.indexOf('<MultiGeometry'), mgz = pm.lastIndexOf('</MultiGeometry>'), kraj = pm.lastIndexOf('</Placemark>');
+  if (mg < 0 || mgz < mg || kraj < mgz) return null;
+  const glava = pm.slice(0, mg), rep = pm.slice(mgz + '</MultiGeometry>'.length, kraj);
+  const geo = pm.slice(mg, mgz).match(GEO);
+  if (!geo || geo.length < 2) return null;
+  const out = []; let dio = '', n = 0;
+  for (const gm of geo) {
+    if (n && dio.length + gm.length > maxB) { out.push(glava + dio + rep + '</Placemark>'); dio = ''; n = 0; }
+    dio += gm; n++;
+  }
+  if (n) out.push(glava + dio + rep + '</Placemark>');
+  return out;
+}
 async function _kmlGrupaIzSadrzaja(content, col) {
   const cijeli = () => pkml(new DOMParser().parseFromString(content, 'text/xml'), col);
   // Po dijelovima već od ~100 KB: fajl od 1 MB odjednom je na Redmi Note bio blok od ~140 ms.
@@ -21488,11 +21508,15 @@ async function _kmlGrupaIzSadrzaja(content, col) {
   const gust = content.length / 28 > 60000;
   let t = performance.now(), off = 0, m = RE.exec(content), dio = [], bajta = 0;
   const predah = async () => { if (performance.now() - t > 8) { await new Promise(r => setTimeout(r, 0)); t = performance.now(); } };
+  const obradi = (xmlPm, pmOffset) => {
+    const d = new DOMParser().parseFromString('<kml xmlns="http://www.opengis.net/kml/2.2"><Document>' + xmlPm + '</Document></kml>', 'text/xml');
+    if (d.getElementsByTagName('parsererror').length) return false;
+    pkml(d, col, undefined, { grp: g, gust, pmOffset });
+    return true;
+  };
   const isprazni = () => {
     if (!dio.length) return true;
-    const d = new DOMParser().parseFromString('<kml xmlns="http://www.opengis.net/kml/2.2"><Document>' + dio.join('') + '</Document></kml>', 'text/xml');
-    if (d.getElementsByTagName('parsererror').length) return false;
-    pkml(d, col, undefined, { grp: g, gust, pmOffset: off });
+    if (!obradi(dio.join(''), off)) return false;
     off += dio.length; dio = []; bajta = 0;
     return true;
   };
@@ -21502,6 +21526,16 @@ async function _kmlGrupaIzSadrzaja(content, col) {
     const pm = content.slice(start, j + KRAJ.length);
     RE.lastIndex = j + KRAJ.length;
     m = RE.exec(content);
+    if (pm.length > _KML_VELIKI_PM) {
+      const komadi = _kmlRazbijPm(pm, MAX_B);
+      if (komadi) {
+        if (!isprazni()) return cijeli();
+        await predah();
+        for (const k of komadi) { if (!obradi(k, off)) return cijeli(); await predah(); }
+        off++;
+        continue;
+      }
+    }
     if (dio.length && (dio.length >= MAX_N || bajta + pm.length > MAX_B)) { if (!isprazni()) return cijeli(); await predah(); }
     dio.push(pm); bajta += pm.length;
   }
@@ -21574,9 +21608,21 @@ function pkml(doc, col, op, opts) {
   }
   return g;
 }
+// Ručno skeniranje umjesto trim/split/map/filter: isti rezultat (i NaN tamo gdje ga je davao
+// stari kod), ~1,6× brže na poligonu od 60 000 tačaka i bez međunizova stringova.
+function _pcsRazmak(c) { return c <= 32 || c === 160 || c === 0x1680 || (c >= 0x2000 && c <= 0x200a) || c === 0x2028 || c === 0x2029 || c === 0x202f || c === 0x205f || c === 0x3000 || c === 0xfeff; }
 function pcs(s) {
   if(!s) return [];
-  return s.trim().split(/\s+/).map(c=>{const p=c.split(',');return p.length>=2?[parseFloat(p[1]),parseFloat(p[0])]:null;}).filter(Boolean);
+  const out = [], n = s.length; let i = 0;
+  while (i < n) {
+    while (i < n && _pcsRazmak(s.charCodeAt(i))) i++;
+    if (i >= n) break;
+    let j = i; while (j < n && !_pcsRazmak(s.charCodeAt(j))) j++;
+    const k1 = s.indexOf(',', i);
+    if (k1 >= 0 && k1 < j) { let k2 = s.indexOf(',', k1 + 1); if (k2 < 0 || k2 > j) k2 = j; out.push([parseFloat(s.slice(k1 + 1, k2)), parseFloat(s.slice(i, k1))]); }
+    i = j;
+  }
+  return out;
 }
 
 function _parseKmlExtData(pm) {
@@ -22438,9 +22484,10 @@ function _rndOznakePanel() {
   if(typeof _libraryRender==='function')_libraryRender();
 }
 
-function _ozZoomKml(i) {
+async function _ozZoomKml(i) {
   const k = kmlLs[i];
   if (!k) return;
+  if (k._lijeno) await _kmlLijenoUcitaj(k, true);
   try { const b = k.grp.getBounds(); if (b.isValid()) map.fitBounds(b, {padding:[30,30]}); } catch(e) {}
   closeOznakePanel();
 }
@@ -22453,7 +22500,7 @@ async function _localKmlSaveContent(origName, content, col, owner=sbUser?.id, dr
     if(await _kmlcGet(cacheKey)!==content)throw new Error('IDB nije potvrdio upis');
     if(sbUser?.id!==owner) { await _kmlcDelete(cacheKey); return false; }
     const store = JSON.parse(localStorage.getItem(_LOCAL_KML_KEY) || '{}');
-    Object.defineProperty(store,origName,{value:{cacheKey,...(driveSource?{_driveSource:driveSource}:{}),...(fmt?{fmt}:{}),col,dash:'',weight:2,opacity:.9,vis:true,displayName:origName,_loadedAt:Date.now()},enumerable:true,configurable:true,writable:true});
+    Object.defineProperty(store,origName,{value:{cacheKey,...(driveSource?{_driveSource:driveSource}:{}),...(fmt?{fmt}:{}),col,dash:'',weight:2,opacity:.9,vis:true,displayName:origName,size:content.length,_loadedAt:Date.now()},enumerable:true,configurable:true,writable:true});
     localStorage.setItem(_LOCAL_KML_KEY, JSON.stringify(store));
     return true;
   } catch(e) { await _kmlcDelete(cacheKey); console.warn('KML nije sačuvan lokalno:',e); return false; }
@@ -22497,6 +22544,76 @@ function _localKmlSaveAll(prune=true) {
   } catch(e) { console.warn('_localKmlSaveAll error:', e);return false; }
 }
 
+function _kmlLayerIzStore(origName, data, grp, col) {
+  return {
+    name: data.displayName || origName, _origName: origName, _driveSource: data._driveSource || null, fmt: data.fmt || '',
+    grp, col, dash: data.dash || '', weight: data.weight || 2,
+    opacity: data.opacity ?? 0.9, vis: data.vis !== false,
+    fill: data.fill || false, fillCol: data.fillCol || col,
+    fillPattern: data.fillPattern || 'solid', fillOpacity: data.fillOpacity ?? 0.35,
+    // Spremljeno 5 px je bilo samo staro zadano — poštuje se jedino ako ga je korisnik sam izabrao.
+    ptR: data.ptRRucno ? (data.ptR || 3) : 3, ptRRucno: data.ptRRucno===true, poligoniVidljivi: data.poligoniVidljivi===true, klikOff: data.klikOff===true,
+    onlyPolygon: data.onlyPolygon===true, tag: data.tag || '', _loadedAt: data._loadedAt || 0
+  };
+}
+// Granice po nazivu (fajl ili izvor sa servera) — isti uzorak kao GithubLayers.role/isBoundary.
+function _kmlJeGranicaPoImenu(k) {
+  const t = String([k?._origName, k?.name, k?.displayName, k?._driveSource?.name, k?._driveSource?.release].join(' ')).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return /granic|boundary/.test(t);
+}
+// Sakriven sloj (ne vidi se, pa se nema šta crtati) ili velike granice: ne parsira se pri pokretanju.
+// Veličina se pamti od v4.7.2 (size); stari zapis bez nje i sa nazivom granica tretira se kao velik.
+function _kmlLijenoPriStartu(origName, data) {
+  if (!data) return false;
+  if (data.vis === false) return true;
+  if (!_kmlJeGranicaPoImenu({ _origName: origName, displayName: data.displayName, _driveSource: data._driveSource })) return false;
+  const vel = Number(data.size) || (typeof data.content === 'string' ? data.content.length : 0);
+  return !vel || vel >= _KML_PO_DIJELOVIMA_MIN;
+}
+// Učita (parsira) sloj koji je pri pokretanju preskočen. Zamijeni praznu grupu pravom; ako je prazna
+// grupa u međuvremenu bila na karti (uključen sloj, izbor poligona), prava ide na njeno mjesto.
+async function _kmlLijenoUcitaj(k, javi) {
+  if (!k || !k._lijeno) return k?.grp;
+  if (k._lijenoP) return k._lijenoP;
+  k._lijenoP = (async () => {
+    const owner = sbUser?.id;
+    if (javi) { try { showToast('⏳ Učitavam sloj „' + (k.name || 'granice') + '“…'); } catch (e) {} }
+    let content = null;
+    try {
+      const store = JSON.parse(localStorage.getItem(_LOCAL_KML_KEY) || '{}');
+      const data = store[k._origName || k.name];
+      if (data) content = data.cacheKey ? await _kmlcGet(data.cacheKey) : data.content;
+    } catch (e) {}
+    if (typeof content !== 'string') { k._lijeno = false; return k.grp; }
+    const grp = await _kmlGrupaIzSadrzaja(content, k.col);
+    if (sbUser?.id !== owner || kmlLs.indexOf(k) < 0) return k.grp;
+    const old = k.grp, naKarti = map.hasLayer(old);
+    k.grp = grp; k._lijeno = false;
+    if (naKarti) map.removeLayer(old);
+    const selecting = !!globalThis.GithubLayers?.selecting?.();
+    if (naKarti || (k.vis !== false && (!k.onlyPolygon || selecting))) grp.addTo(map);
+    const idx = kmlLs.indexOf(k);
+    if (idx >= 0) applyKmlStyle(idx);
+    try { globalThis.GithubLayers?.render?.(); } catch (e) {}
+    try { rndGraniceModal(); } catch (e) {}
+    try { if (document.getElementById('oznake-panel')?.style.display !== 'none') _rndOznakePanel(); } catch (e) {}
+    return grp;
+  })();
+  try { return await k._lijenoP; } finally { k._lijenoP = null; }
+}
+async function _kmlLijenoUcitajSve(filter) {
+  const lijeni = kmlLs.filter(k => k && k._lijeno && (!filter || filter(k)));
+  for (const k of lijeni) await _kmlLijenoUcitaj(k, true);
+  return lijeni.length;
+}
+// Prikazan veliki sloj se učita poslije pokretanja, kad je glavna nit mirna.
+function _kmlLijenoPozadina(k) {
+  setTimeout(() => {
+    const kreni = () => { if (k._lijeno) _kmlLijenoUcitaj(k, false); };
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(kreni, { timeout: 5000 }); else kreni();
+  }, 15000);
+}
+
 async function _localKmlRestore() {
   try {
     const store = JSON.parse(localStorage.getItem(_LOCAL_KML_KEY) || '{}');
@@ -22511,6 +22628,24 @@ async function _localKmlRestore() {
     for(const [origName,data] of Object.entries(store)) {
       if (kmlLs.find(k => (k._origName || k.name) === origName && !k._key)) continue;
       try {
+        // Velike granice i sakriveni veliki slojevi se NE čitaju ni ne parsiraju pri pokretanju:
+        // granice služe za izvještaj odjela / izbor poligona, a granice se na karti ionako vide iz
+        // offline karte. Izmjereno na terenu: 13 slojeva → 1681 poziv pkml, 3,3 s rada pri svakom startu.
+        // Sloj dobija praznu grupu; učita se tek kad zatreba (_kmlLijenoUcitaj).
+        if (_kmlLijenoPriStartu(origName, data)) {
+          const col = data.col || KCOLS[kmlCI % KCOLS.length]; kmlCI++;
+          const layer = _kmlLayerIzStore(origName, data, typeof _kmlGrupa === 'function' ? _kmlGrupa() : L.featureGroup(), col);
+          layer._lijeno = true;
+          layer.grp.once('add', () => { _kmlLijenoUcitaj(layer, true); });
+          layer.onlyPolygon = globalThis.GithubLayers?.defaultOnlyPolygon(layer) ?? layer.onlyPolygon;
+          layer.klikRucno = data.klikRucno === true;
+          if (!layer.klikRucno && globalThis.GithubLayers?.klikOffZadano(layer)) layer.klikOff = true;
+          kmlLs.push(layer);
+          applyKmlStyle(kmlLs.length - 1);
+          // Prikazan na karti (ne samo za izbor poligona): učita se kasnije u pozadini, kad se app smiri.
+          if (layer.vis && !layer.onlyPolygon) _kmlLijenoPozadina(layer);
+          continue;
+        }
         const content=data.cacheKey?await _kmlcGet(data.cacheKey):data.content;
         if(sbUser?.id!==owner)return;
         if(kmlLs.some(k=>(k._origName||k.name)===origName&&!k._key))continue;
@@ -22532,16 +22667,7 @@ async function _localKmlRestore() {
         const grp = await _kmlGrupaIzSadrzaja(content, col);
         if(sbUser?.id!==owner)return;
         if(kmlLs.some(k=>(k._origName||k.name)===origName&&!k._key))continue;   // drugi paralelni restore je u međuvremenu dodao isti sloj
-        const layer={
-          name: data.displayName || origName, _origName: origName, _driveSource: data._driveSource || null, fmt: data.fmt || '',
-          grp, col, dash: data.dash || '', weight: data.weight || 2,
-          opacity: data.opacity ?? 0.9, vis: data.vis !== false,
-          fill: data.fill || false, fillCol: data.fillCol || col,
-          fillPattern: data.fillPattern || 'solid', fillOpacity: data.fillOpacity ?? 0.35,
-          // Spremljeno 5 px je bilo samo staro zadano — poštuje se jedino ako ga je korisnik sam izabrao.
-          ptR: data.ptRRucno ? (data.ptR || 3) : 3, ptRRucno: data.ptRRucno===true, poligoniVidljivi: data.poligoniVidljivi===true, klikOff: data.klikOff===true,
-          onlyPolygon: data.onlyPolygon===true, tag: data.tag || '', _loadedAt: data._loadedAt || 0
-        };
+        const layer=_kmlLayerIzStore(origName, data, grp, col);
         layer.onlyPolygon=globalThis.GithubLayers?.defaultOnlyPolygon(layer)??layer.onlyPolygon;
         // Kamionski putevi sa servera: klik zadano isključen, osim ako ga je korisnik sam uključio (klikRucno).
         layer.klikRucno=data.klikRucno===true;

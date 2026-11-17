@@ -27,8 +27,10 @@
  function remember(){if(client){owner=sbUser?.id;client.hide();return;}previous={boundary:_dozCreateBoundary,area:_dozCreateAreaHa};owner=sbUser?.id;_dozKmlSelSavedGj=_dozCreateGj;_dozKmlSelSavedOdjel=_dozCreateOdjel;}
  function download(){remember();pendingDownload=true;dozCloseCreateOdjel();closeLayerImport();_openLayerSheet();_lsTab('granice');}
  function afterDownload(){if(!pendingDownload)return;pendingDownload=false;if(sbUser?.id!==owner){client=null;return;}closeLayerSheet();if(client){const c=client;client=null;c.cancel();return;}_dozNewOdjelDrawGj=_dozKmlSelSavedGj;_dozNewOdjelDrawOdjel=_dozKmlSelSavedOdjel;dozShowCreateOdjel(true);}
- function startCore(){
+ async function startCore(){
   if(_dozGpsOn||_dozDrawType!==null){showToast('Završi snimanje ili crtanje prije izbora granice');return;}
+  // Granice se ne parsiraju pri pokretanju (glavni.js _kmlLijenoUcitaj) — učitaj ih prije izbora.
+  if(typeof _kmlLijenoUcitajSve==='function')await _kmlLijenoUcitajSve();
   sources=getSources();if(!sources.length){download();showToast('Preuzmi Granice odjela pa izaberi poligone');return;}
   remember();selectedSource=0;items=sources[0].rows;_dozKmlSelLayers=[];styles.clear();visibility.clear();dozCloseCreateOdjel();switchTab('karta');map.closePopup();
   _dozKmlSelMode=true;root.GithubLayers?.sync();source(0);el('doz-kmlsel-banner').style.display='flex';el('action-bar').style.display='none';el('tab-bar').style.display='none';
