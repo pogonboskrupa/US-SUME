@@ -20,3 +20,12 @@ assert(/Glavna nit kasni/.test(txt), 'lag upozorenje');
 const prazno = R._perfPreporuke({ dom: 10, slojeva: 1, plocica: 1, lagP95: 5, dugihZadataka: 0, poTabu: [], funkcije: [], pomicanja: [], sekundi: 5 });
 assert.strictEqual(prazno.length, 1);
 console.log('perf-dijagnostika: ok');
+// v4.7.3: san tajmera (skriven/ugašen ekran) se ne broji kao kašnjenje glavne niti.
+{
+  const srcG = require('./_izvor').izvor();
+  const a = srcG.indexOf('Kašnjenje petlje događaja'), blok = srcG.slice(a, a + 1500);
+  assert(/if \(document\.hidden\) \{ _PERF\.lagSkriven = true; return; \}/.test(blok), 'skriven ekran se preskače');
+  assert(/if \(_PERF\.lagSkriven\) \{ _PERF\.lagSkriven = false; return; \}/.test(blok), 'prvi otkucaj poslije skrivanja se preskače');
+  assert(/d >= 0 && d < 3000/.test(blok), 'razmak > 3 s nije kašnjenje niti');
+  console.log('OK lag bez sna tajmera');
+}

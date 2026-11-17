@@ -38509,8 +38509,12 @@ const _PERF = { lt: [], ltUk: 0, ltN: 0, ltMax: 0, lag: [], fn: {}, start: Date.
     let last = performance.now();
     setInterval(() => {
       const now = performance.now(), d = now - last - 500; last = now;
-      if (document.hidden || d < 0 && d > -400) { if (document.hidden) return; }
-      if (d >= 0 && d < 20000) { _PERF.lag.push(Math.round(d)); if (_PERF.lag.length > 240) _PERF.lag.shift(); }
+      // Skriven ekran ili ugašen ekran tokom snimanja (WebView tada nije pauziran, ali Android
+      // prigušuje tajmere): razmak je san tajmera, ne zauzeta nit. Prvi otkucaj poslije skrivanja
+      // i razmak > 3 s se ne broje — stvarno blokiranje te dužine se vidi u dugim zadacima (LoAF).
+      if (document.hidden) { _PERF.lagSkriven = true; return; }
+      if (_PERF.lagSkriven) { _PERF.lagSkriven = false; return; }
+      if (d >= 0 && d < 3000) { _PERF.lag.push(Math.round(d)); if (_PERF.lag.length > 240) _PERF.lag.shift(); }
       // Glavna nit stalno kasni (ne samo pri pomicanju) → lagani prikaz sam, ako korisnik nije ručno birao.
       try {
         if (_PERF.lag.length >= 60 && !_PERF.lagLite) {
