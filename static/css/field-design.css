@@ -1812,3 +1812,46 @@ html[data-field-theme=day] .gu-ime .gu-rm{color:#1d4ed8}
 html[data-field-theme=day] .adm-rm-filter,html[data-field-theme=day] .adm-rm.nema{color:#334155}
 html[data-field-theme=day] .adm-rm,html[data-field-theme=day] .adm-rm-izbor,html[data-field-theme=day] .adm-rm-filter button{color:#1d4ed8}
 html[data-field-theme=day] .adm-rm-filter button{background:#eff6ff}
+
+/* v4.7.7: list za izvoz/slanje traga — sa/bez slika jasno razdvojeno, radnje u boji */
+.tiz-bg { position: fixed; inset: 0; z-index: 999000; background: rgba(0,0,0,.5); display: flex; align-items: flex-end; justify-content: center; }
+.tiz-box { width: 100%; max-width: 460px; max-height: 92vh; overflow-y: auto; background: #10201a; color: #e6efe9; border-radius: 16px 16px 0 0; padding: 14px 14px calc(14px + env(safe-area-inset-bottom)); box-shadow: 0 -6px 24px rgba(0,0,0,.4); display: flex; flex-direction: column; gap: 12px; }
+.tiz-head { display: flex; align-items: center; gap: 10px; }
+.tiz-head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tiz-head b { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tiz-head small { color: #9fb5a8; font-size: 12.5px; }
+.tiz-boja { width: 6px; align-self: stretch; border-radius: 3px; flex-shrink: 0; }
+.tiz-x { width: 44px; height: 44px; border: 0; border-radius: 10px; background: rgba(255,255,255,.08); color: inherit; font-size: 18px; flex-shrink: 0; }
+.tiz-izbor { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tiz-opc { display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 8px 10px; border-radius: 12px; border: 2px solid rgba(255,255,255,.14); background: rgba(255,255,255,.04); color: #b8c9be; text-align: left; }
+.tiz-opc .ic { width: 22px; height: 22px; flex-shrink: 0; }
+.tiz-opc span { display: flex; flex-direction: column; min-width: 0; }
+.tiz-opc b { font-size: 14.5px; }
+.tiz-opc small { font-size: 11.5px; opacity: .85; }
+.tiz-opc.sa.on { border-color: #2dd4bf; background: rgba(45,212,191,.16); color: #ccfbf1; }
+.tiz-opc.bez.on { border-color: #f59e0b; background: rgba(245,158,11,.16); color: #fef3c7; }
+.tiz-lista { display: flex; flex-direction: column; gap: 8px; }
+.tiz-radnja { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 10px 12px; border-radius: 12px; border: 1px solid; text-align: left; color: #e6efe9; }
+.tiz-ri { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #fff; }
+.tiz-ri .ic { width: 22px; height: 22px; }
+.tiz-rt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tiz-rt b { font-size: 15px; }
+.tiz-rt small { font-size: 12px; color: #b3c4ba; }
+.tiz-str { font-size: 22px; opacity: .6; }
+.tiz-radnja.kol { background: rgba(34,197,94,.13); border-color: rgba(34,197,94,.5); }
+.tiz-radnja.kol .tiz-ri { background: #16a34a; }
+.tiz-radnja.pod { background: rgba(59,130,246,.13); border-color: rgba(59,130,246,.5); }
+.tiz-radnja.pod .tiz-ri { background: #2563eb; }
+.tiz-radnja.sac { background: rgba(168,85,247,.12); border-color: rgba(168,85,247,.45); }
+.tiz-radnja.sac .tiz-ri { background: #7c3aed; }
+.tiz-odustani { min-height: 46px; border-radius: 12px; border: 0; background: rgba(255,255,255,.08); color: #cbd5d0; font-size: 15px; }
+html[data-field-theme=day] .tiz-box { background: #ffffff; color: #0f172a; }
+html[data-field-theme=day] .tiz-head small, html[data-field-theme=day] .tiz-rt small { color: #475569; }
+html[data-field-theme=day] .tiz-x, html[data-field-theme=day] .tiz-odustani { background: #f1f5f9; color: #1e293b; }
+html[data-field-theme=day] .tiz-opc { background: #f8fafc; border-color: #cbd5e1; color: #334155; }
+html[data-field-theme=day] .tiz-opc.sa.on { background: #ccfbf1; border-color: #0d9488; color: #134e4a; }
+html[data-field-theme=day] .tiz-opc.bez.on { background: #fef3c7; border-color: #d97706; color: #78350f; }
+html[data-field-theme=day] .tiz-radnja { color: #0f172a; }
+html[data-field-theme=day] .tiz-radnja.kol { background: #f0fdf4; border-color: #86efac; }
+html[data-field-theme=day] .tiz-radnja.pod { background: #eff6ff; border-color: #93c5fd; }
+html[data-field-theme=day] .tiz-radnja.sac { background: #faf5ff; border-color: #d8b4fe; }

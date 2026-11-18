@@ -18564,30 +18564,60 @@ async function _tragKmlSacuvaj(id, bezSlika) {
 }
 
 // Jedan ulaz za izvoz traga (v1.8.1) — kartica traga, popup na karti i Teren.
-// Zamjenjuje meni "KML izvoz" (izvozio je samo vlake, nikad tragove).
+// v4.7.7: zaseban list umjesto liste istih sivih dugmadi (sa/bez slika se nije
+// razlikovalo na prvi pogled). Gore se JEDNOM bira "Sa slikama" / "Samo trag"
+// (dva jasno obojena izbora), ispod su tri radnje, svaka u svojoj boji.
+var _tizSaSlikama = true;
+function _tragIzvozIzvrsi(id, radnja, saSlikama) {
+  const t = _tragRegistry.find(x => x.id === id);
+  if (!t) return;
+  const bez = !saSlikama || !(t.fotos && t.fotos.length);
+  if (radnja === 'kolegi') return bez ? podaciPosalji('trag', _tragIme(t), _tragToKml(t)) : _tragPosaljiSaSlikama(t);
+  if (radnja === 'podijeli') return bez ? _tragRegShare(id, true) : _tragRegShare(id);
+  if (radnja === 'sacuvaj') return bez ? _tragKmlSacuvaj(id, true) : _tragKmlSacuvaj(id);
+}
+function _tizZatvori() { document.getElementById('tiz-bg')?.remove(); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('tiz-bg')) _tizZatvori(); });
+function _tizHtml(t) {
+  const nF = (t.fotos && t.fotos.length) || 0, sa = nF > 0 && _tizSaSlikama;
+  const ico = n => '<svg class="ic"><use href="#' + n + '"/></svg>';
+  const meta = [_tragFmtLen(_tragCalcLen(t.pts || [])), (t.pts || []).length + ' tač.', nF ? nF + (nF === 1 ? ' slika' : nF < 5 ? ' slike' : ' slika') : 'bez slika'].join(' · ');
+  const izbor = nF ? '<div class="tiz-izbor" role="radiogroup" aria-label="Šta šalješ">' +
+    '<button type="button" role="radio" aria-checked="' + sa + '" class="tiz-opc sa' + (sa ? ' on' : '') + '" data-sa="1">' + ico('ic-slika') + '<span><b>Sa slikama</b><small>' + nF + (nF === 1 ? ' slika' : nF < 5 ? ' slike' : ' slika') + ' uz trag</small></span></button>' +
+    '<button type="button" role="radio" aria-checked="' + !sa + '" class="tiz-opc bez' + (sa ? '' : ' on') + '" data-sa="0">' + ico('ic-trag') + '<span><b>Samo trag</b><small>linija, bez slika</small></span></button>' +
+    '</div>' : '';
+  const komu = isAdmin() ? 'Pošalji korisniku' : 'Pošalji kolegi';
+  const radnja = (k, cls, ic, nas, opis) => '<button type="button" class="tiz-radnja ' + cls + '" data-r="' + k + '">' +
+    '<span class="tiz-ri">' + ico(ic) + '</span><span class="tiz-rt"><b>' + nas + '</b><small>' + opis + '</small></span><span class="tiz-str">›</span></button>';
+  return '<div class="tiz-box" role="dialog" aria-modal="true" aria-labelledby="tiz-naslov">' +
+    '<header class="tiz-head"><span class="tiz-boja" style="background:' + _tvBoja(t.color) + '"></span>' +
+    '<div><b id="tiz-naslov">' + _escHtml(_tragIme(t)) + '</b><small>' + meta + '</small></div>' +
+    '<button type="button" class="tiz-x" aria-label="Zatvori">✕</button></header>' +
+    izbor +
+    '<div class="tiz-lista">' +
+    radnja('kolegi', 'kol', 'ic-korisnik', komu, sa ? 'Preko servera — kod kolege ostaje lokalno. Mnogo slika se smanji da stane.' : 'Preko servera — kod kolege ostaje lokalno.') +
+    radnja('podijeli', 'pod', 'ic-posalji', 'Podijeli', sa ? 'Viber, WhatsApp, Bluetooth, e-mail — pune slike (.kmz)' : 'Viber, WhatsApp, Bluetooth, e-mail (.kml)') +
+    radnja('sacuvaj', 'sac', 'ic-uvezi', 'Sačuvaj na telefon', sa ? 'Fajl .kmz sa slikama' : 'Fajl .kml') +
+    '</div><button type="button" class="tiz-odustani">Odustani</button></div>';
+}
 async function _tragKmlMeni(id) {
   const t = _tragRegistry.find(x => x.id === id);
   if (!t) return;
   try { map.closePopup(); } catch (e) {}
-  // Trag sa slikama: korisnik bira da li slike putuju uz trag (KMZ) ili se dijeli samo trag (KML).
-  const nF = (t.fotos && t.fotos.length) || 0;
-  const ico = n => '<svg class="ic"><use href="#' + n + '"/></svg> ';
-  const akcije = nF ? [
-    { label: ico('ic-posalji') + 'Podijeli trag SA slikama (' + nF + ') — .kmz', radi: () => _tragRegShare(id) },
-    { label: ico('ic-posalji') + 'Podijeli SAMO trag (bez slika) — .kml', radi: () => _tragRegShare(id, true) },
-    { label: ico('ic-uvezi') + 'Sačuvaj na telefon sa slikama (.kmz)', radi: () => _tragKmlSacuvaj(id) },
-    { label: ico('ic-uvezi') + 'Sačuvaj na telefon samo trag (.kml)', radi: () => _tragKmlSacuvaj(id, true) },
-  ] : [
-    { label: ico('ic-posalji') + 'Podijeli (Viber, WhatsApp, e-mail…)', radi: () => _tragRegShare(id) },
-    { label: ico('ic-uvezi') + 'Sačuvaj .kml na telefon', radi: () => _tragKmlSacuvaj(id) },
-  ];
-  const komu = isAdmin() ? 'Pošalji korisniku (bilo koja šumarija)' : 'Pošalji kolegi (ostaje samo kod njega)';
-  if (nF) {
-    akcije.push({ label: ico('ic-korisnik') + komu + ' — SA slikama (' + nF + ')', radi: () => _tragPosaljiSaSlikama(t) });
-    akcije.push({ label: ico('ic-korisnik') + komu + ' — samo trag', radi: () => podaciPosalji('trag', _tragIme(t), _tragToKml(t)) });
-  } else akcije.push({ label: ico('ic-korisnik') + komu, radi: () => podaciPosalji('trag', _tragIme(t), _tragToKml(t)) });
-  const i = await _dlgActions('📄 ' + _tragIme(t) + ' — izvoz', akcije.map(a => ({ label: a.label })));
-  if (i >= 0 && akcije[i]) akcije[i].radi();
+  _tizZatvori();
+  _tizSaSlikama = true;
+  const bg = document.createElement('div');
+  bg.id = 'tiz-bg'; bg.className = 'tiz-bg';
+  const crtaj = () => { bg.innerHTML = _tizHtml(t); };
+  crtaj();
+  bg.addEventListener('click', e => {
+    if (e.target === bg || e.target.closest('.tiz-x,.tiz-odustani')) { _tizZatvori(); return; }
+    const o = e.target.closest('.tiz-opc');
+    if (o) { _tizSaSlikama = o.dataset.sa === '1'; crtaj(); return; }
+    const r = e.target.closest('.tiz-radnja');
+    if (r) { const sa = _tizSaSlikama; _tizZatvori(); _tragIzvozIzvrsi(id, r.dataset.r, sa); }
+  });
+  document.body.appendChild(bg);
 }
 
 function _toggleLocPopup() {

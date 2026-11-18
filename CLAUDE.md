@@ -5166,3 +5166,8 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 - **Server i dalje drži podatak samo kratko**: sandučić iz v3.5.0. Primalac spremi poruku lokalno (IndexedDB), pa se red briše sa servera; nepreuzeto se briše poslije 7 dana. Ograničenje 3 MB NIJE podignuto: veća poruka na slaboj vezi češće pada.
 - Native dijeljenje (Viber/Bluetooth, `.kmz`) nema ograničenje i šalje pune slike.
 - Test: `tests/js/trag-slanje-slike.test.js` (pada na starom kodu).
+
+### Izvoz/slanje traga — pregledan list umjesto sivih dugmadi (v4.7.7)
+- `_tragKmlMeni` više ne koristi `_dlgActions` (šest istih sivih dugmadi gdje se "sa slikama" i "samo trag" nisu razlikovali na prvi pogled). Sad je to vlastiti list `#tiz-bg` (`_tizHtml`): zaglavlje (boja traga, ime, dužina, broj tačaka i slika), **izbor koji se bira jednom** "Sa slikama" (tirkiz) / "Samo trag" (oker), prikazuje se samo kad trag ima slike, i tri radnje, svaka u svojoj boji: Pošalji kolegi/korisniku (zelena), Podijeli (plava), Sačuvaj na telefon (ljubičasta). Opis radnje prati izbor (.kmz/.kml, smanjivanje slika).
+- Izvršavanje je u `_tragIzvozIzvrsi(id, radnja, saSlikama)`; trag bez slika nikad ne ide putem sa slikama. Zatvara se na ✕, Odustani, dodir pozadine i Esc. CSS `.tiz-*` u `field-design.css` ima i dnevnu temu.
+- Test: `tests/js/trag-izvoz-list.test.js`.
