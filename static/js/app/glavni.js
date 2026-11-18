@@ -18453,9 +18453,13 @@ async function _tragKmzBajti(t) {
   return _zipStore([{ name: 'doc.kml', data: kml }, ...fajlovi]);
 }
 // Trag + slike kao JEDAN KML (slike kao data: URI u opisu tačke, isto kao poslana fotografija) — primalac ga
-// otvara iz Primljenih podataka i vidi liniju i tačke sa slikama. Ograničenje servera je ~2,8 MB: prvo se
-// pokušaju pune slike, pa smanjene (sličice), pa onoliko slika koliko stane; korisniku se kaže koliko ide.
-async function _tragKmlSaSlikama(t) {
+// otvara iz Primljenih podataka i vidi liniju i tačke sa slikama. Ograničenje servera je ~2,8 MB.
+// v4.7.6: kad pune slike (900 px) ne stanu, slike se PONOVO SAŽIMAJU na manji, ali čitljiv format
+// (720 → 300 px) umjesto da se odmah pređe na sličice od 60 px — sa 30 slika je trag padao na sličice,
+// a kolega ih je vidio razvučene na 320 px (mutno, ništa se ne vidi). Sličice ostaju samo kao zadnja
+// rezerva za sliku koja se ne može ponovo sažeti. `smanji(du, px, q)` je ubacivo radi testa.
+const _TRAG_SLIKE_NIVOI = [[720, 0.74], [600, 0.72], [480, 0.7], [380, 0.68], [300, 0.66]];
+async function _tragKmlSaSlikama(t, smanji) {
   const fotos = (t.fotos || []).filter(f => Number.isFinite(f.la) && Number.isFinite(f.lo));
   const pune = [];
   for (const f of fotos) { let du = null; try { du = await _kmlcGet('fotofull:' + f.ts); } catch (e) {} pune.push(typeof du === 'string' && du.startsWith('data:image/') ? du : (f.thumb || null)); }
@@ -18465,19 +18469,38 @@ async function _tragKmlSaSlikama(t) {
   const lista = srcs => fotos.map((f, i) => srcs[i] ? { putanja: srcs[i], la: f.la, lo: f.lo } : null).filter(Boolean);
   let kml = sastavi(lista(pune));
   if (velicina(kml) <= max) return { kml, poslano: lista(pune).length, smanjeno: false, ukupno: fotos.length };
-  const male = fotos.map(f => f.thumb || null);
-  kml = sastavi(lista(male));
-  if (velicina(kml) <= max) return { kml, poslano: lista(male).length, smanjeno: true, ukupno: fotos.length };
-  let izbor = lista(male);
+  if (typeof smanji !== 'function') smanji = (du, px, q) => _resizeImg(new Blob([_dataUrlBajti(du)], { type: 'image/jpeg' }), px, q);
+  // Procjena: veličina slike raste otprilike sa kvadratom stranice. Nivoi za koje je jasno da ne mogu
+  // stati se preskaču, da se 30 slika ne sažima pet puta zaredom na slabom telefonu.
+  const osnova = velicina(sastavi([])), n = Math.max(1, fotos.length);
+  const prosjek = pune.reduce((a, x) => a + (x ? x.length : 0), 0) / n;
+  const budzet = (max - osnova) / n;
+  let zadnji = null;
+  for (const [px, q] of _TRAG_SLIKE_NIVOI) {
+    const zadnjiNivo = px === _TRAG_SLIKE_NIVOI[_TRAG_SLIKE_NIVOI.length - 1][0];
+    if (!zadnjiNivo && prosjek * (px / 900) * (px / 900) > budzet * 1.4) continue;
+    const srcs = [];
+    for (let i = 0; i < fotos.length; i++) {
+      const du = pune[i];
+      let s = fotos[i].thumb || null;
+      if (du && du !== fotos[i].thumb) { try { s = await smanji(du, px, q); } catch (e) {} }
+      srcs.push(s);
+    }
+    zadnji = srcs;
+    kml = sastavi(lista(srcs));
+    if (velicina(kml) <= max) return { kml, poslano: lista(srcs).length, smanjeno: true, px, ukupno: fotos.length };
+  }
+  // Ni najmanji čitljiv format ne staje: šalje se onoliko slika koliko stane (ostale posebno).
+  let izbor = lista(zadnji || fotos.map(f => f.thumb || null));
   while (izbor.length && velicina(sastavi(izbor)) > max) izbor = izbor.slice(0, -1);
-  return { kml: sastavi(izbor), poslano: izbor.length, smanjeno: true, ukupno: fotos.length };
+  return { kml: sastavi(izbor), poslano: izbor.length, smanjeno: true, px: _TRAG_SLIKE_NIVOI[_TRAG_SLIKE_NIVOI.length - 1][0], ukupno: fotos.length };
 }
 async function _tragPosaljiSaSlikama(t) {
   showToast('⏳ Pripremam trag sa slikama…');
   let r;
   try { r = await _tragKmlSaSlikama(t); } catch (e) { showToast('⚠ Slike nije moguće pripremiti — šaljem samo trag'); return podaciPosalji('trag', _tragIme(t), _tragToKml(t)); }
   if (r.poslano < r.ukupno) showToast('⚠ Stane ' + r.poslano + ' od ' + r.ukupno + ' slika (ograničenje veličine) — ostale pošalji posebno');
-  else if (r.smanjeno) showToast('Slike se šalju smanjene (ograničenje veličine)');
+  else if (r.smanjeno) showToast('Slike se šalju smanjene' + (r.px ? ' na ' + r.px + ' px' : '') + ' (ograničenje veličine)');
   return podaciPosalji('trag', _tragIme(t), r.kml);
 }
 function _bajtiUBase64(u) { let s = ''; const K = 0x8000; for (let i = 0; i < u.length; i += K) s += String.fromCharCode.apply(null, u.subarray(i, i + K)); return btoa(s); }
