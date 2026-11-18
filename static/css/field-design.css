@@ -1855,3 +1855,16 @@ html[data-field-theme=day] .tiz-radnja { color: #0f172a; }
 html[data-field-theme=day] .tiz-radnja.kol { background: #f0fdf4; border-color: #86efac; }
 html[data-field-theme=day] .tiz-radnja.pod { background: #eff6ff; border-color: #93c5fd; }
 html[data-field-theme=day] .tiz-radnja.sac { background: #faf5ff; border-color: #d8b4fe; }
+
+/* v4.7.8: Moja lokacija — glavne radnje (Snimi trag, Izmjeri, Slika, Tačka) veće i dominantnije od
+   donjeg reda prekidača (Šumski mod, Kompas, Radijus). Snimi trag je najširi i najistaknutiji. */
+html #ab-loc-popup .abp-tiles {grid-template-columns:1.6fr 1fr 1fr 1fr;gap:8px;}
+html #ab-loc-popup .abp-tile2 {min-height:68px;gap:4px;padding:6px 4px;border-radius:14px;font:800 13px system-ui;}
+html #ab-loc-popup .abp-tile2 .ic {width:26px;height:26px;}
+html #ab-loc-popup .abp-tile2.abp-trag {font-size:14.5px;box-shadow:0 3px 10px rgba(194,65,12,.45);}
+html #ab-loc-popup .abp-tile2.abp-trag .ic {width:30px;height:30px;}
+html #ab-loc-popup.gps-off .abp-tiles {grid-template-columns:1fr 1fr;}
+html #ab-loc-popup.gps-off .abp-tile2 {min-height:54px;font-size:15px;}
+html #ab-loc-popup .abp-donji {margin-top:10px;gap:6px;}
+html #ab-loc-popup .abp-donji .abp-chip {min-height:34px;font-size:12.5px;font-weight:600;padding:3px 6px;opacity:.9;}
+html #ab-loc-popup .abp-donji .abp-chip .ic {width:15px;height:15px;}
