@@ -5174,3 +5174,10 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 
 ### Moja lokacija — glavne radnje dominantnije od prekidača (v4.7.8)
 - Na zahtjev: Snimi trag / Izmjeri / Slika / Tačka su veće (68 px, ikona 26 px, font 13 px), a **Snimi trag** je najširi (kolona 1.6fr) sa većom ikonom i sjenom. Donji red Šumski mod / Kompas / Radijus je niži (34 px, font 12.5 px) da ne konkuriše. Samo CSS na kraju `field-design.css` (pravila pod `#ab-loc-popup`, poslije starijih iz v4.5.1/v4.5.2); ID-jevi i handleri nepromijenjeni. Provjereno snimkom na 360 px (noć/dan): nijedan natpis se ne odsijeca.
+
+### Fotografija bez zastoja karte (v4.7.9)
+- Izvještaj sa telefona (v4.7.8, 2,4 h snimanja traga): 6 od 8 najdužih zastoja (180–320 ms) bilo je `IMG[blob:…].onload` u `_resizeImg` — dekodiranje fotografije sa kamere (12+ MP) i JPEG kodiranje na glavnoj niti, dvaput po slici (sličica 60 px + 900 px paralelno). Pozicije `loaf` su UTF-16 jedinice (vidi v4.7.3).
+- Sad `_resizeImgVise(file, [[px,q],…])` dekodira JEDNOM kroz `createImageBitmap` (van glavne niti), crta umanjeno i kodira kroz `toBlob` + `FileReader` (asinhrono). `_resizeImg` je omotač oko nje. Rezerva `_resizeImgStaro` (stari `<img>` put) kad nema `createImageBitmap` ili kad padne; `toDataURL` kad nema `toBlob`.
+- Izmjereno (Chromium, CPU 4×, slika 4000×3000): najduži zastoj 239–430 ms → 20–26 ms. **Bez usporenja CPU-a mjerenje zavara** (prvi prolaz bez zagrijavanja je pokazao suprotno) — test zato usporava CPU i zagrije se prije mjerenja.
+- Ostalo iz izvještaja: `onP` ø 0,64 ms (5266 fiksova), čitanje offline karte ø 10,7 ms bez praznih/isteklih — bez potrebe za izmjenom. DOM 11 170 elemenata je napomena alata, ne izmjereni zastoj (v2.9.0: skriveni elementi su jeftini).
+- Test: `tests/browser/resize-img.py` (u `run-ci.sh`, sam na kraju jer mjeri vrijeme).

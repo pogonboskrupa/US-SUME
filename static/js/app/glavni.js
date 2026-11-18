@@ -8092,10 +8092,9 @@ async function onLocPhotoSelected(input) {
   const ts = Date.now();
   showToast('⏳ Obrađujem sliku...');
   try {
-    const [thumb, full] = await Promise.all([
-      _resizeImg(file, 60,  0.78),
-      _resizeImg(file, 900, 0.80),
-    ]);
+    // Jedno dekodiranje za obje veličine (v4.7.9) — dekodiranje fotografije
+    // sa kamere je najskuplji dio, a dva paralelna poziva su ga radila dvaput.
+    const [thumb, full] = await _resizeImgVise(file, [[60, 0.78], [900, 0.80]]);
     const idx = _locFotos.length;
     const m = _buildFotoMarker(la, lo, thumb, full, idx, ts, true);
     _locFotos.push({la, lo, ts, thumb, full, marker: m, shared: false, sharedWith: null, sbId: null, odjel:pos.odjel||'', gj:pos.gj||''});
@@ -8513,28 +8512,66 @@ async function deleteFotoShared(tsKey) {
 }
 
 // ─ Resize helper ─
-async function _resizeImg(file, maxPx, q) {
+// v4.7.9: dekodiranje ide kroz createImageBitmap (radi VAN glavne niti), a
+// kodiranje kroz toBlob (asinhrono). Ranije je img.onload → drawImage →
+// toDataURL dekodirao fotografiju od 12+ MP i kodirao JPEG na glavnoj niti:
+// izmjereno na telefonu 180–320 ms zastoja karte po slici (Debug → Dijagnostika
+// brzine, najduži LoAF na _resizeImg). Stari put ostaje rezerva za WebView bez
+// createImageBitmap/toBlob ili kad dekodiranje u pozadini padne.
+function _resizeImgCanvasUrl(src, w, h, maxPx, q) {
+  return new Promise((resolve, reject) => {
+    const s = Math.min(maxPx / w, maxPx / h, 1);
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w * s));
+    c.height = Math.max(1, Math.round(h * s));
+    const ctx = c.getContext('2d');
+    if (!ctx) { reject(new Error('canvas context failed')); return; }
+    ctx.drawImage(src, 0, 0, c.width, c.height);
+    const izDataUrl = () => {
+      const du = c.toDataURL('image/jpeg', q);
+      if (!du || du.length < 50) reject(new Error('canvas export failed')); else resolve(du);
+    };
+    if (typeof c.toBlob !== 'function' || typeof FileReader === 'undefined') { izDataUrl(); return; }
+    c.toBlob(bl => {
+      if (!bl) { izDataUrl(); return; }
+      const fr = new FileReader();
+      fr.onload = () => (fr.result && fr.result.length >= 50) ? resolve(fr.result) : izDataUrl();
+      fr.onerror = izDataUrl;
+      fr.readAsDataURL(bl);
+    }, 'image/jpeg', q);
+  });
+}
+function _resizeImgStaro(file, maxPx, q) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
-      try {
-        const s = Math.min(maxPx / img.width, maxPx / img.height, 1);
-        const c = document.createElement('canvas');
-        c.width = Math.max(1, Math.round(img.width * s));
-        c.height = Math.max(1, Math.round(img.height * s));
-        const ctx = c.getContext('2d');
-        if (!ctx) { URL.revokeObjectURL(url); reject(new Error('canvas context failed')); return; }
-        ctx.drawImage(img, 0, 0, c.width, c.height);
-        const dataUrl = c.toDataURL('image/jpeg', q);
-        URL.revokeObjectURL(url);
-        if (!dataUrl || dataUrl.length < 50) { reject(new Error('canvas export failed')); return; }
-        resolve(dataUrl);
-      } catch(e) { URL.revokeObjectURL(url); reject(e); }
+      _resizeImgCanvasUrl(img, img.width, img.height, maxPx, q)
+        .then(du => { URL.revokeObjectURL(url); resolve(du); },
+              e => { URL.revokeObjectURL(url); reject(e); });
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Slika se ne može učitati')); };
     img.src = url;
   });
+}
+async function _resizeImgVise(file, velicine) {
+  let bmp = null;
+  if (typeof createImageBitmap === 'function') {
+    try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (e) { bmp = null; }
+  }
+  if (!bmp) {
+    const out = [];
+    for (const [px, q] of velicine) out.push(await _resizeImgStaro(file, px, q));
+    return out;
+  }
+  try {
+    const out = [];
+    for (const [px, q] of velicine) out.push(await _resizeImgCanvasUrl(bmp, bmp.width, bmp.height, px, q));
+    return out;
+  } finally { try { bmp.close(); } catch (e) {} }
+}
+async function _resizeImg(file, maxPx, q) {
+  return (await _resizeImgVise(file, [[maxPx, q]]))[0];
 }
 
 // ─ Persistencija ─
