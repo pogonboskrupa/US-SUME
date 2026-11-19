@@ -40,7 +40,7 @@ function read(key){try{return object(JSON.parse(localStorage.getItem(key)||'{}')
 function settingsFor(project){return cleanSettings({...read(prefsKey('__all__')),...(project==='__all__'?{}:read(prefsKey(project)))});}
 function editTarget(){return typeof _vlakaStyleTarget==='function'?_vlakaStyleTarget():_aktivniProjektId;}
 function identity(v){return (v.korisnikId||v.korisnik_id||uid())+':'+v.nm;}
-function recordFor(v){const value=read(storeKey(v.projektId))[identity(v)];return typeof value==='string'?{mode:modes.includes(value)?value:'auto'}:{...object(value),mode:modes.includes(value?.mode)?value.mode:'auto'};}
+function recordFor(v){const value=read(storeKey(v.projektId))[identity(v)];return typeof value==='string'?{mode:modes.includes(value)?value:'off'}:{...object(value),mode:modes.includes(value?.mode)?value.mode:'off'};}
 function modeFor(v){return recordFor(v).mode;}
 function splitFor(v){const split=recordFor(v).split;const p=split?routeProjection(v.pts,split,split.atM):null;return p&&p.distance<=40?p:null;}
 function actualMode(v){const mode=modeFor(v);if(mode==='both')return splitFor(v)?mode:null;if(mode!=='auto')return mode;if(v.pts.length<2)return null;if(v.lagerPt)return chooseEnd(segmentDistance(v.pts[0],[v.lagerPt.la,v.lagerPt.lo],[v.lagerPt.la,v.lagerPt.lo]),segmentDistance(v.pts.at(-1),[v.lagerPt.la,v.lagerPt.lo],[v.lagerPt.la,v.lagerPt.lo]));if(v.naPutu||v.na_putu)return 'end';const road=chooseEnd(nearest(v.pts[0]),nearest(v.pts.at(-1)));return road||(v.lager?'start':null);}

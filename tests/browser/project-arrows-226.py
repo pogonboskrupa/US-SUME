@@ -79,7 +79,7 @@ async def main():
   assert await page.evaluate('peer._directionMarkers[0].options.icon.options.iconSize[0]')==40
   await page.evaluate("VlakaDirection.change('visible',false)");assert await page.evaluate('testV._directionMarkers.length+peer._directionMarkers.length')==0
   await page.evaluate("VlakaDirection.change('visible',true);VlakaDirection.change('separator',false)");assert await page.evaluate('testV._directionMarkers.length')==4
-  await page.evaluate("_aktivniProjektId='Q'");assert await page.evaluate("VlakaDirection.settingsFor('Q').size")==25;await page.evaluate("_aktivniProjektId='P';sbUser={id:'C'}");assert await page.evaluate("VlakaDirection.modeFor(testV)==='auto'&&VlakaDirection.settingsFor('P').size===25");await page.evaluate("sbUser={id:'A'}")
+  await page.evaluate("_aktivniProjektId='Q'");assert await page.evaluate("VlakaDirection.settingsFor('Q').size")==25;await page.evaluate("_aktivniProjektId='P';sbUser={id:'C'}");assert await page.evaluate("VlakaDirection.modeFor(testV)==='off'&&VlakaDirection.settingsFor('P').size===25");await page.evaluate("sbUser={id:'A'}")
   # Quota ne smije potvrditi postavku ili novi položaj razdjelnice.
   await page.evaluate("()=>{window.oldSet=Storage.prototype.setItem;Storage.prototype.setItem=function(){throw new DOMException('full','QuotaExceededError')};}")
   await page.evaluate("VlakaDirection.change('size',48);VlakaDirection.startPick(testV)");await tap_fraction(page,.8);assert await page.evaluate('VlakaDirection.isPicking()');assert abs(await page.evaluate('VlakaDirection.splitFor(testV).f')-.2)<.02;assert await page.evaluate("VlakaDirection.settingsFor('P').size")==40

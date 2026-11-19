@@ -20342,7 +20342,7 @@ function _lblOvrSet(v, o) { _lblOvrAll()[_lblKljuc(v)] = { la: o.la, lo: o.lo, r
 function _lblOvrDel(v) { delete _lblOvrAll()[_lblKljuc(v)]; }
 function _lblOvrSnimi() {
   try { localStorage.setItem('tvlake_lbl_ovr_v1', JSON.stringify(_lblOvrAll())); return true; }
-  catch(e) { showToast('⚠ Položaj labele nije sačuvan (memorija telefona)'); return false; }
+  catch(e) { showToast('⚠ Položaj oznake vlake nije sačuvan (memorija telefona)'); return false; }
 }
 
 var _lblEdit = false;      // način uređivanja: labele se mogu povući i zarotirati
@@ -20571,10 +20571,10 @@ function _lblBarGradi() {
   b.id = 'lbl-edit-bar';
   b.hidden = true;
   b.innerHTML = `
-    <div class="lb-row"><b>🏷 Labele</b><span id="lb-ime" class="lb-ime"></span><button type="button" class="lb-ok" onclick="_lblEditToggle(false)">✓ Gotovo</button></div>
+    <div class="lb-row"><b>🏷 Oznake vlaka</b><span id="lb-ime" class="lb-ime"></span><button type="button" class="lb-ok" onclick="_lblEditToggle(false)">✓ Gotovo</button></div>
     <div class="lb-row" id="lb-ctl">
       <button type="button" onclick="_lblKorak(-15)" title="Zaokreni −15°" aria-label="Zaokreni ulijevo">↺</button>
-      <input type="range" id="lb-rot" min="-90" max="90" step="1" value="0" oninput="_lblRotiraj(this.value)" onchange="_lblSnimi()" aria-label="Ugao labele">
+      <input type="range" id="lb-rot" min="-90" max="90" step="1" value="0" oninput="_lblRotiraj(this.value)" onchange="_lblSnimi()" aria-label="Ugao oznake vlake">
       <button type="button" onclick="_lblKorak(15)" title="Zaokreni +15°" aria-label="Zaokreni udesno">↻</button>
       <span id="lb-deg" class="lb-deg">0°</span>
       <button type="button" onclick="_lblAuto()" title="Vrati na automatski položaj">Auto</button>
@@ -20596,13 +20596,13 @@ function _lblBarOsvjezi(samoUgao) {
   ctl.style.display = s ? '' : 'none';
   b.querySelector('#lb-ime').textContent = s ? (s.kind === 'lager' ? 'lager ' + (s.v.lager || '') + ' · ' + s.v.nm : s.v.nm) : '';
   b.querySelector('#lb-hint').textContent = s
-    ? 'Povuci labelu da je pomjeriš, slajder je rotira.'
-    : 'Dodirni labelu vlake/kraka ili lager, pa je povuci ili zarotiraj.';
+    ? 'Povuci oznaku vlake da je pomjeriš, slajder je rotira.'
+    : 'Dodirni oznaku vlake/kraka ili lager, pa je povuci ili zarotiraj.';
 }
 function _lblEditToggle(on, v) {
   const nova = on === undefined ? !_lblEdit : !!on;
   if (nova === _lblEdit) return;
-  if (nova && (typeof recOn !== 'undefined' && recOn)) { showToast('Završi snimanje vlake pa uređuj labele'); return; }
+  if (nova && (typeof recOn !== 'undefined' && recOn)) { showToast('Završi snimanje vlake pa uređuj oznake vlaka'); return; }
   _lblEdit = nova;
   if (!nova) _lblSel = null;
   document.body.classList.toggle('lbl-edit-on', nova);
@@ -20613,7 +20613,7 @@ function _lblEditToggle(on, v) {
   if (nova && v) _lblSelect(v, 'ime');
   else _lblMarkSel();
   if (typeof _vsdOn !== 'undefined' && _vsdOn && typeof _vsdRender === 'function') _vsdRender();
-  if (nova) showToast('🏷 Uređivanje labela: povuci labelu ili lager, slajder je zaokreće');
+  if (nova) showToast('🏷 Uređivanje oznaka vlaka: povuci oznaku ili lager, slajder je zaokreće');
 }
 function vpLabele() {
   const v = vlake[_vpIdx];

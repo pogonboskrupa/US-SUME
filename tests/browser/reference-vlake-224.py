@@ -72,7 +72,7 @@ async def main():
   await page.evaluate("()=>{window.dirV=vlake.find(v=>v.nm==='T12');_vpIdx=vlake.indexOf(dirV);_vpSharedKey=null;const p=ptAtFrac(dirV.pts,.2),atM=VlakaDirection.routeProjection(dirV.pts,p).atM;localStorage.setItem(VlakaDirection.storeKey('P'),JSON.stringify({[VlakaDirection.identity(dirV)]:{mode:'both',split:{...p,atM}}}));VlakaDirection.draw(dirV);}")
   assert await page.evaluate('dirV._directionMarkers.length')==3
   await page.evaluate("VlakaDirection.setPopup('start')");assert await page.evaluate('dirV._directionMarkers.length')==2
-  await page.evaluate("sbUser={id:'B'}");assert await page.evaluate('VlakaDirection.modeFor(dirV)')=='auto';await page.evaluate("sbUser={id:'A'}")
+  await page.evaluate("sbUser={id:'B'}");assert await page.evaluate('VlakaDirection.modeFor(dirV)')=='off';await page.evaluate("sbUser={id:'A'}")
   # Stvarni Leaflet Canvas: tačke su krugovi, crtice imaju kratke vidljive razmake.
   for z in [13,15,17]:
    for mode in ['dash','dot']:
