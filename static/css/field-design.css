@@ -2013,3 +2013,9 @@ html #loadmap-modal .lm-card.active .lm-card-btns .lm-primary{background:rgba(22
 html #loadmap-modal .lm-recent-card.active{border-color:#16a34a;box-shadow:0 0 0 2px rgba(74,222,128,.25)}
 html #loadmap-modal .lm-recent-card.active small{color:#4ade80;font-weight:700}
 html[data-field-theme=day] .offline-map-card.is-active>button,html[data-field-theme=day] #loadmap-modal .lm-card.active .lm-card-btns .lm-primary,html[data-field-theme=day] #loadmap-modal .lm-recent-card.active small{color:#166534}
+/* Dugmad za zatvaranje (X) — svijetlo crvena svuda, da se lako primijeti (v4.8.5). SVG X (#ic-zatvori) uzima boju iz --x-crvena direktno u simbolu; tekstualni X (✕ ×) preko selektora ispod. */
+:root{--x-crvena:#f87171}
+html[data-field-theme=day]{--x-crvena:#b91c1c}
+button[style*="#7f1d1d"],button[style*="#991b1b"]{--x-crvena:#fecaca}
+html button[aria-label^="Zatvori"],html button.nalog-x,html button.mdrop-x,html button.tiz-x,html button.por-x,html button.ozr-x,html button.shr-pz-x,html button.vsd-x,html button.rs-x,html button.rk-close,html button.stl-x,html button.ttm-x,html button.np-close,html button.imv-x,html button.vpick-close,html #loadmap-close,html #pm-close-btn,html #izv-close-btn,html #help-close,html #foto-fullscreen-close,html #spd-close{color:var(--x-crvena)!important;background-color:rgba(248,113,113,.14)!important;border-color:rgba(248,113,113,.5)!important;font-weight:700}
+html[data-field-theme=day] button[aria-label^="Zatvori"],html[data-field-theme=day] button.nalog-x,html[data-field-theme=day] button.mdrop-x,html[data-field-theme=day] button.tiz-x,html[data-field-theme=day] button.por-x,html[data-field-theme=day] button.ozr-x,html[data-field-theme=day] button.rs-x,html[data-field-theme=day] button.stl-x{background-color:rgba(185,28,28,.07)!important;border-color:rgba(185,28,28,.4)!important}
