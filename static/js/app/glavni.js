@@ -33418,7 +33418,7 @@ function _loadmapStatus(t) {
 }
 function _loadmapBadges(m) {
   const saving=_sqlImports.has(m.name);
-  return '<div class="lm-badges"><span class="'+(m.visible?'lm-badge-visible':'lm-badge-hidden')+'">'+(m.visible?'● Vidljiva':'Skrivena')+'</span><span class="'+(m.saved&&!saving?'lm-badge-saved':'lm-badge-session')+'">'+(saving?'Čuvanje u toku…':m.meta?._nativeId?'✓ Povezana s fajlom':m.saved?'✓ Sačuvana na telefonu':'Samo ova sesija')+'</span></div>';
+  return '<div class="lm-badges"><span class="'+(m.visible?'lm-badge-visible':'lm-badge-hidden')+'">'+(m.visible?'● Trenutno prikazana':'Nije prikazana')+'</span><span class="'+(m.saved&&!saving?'lm-badge-saved':'lm-badge-session')+'">'+(saving?'Čuvanje u toku…':m.meta?._nativeId?'✓ Povezana s fajlom':m.saved?'✓ Sačuvana na telefonu':'Samo ova sesija')+'</span></div>';
 }
 function _loadmapRenderStartupDiag() {
   const el = document.getElementById('loadmap-startup-debug');
@@ -33618,7 +33618,7 @@ async function _loadmapRenderRecent() {
   const el=document.getElementById('loadmap-recent');if(!el)return;
   const token=++_loadmapRecentToken,maps=(await _mapMgrCollect()).slice(0,10);if(token!==_loadmapRecentToken)return;
   _loadmapRecentShown=maps;const count=document.getElementById('loadmap-recent-count');if(count)count.textContent=maps.length?maps.length+' '+(maps.length===1?'karta':maps.length<5?'karte':'karata'):'';
-  el.innerHTML=maps.length?maps.map((m,i)=>'<button type="button" class="lm-recent-card'+(m.visible?' active':'')+'" onclick="_loadmapRecentTap('+i+')" aria-label="'+_escHtml('Prikaži kartu '+m.name)+'">'+_loadmapThumbHtml(m.name)+'<span class="lm-recent-copy"><b>'+_escHtml(m.name)+'</b><small>'+_escHtml(_mapMgrFmtLabel(m.fmt))+(m.visible?' · vidljiva':'')+'</small></span></button>').join(''):'<div class="lm-empty">Karte koje dodaš bit će ovdje za brzi pristup.</div>';
+  el.innerHTML=maps.length?maps.map((m,i)=>'<button type="button" class="lm-recent-card'+(m.visible?' active':'')+'" onclick="_loadmapRecentTap('+i+')" aria-label="'+_escHtml('Prikaži kartu '+m.name)+'">'+_loadmapThumbHtml(m.name)+'<span class="lm-recent-copy"><b>'+_escHtml(m.name)+'</b><small>'+_escHtml(_mapMgrFmtLabel(m.fmt))+(m.visible?' · trenutno prikazana':'')+'</small></span></button>').join(''):'<div class="lm-empty">Karte koje dodaš bit će ovdje za brzi pristup.</div>';
 }
 async function _loadmapShow(name) {
   if(_loadmapOpening)return false;_loadmapOpening=true;
