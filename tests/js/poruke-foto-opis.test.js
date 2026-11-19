@@ -65,5 +65,18 @@ function mk(opts) {
   assert(/opis\?\{opis\}/.test(ex('_saveFotos')) && /opis:opis\|\|''/.test(ex('_restoreFotos')));
   assert(/_fotoOpisPitaj\(ts\);\s*return;/.test(ex('onLocPhotoSelected')), 'opis se nudi i za sliku u tragu');
   assert(/_fotoOpisUredi\(\$\{fkey\}\)/.test(ex('_setupFotoPopup')), 'popup ima dugme Opis');
+  // brzi izbor opisa (v4.8.1)
+  const g = new Function('const _FOTO_OPIS_MAX = 500;' + ex('_fotoOpisNormalizuj') + 'const _FOTO_OPIS_BRZI = [\'Loš šumski red\', \'Silazak sa vlake\', \'Sanitar\', \'Bezdana\', \'Bespravna sječa\'];' + ex('_fotoOpisSastavi') + ex('_fotoOpisRastavi') + ';return {_fotoOpisSastavi,_fotoOpisRastavi};')();
+  assert.strictEqual(g._fotoOpisSastavi(['Sanitar'], ''), 'Sanitar');
+  assert.strictEqual(g._fotoOpisSastavi(['Bespravna sječa', 'Loš šumski red'], 'bukva 60 cm'), 'Loš šumski red, Bespravna sječa, bukva 60 cm', 'redoslijed po listi, slobodan tekst na kraju');
+  assert.strictEqual(g._fotoOpisSastavi([], '  samo tekst '), 'samo tekst');
+  assert.strictEqual(g._fotoOpisSastavi([], ''), '');
+  assert.strictEqual(g._fotoOpisSastavi(['Nepoznato'], ''), '', 'izbor van liste se ignoriše');
+  // uređivanje: postojeći opis se rastavlja nazad na izbore + tekst i sastavlja istim
+  const r = g._fotoOpisRastavi('Loš šumski red, Sanitar, bukva 60 cm');
+  assert.deepStrictEqual(r.izabrani, ['Loš šumski red', 'Sanitar']); assert.strictEqual(r.tekst, 'bukva 60 cm');
+  assert.strictEqual(g._fotoOpisSastavi(r.izabrani, r.tekst), 'Loš šumski red, Sanitar, bukva 60 cm', 'uredi pa sačuvaj ne mijenja opis');
+  assert.deepStrictEqual(g._fotoOpisRastavi('Sanitar').izabrani, ['Sanitar']); assert.strictEqual(g._fotoOpisRastavi('Sanitar').tekst, '');
+  assert.strictEqual(g._fotoOpisRastavi('suho stablo').tekst, 'suho stablo'); assert.deepStrictEqual(g._fotoOpisRastavi('suho stablo').izabrani, []);
   console.log('OK poruke + opis fotografije');
 })().catch(e => { console.error(e); process.exit(1); });

@@ -8148,11 +8148,57 @@ function _fotoOpisPostavi(ts, opis) {
   } catch (e) {}
   return !!f || trag;
 }
-async function _fotoOpisPitaj(ts, staro) {
-  const unos = await _dlgPrompt('Kratak opis (npr. vrsta, prečnik, šteta). Ostavi prazno ako ne treba.', staro || '', { title: '📝 Opis fotografije', okLabel: 'Sačuvaj' });
-  if (unos == null) return;
-  _fotoOpisPostavi(ts, unos);
-  if (_fotoOpisNormalizuj(unos)) showToast('📝 Opis sačuvan');
+// Brzi izbor uz slobodan tekst (v4.8.1): najčešće primjedbe sa terena jednim dodirom, a može ih biti
+// i više odjednom. Konačan opis = izabrano (po redu iz liste) + slobodan tekst, odvojeno zarezom.
+const _FOTO_OPIS_BRZI = ['Loš šumski red', 'Silazak sa vlake', 'Sanitar', 'Bezdana', 'Bespravna sječa'];
+function _fotoOpisSastavi(izabrani, tekst) {
+  const sel = _FOTO_OPIS_BRZI.filter(x => (izabrani || []).includes(x));
+  const t = _fotoOpisNormalizuj(tekst);
+  return _fotoOpisNormalizuj([...sel, ...(t ? [t] : [])].join(', '));
+}
+// Postojeći opis → koje brze izbore sadrži i šta je ostalo kao slobodan tekst (za uređivanje).
+function _fotoOpisRastavi(opis) {
+  let ostalo = String(opis || '');
+  const izabrani = [];
+  _FOTO_OPIS_BRZI.forEach(x => {
+    const i = ostalo.indexOf(x);
+    if (i >= 0) { izabrani.push(x); ostalo = ostalo.slice(0, i) + ostalo.slice(i + x.length); }
+  });
+  ostalo = ostalo.replace(/^[\s,;]+|[\s,;]+$/g, '').replace(/\s*,\s*,+/g, ',').replace(/(^|,)\s*,/g, '$1').trim();
+  return { izabrani, tekst: ostalo };
+}
+function _fotoOpisPitaj(ts, staro) {
+  return new Promise(res => {
+    const old = document.getElementById('fop-bg'); if (old) old.remove();
+    const r = _fotoOpisRastavi(staro), izabrani = new Set(r.izabrani);
+    const bg = document.createElement('div'); bg.id = 'fop-bg'; bg.setAttribute('role', 'dialog'); bg.setAttribute('aria-modal', 'true');
+    bg.innerHTML = '<div class="fop-sh"><div class="fop-h"><b>📝 Opis fotografije</b><small>Izaberi i/ili napiši — može više izbora</small></div>' +
+      '<div class="fop-brzi">' + _FOTO_OPIS_BRZI.map(t => '<button type="button" data-t="' + _escHtml(t) + '" aria-pressed="' + izabrani.has(t) + '">' + _escHtml(t) + '</button>').join('') + '</div>' +
+      '<textarea id="fop-tekst" maxlength="' + _FOTO_OPIS_MAX + '" rows="3" placeholder="Ili napiši svoj opis (npr. vrsta, prečnik, šteta)…">' + _escHtml(r.tekst) + '</textarea>' +
+      '<div class="fop-pre" id="fop-pre"></div>' +
+      '<div class="fop-akc"><button type="button" class="fop-odu">Odustani</button><button type="button" class="fop-sac pri">Sačuvaj</button></div></div>';
+    document.body.appendChild(bg);
+    const ta = bg.querySelector('#fop-tekst'), pre = bg.querySelector('#fop-pre');
+    const osvj = () => {
+      const o = _fotoOpisSastavi([...izabrani], ta.value);
+      pre.textContent = o ? '→ ' + o : 'Bez opisa';
+      bg.querySelectorAll('.fop-brzi button').forEach(b => b.setAttribute('aria-pressed', String(izabrani.has(b.dataset.t))));
+    };
+    const kraj = v => { bg.remove(); res(v); };
+    bg.querySelector('.fop-brzi').addEventListener('click', e => {
+      const b = e.target.closest('button[data-t]'); if (!b) return;
+      izabrani.has(b.dataset.t) ? izabrani.delete(b.dataset.t) : izabrani.add(b.dataset.t); osvj();
+    });
+    ta.addEventListener('input', osvj);
+    bg.querySelector('.fop-odu').addEventListener('click', () => kraj(null));
+    bg.querySelector('.fop-sac').addEventListener('click', () => kraj(_fotoOpisSastavi([...izabrani], ta.value)));
+    bg.addEventListener('click', e => { if (e.target === bg) kraj(null); });
+    osvj();
+  }).then(opis => {
+    if (opis == null) return;
+    _fotoOpisPostavi(ts, opis);
+    if (_fotoOpisNormalizuj(opis)) showToast('📝 Opis sačuvan');
+  });
 }
 function _fotoOpisUredi(ts) {
   try { map.closePopup(); } catch (e) {}

@@ -1947,3 +1947,19 @@ html[data-field-theme=day] #por-bg .por-akc .pri{background:#15803d}
 
 /* Opis fotografije u popupu (v4.8.0) */
 .foto-opis{margin:0 0 5px;padding:6px 8px;border-radius:6px;background:#f1f5f9;border-left:3px solid #2dd4bf;font-size:12.5px;line-height:1.35;color:#0f172a;white-space:pre-wrap;word-break:break-word}
+
+/* Opis fotografije — brzi izbor (v4.8.1) */
+#fop-bg{position:fixed;inset:0;z-index:999940;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center}
+#fop-bg .fop-sh{width:100%;max-width:520px;box-sizing:border-box;padding:14px 14px calc(14px + env(safe-area-inset-bottom,0px));border-radius:18px 18px 0 0;background:var(--field-card,#0f172a);color:var(--field-ink,#e2e8f0);font-family:system-ui,sans-serif;box-shadow:0 -10px 30px rgba(0,0,0,.4)}
+#fop-bg .fop-h b{display:block;font-size:17px}
+#fop-bg .fop-h small{display:block;margin:2px 0 10px;font-size:12.5px;color:var(--field-muted,#94a3b8)}
+#fop-bg .fop-brzi{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+#fop-bg .fop-brzi button{min-height:46px;padding:0 14px;border-radius:12px;border:1px solid var(--field-border,#334155);background:var(--field-bg,#0b1424);color:inherit;font:700 14px system-ui;cursor:pointer}
+#fop-bg .fop-brzi button[aria-pressed=true]{background:#0d9488;border-color:#2dd4bf;color:#fff}
+#fop-bg textarea{display:block;width:100%;box-sizing:border-box;min-height:76px;padding:10px 12px;border-radius:12px;border:1px solid var(--field-border,#334155);background:var(--field-bg,#0b1424);color:inherit;font:16px/1.4 system-ui;resize:vertical}
+#fop-bg .fop-pre{margin:8px 2px;min-height:18px;font-size:12.5px;color:var(--field-muted,#94a3b8);word-break:break-word}
+#fop-bg .fop-akc{display:grid;grid-template-columns:1fr 1.6fr;gap:8px}
+#fop-bg .fop-akc button{min-height:50px;border-radius:12px;border:1px solid var(--field-border,#334155);background:transparent;color:inherit;font:700 15px system-ui;cursor:pointer}
+#fop-bg .fop-akc .pri{background:#16a34a;border-color:#15803d;color:#fff}
+html[data-field-theme=day] #fop-bg .fop-brzi button[aria-pressed=true]{background:#0f766e;border-color:#0f766e}
+html[data-field-theme=day] #fop-bg .fop-akc .pri{background:#15803d}
