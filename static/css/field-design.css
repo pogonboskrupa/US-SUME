@@ -1982,3 +1982,13 @@ html[data-field-theme=day] #fop-bg .fop-akc .pri{background:#15803d}
 #ozr-bg .ozr-nap{margin:10px 0;font-size:12px;line-height:1.45;color:var(--field-muted,#94a3b8)}
 #ozr-bg .ozr-zad{width:100%;min-height:46px;border-radius:12px;border:1px solid var(--field-border,#334155);background:transparent;color:inherit;font:700 14px system-ui;cursor:pointer}
 html[data-field-theme=day] #ozr-bg .ozr-chips button[aria-pressed=true]{background:#1e40af;border-color:#1e40af}
+/* Karte na jednom mjestu — pregledniji izbor podloga (v4.8.3): dvije kolone, ikona lijevo + naziv i izvor, velike mete; zadnja (Nagib) preko cijele širine. */
+html #ls-basemap-grid {grid-template-columns:1fr 1fr;gap:10px;}
+html #ls-basemap-grid .layer-opt {display:grid;grid-template-columns:40px minmax(0,1fr);grid-template-rows:auto auto;column-gap:10px;row-gap:0;align-items:center;justify-items:start;text-align:left;min-height:64px;padding:10px 12px;font-size:15px;font-weight:700;border-radius:14px;}
+html #ls-basemap-grid .layer-opt span.layer-ico {grid-row:1 / span 3;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:22px;border-radius:11px;background:rgba(148,163,184,.14);}
+html #ls-basemap-grid .layer-opt .lopt-sub {margin:0;font-size:11.5px;font-weight:500;color:var(--field-muted);}
+html #ls-basemap-grid .layer-opt .lopt-mb {position:static;grid-column:2;justify-self:start;margin-top:3px;font-size:10px;}
+html #ls-basemap-grid .layer-opt:last-child:nth-child(odd) {grid-column:1 / -1;}
+html #ls-basemap-grid .layer-opt.active span.layer-ico {background:rgba(74,222,128,.22);}
+html[data-field-theme=day] #ls-basemap-grid .layer-opt span.layer-ico {background:rgba(15,23,42,.07);}
+html[data-field-theme=day] #ls-basemap-grid .layer-opt.active span.layer-ico {background:rgba(30,64,175,.14);}

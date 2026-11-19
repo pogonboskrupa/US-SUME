@@ -5910,7 +5910,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.8.2';
+const APP_VER = 'v4.8.3';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -8051,9 +8051,6 @@ function _loadLocalVlake() {
       </button>
       <button class="layer-opt" id="lo-google" onclick="setLayer('📡 Google')">
         <span class="layer-ico"><svg class="ic"><use href="#ic-globus"/></svg></span>Google<span class="lopt-sub">Satelit HD</span>
-      </button>
-      <button class="layer-opt" id="lo-eox" onclick="setLayer('🌍 Sentinel')">
-        <span class="layer-ico"><svg class="ic"><use href="#ic-satelit"/></svg></span>Pokrivenost<span class="lopt-sub">WorldCover, bez ključa</span>
       </button>
       <button class="layer-opt" id="lo-nagib" onclick="setLayer('_nagib')">
         <span class="layer-ico"><svg class="ic"><use href="#ic-uglomjer"/></svg></span>Nagib<span class="lopt-sub">Topo + nagibi</span>

@@ -12634,7 +12634,8 @@ window.addEventListener('pagehide', e => _appLifecycleDebug('pagehide', !!e.pers
         if (stillSelected && _OVL.slope && !map.hasLayer(_OVL.slope)) _OVL.slope.addTo(map);
       }, 500);
     } else if (saved?.type === 'tl' && saved.key === '_granice') restoredKey = '⛰ Topo';
-    else if (saved?.type === 'tl' && TL[saved.key]) restoredKey = saved.key;
+    // Pokrivenost (WorldCover) je uklonjena iz izbora podloga (v4.8.3) — ko ju je imao zadnju, dobija Topo.
+    else if (saved?.type === 'tl' && saved.key !== '🌍 Sentinel' && TL[saved.key]) restoredKey = saved.key;
   } catch(e) {}
   TL[restoredKey].addTo(map);
   const iconSvg = {
