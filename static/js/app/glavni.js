@@ -8225,7 +8225,7 @@ function _buildFotoMarker(la, lo, thumb, full, idx, ts, isOwn, shared) {
     html: _fotoMarkerHtml(thumb, shared, isOwn !== false)
   });
   const m = L.marker([la, lo], {icon: ico});
-  if((typeof _prevHideFT==='undefined'||!_prevHideFT)&&(typeof _tvPhotoVisible==='function'?_tvPhotoVisible({la,lo,ts},isOwn===false):typeof _tvCategoryOn!=='function'||_tvCategoryOn('photos')))m.addTo(map);
+  if(!(typeof _ozrSkriveno==='function'&&_ozrSkriveno('foto'))&&(typeof _tvPhotoVisible==='function'?_tvPhotoVisible({la,lo,ts},isOwn===false):typeof _tvCategoryOn!=='function'||_tvCategoryOn('photos')))m.addTo(map);
   _setupFotoPopup(m, idx, la, lo, ts, full, isOwn !== false, !!shared);
   return m;
 }
@@ -13482,6 +13482,89 @@ map.on('moveend', () => {
   if (_nvPratiCentar()) debouncedUpdElev(c.lat, c.lng, 250);
 });
 
+// === PRIKAZ OZNAKA U RAZMJERI (v4.8.2) ===
+// Do koje razmjere se vide fotografije, mjerenja i KML fajlovi — korisnik bira (Meni → Prikaz oznaka u
+// razmjeri), zadano 1:12 500 / 1:12 500 / 1:50 000. Oznaka se vidi na izabranoj razmjeri i krupnijoj
+// (1:12 500, 1:5 000…), a pri sitnijoj (1:25 000…) se samo privremeno skloni sa karte — nikad ne mijenja
+// korisnikov Prikaži/Sakrij. 0 = uvijek vidljivo. `var` jer _updMapScale i _buildFotoMarker znaju
+// doći prije ovog reda (TDZ).
+var _OZR_KEY = 'tvlake_oznake_razmjera_v1';
+var _OZR_ZADANO = { foto: 12500, msr: 12500, kml: 50000 };
+var _OZR_IZBOR = [5000, 10000, 12500, 25000, 50000, 100000, 0];
+var _OZR_NAZIV = { foto: '📷 Fotografije', msr: '📏 Mjerenja', kml: '🗺 KML fajlovi' };
+var _ozrMem = null, _ozrRazmjera = 0;
+function _ozrPostavke() {
+  if (_ozrMem) return _ozrMem;
+  let o = {};
+  try { o = JSON.parse(localStorage.getItem(_OZR_KEY) || '{}') || {}; } catch (e) { o = {}; }
+  const r = {};
+  for (const k of Object.keys(_OZR_ZADANO)) { const v = Number(o[k]); r[k] = Number.isFinite(v) && v >= 0 && o[k] !== null && o[k] !== '' ? v : _OZR_ZADANO[k]; }
+  return (_ozrMem = r);
+}
+function _ozrVidljivo(vrsta, nazivnik) { const p = _ozrPostavke()[vrsta]; return !p || !(nazivnik > 0) || nazivnik <= p; }
+function _ozrSkriveno(vrsta) { return !_ozrVidljivo(vrsta, _ozrRazmjera); }
+function _ozrPostavi(vrsta, v) {
+  if (!Object.hasOwn(_OZR_ZADANO, vrsta)) return;
+  const p = Object.assign({}, _ozrPostavke(), { [vrsta]: Number(v) || 0 });
+  _ozrMem = p;
+  try { localStorage.setItem(_OZR_KEY, JSON.stringify(p)); } catch (e) { showToast('Postavka nije sačuvana'); }
+  _ozrPrimijeni(); _ozrRender();
+}
+function _ozrVratiZadano() { _ozrMem = null; try { localStorage.removeItem(_OZR_KEY); } catch (e) {} _ozrPrimijeni(); _ozrRender(); }
+// Uskladi kartu sa pravilom. Dira samo ono što je korisnik ostavio vidljivim; KML sklonjen zbog razmjere
+// pamti `_zoomSakriven` da se vrati čim se zumira bliže.
+function _ozrPrimijeni() {
+  try { if (!map || typeof map.hasLayer !== 'function') return; } catch (e) { return; }   // map je const niže u fajlu (TDZ)
+  try {
+    const sF = _ozrSkriveno('foto');
+    for (const [list, shared] of [[typeof _locFotos !== 'undefined' ? _locFotos : [], false], [typeof _sharedFotos !== 'undefined' ? _sharedFotos : [], true]]) for (const f of list) {
+      if (!f.marker) continue;
+      const vis = !sF && (typeof _tvPhotoVisible !== 'function' || _tvPhotoVisible(f, shared));
+      if (!vis && map.hasLayer(f.marker)) map.removeLayer(f.marker);
+      else if (vis && !map.hasLayer(f.marker)) map.addLayer(f.marker);
+    }
+  } catch (e) {}
+  try {
+    if (typeof _msrSavedLayer !== 'undefined' && _msrSavedLayer) {
+      const vis = !_ozrSkriveno('msr') && (typeof _tvCategoryOn !== 'function' || _tvCategoryOn('measurements'));
+      if (!vis && map.hasLayer(_msrSavedLayer)) map.removeLayer(_msrSavedLayer);
+      else if (vis && !map.hasLayer(_msrSavedLayer)) map.addLayer(_msrSavedLayer);
+    }
+  } catch (e) {}
+  try {
+    const sK = _ozrSkriveno('kml');
+    for (const k of (typeof kmlLs !== 'undefined' ? kmlLs : [])) {
+      if (!k || !k.grp || k.vis === false) { if (k) k._zoomSakriven = false; continue; }
+      if (sK) { if (map.hasLayer(k.grp)) { map.removeLayer(k.grp); k._zoomSakriven = true; } }
+      else if (k._zoomSakriven) { k._zoomSakriven = false; if (!map.hasLayer(k.grp)) k.grp.addTo(map); }
+    }
+  } catch (e) {}
+}
+function _ozrRazmjeraTxt(v) { return v ? '1:' + String(v).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : 'Uvijek'; }
+function ozrOtvori() {
+  let bg = document.getElementById('ozr-bg');
+  if (!bg) {
+    bg = document.createElement('div'); bg.id = 'ozr-bg'; bg.setAttribute('role', 'dialog'); bg.setAttribute('aria-modal', 'true');
+    bg.addEventListener('click', e => {
+      if (e.target === bg || e.target.closest('.ozr-x')) { bg.remove(); return; }
+      const b = e.target.closest('button[data-v]'); if (b) { _ozrPostavi(b.dataset.k, Number(b.dataset.v)); return; }
+      if (e.target.closest('.ozr-zad')) _ozrVratiZadano();
+    });
+    document.body.appendChild(bg);
+  }
+  _ozrRender();
+}
+function _ozrRender() {
+  const bg = document.getElementById('ozr-bg'); if (!bg) return;
+  const p = _ozrPostavke();
+  const red = k => '<div class="ozr-red"><div class="ozr-rt"><b>' + _OZR_NAZIV[k] + '</b><small>' + (p[k] ? 'vidi se na ' + _ozrRazmjeraTxt(p[k]) + ' i krupnijoj' : 'vidi se na svakoj razmjeri') + (_ozrRazmjera ? (_ozrVidljivo(k, _ozrRazmjera) ? ' · sad vidljivo' : ' · sad sklonjeno') : '') + '</small></div>' +
+    '<div class="ozr-chips">' + _OZR_IZBOR.map(v => '<button type="button" data-k="' + k + '" data-v="' + v + '" aria-pressed="' + (p[k] === v) + '">' + _ozrRazmjeraTxt(v) + (v === _OZR_ZADANO[k] ? '<i>zadano</i>' : '') + '</button>').join('') + '</div></div>';
+  bg.innerHTML = '<div class="ozr-sh"><div class="ozr-h"><div><b>Prikaz oznaka u razmjeri</b><small>Do koje razmjere se oznaka vidi na karti' + (_ozrRazmjera ? ' · trenutno ' + _ozrRazmjeraTxt(_ozrRazmjera) : '') + '</small></div><button type="button" class="ozr-x" aria-label="Zatvori">✕</button></div>' +
+    Object.keys(_OZR_ZADANO).map(red).join('') +
+    '<p class="ozr-nap">Pri sitnijoj razmjeri oznaka se samo skloni sa karte — ništa se ne briše, a tvoje Prikaži/Sakrij ostaje kako je.</p>' +
+    '<button type="button" class="ozr-zad">Vrati zadano</button></div>';
+}
+
 // === RAZMJERA KARTE (live) ===
 function _updMapScale() {
   const el = document.getElementById('map-scale-val');
@@ -13507,19 +13590,17 @@ function _updMapScale() {
   const pLabels = map.getPane('vlakeLabels');
   if (pLines)  pLines.style.display  = hideVlake ? 'none' : '';
   if (pLabels) pLabels.style.display = hideVlake ? 'none' : '';
-  // Sakrij foto oznake i tragove pri razmjeri > 1:25 000
+  // Fotografije, mjerenja i KML: korisnikova razmjera (Prikaz oznaka u razmjeri, v4.8.2).
+  _ozrRazmjera = closest;
+  _ozrPrimijeni();
+  if (document.getElementById('ozr-bg')) _ozrRender();
+  // Sakrij tragove pri razmjeri > 1:25 000
   // try-catch: _tragRegistry/Layers su let-deklarirani niže u fajlu (TDZ pri init pozivu)
   try {
     const hideFT = closest > 25000;
     if (hideFT !== _prevHideFT) {
       _prevHideFT = hideFT;
       // Zoom samo privremeno sklanja oznake; nikad ne poništava korisnikov Sakrij.
-      for(const [list,shared] of [[_locFotos||[],false],[_sharedFotos||[],true]])for(const f of list){
-        if(!f.marker)continue;
-        const visible=!hideFT&&(typeof _tvPhotoVisible!=='function'||_tvPhotoVisible(f,shared));
-        if(!visible&&map.hasLayer(f.marker))map.removeLayer(f.marker);
-        else if(visible&&!map.hasLayer(f.marker))map.addLayer(f.marker);
-      }
       (_tragRegistry||[]).forEach(t => {
         const layer = (_tragLayers||{})[t.id];
         if (!layer) return;
@@ -22811,7 +22892,9 @@ function setKmlOpacity(i, val)  { kmlLs[i].opacity = parseFloat(val); applyKmlSt
 function togK(i) {
   const k = kmlLs[i];
   if (!k.grp) return;   // server placeholder (nije preuzeto) — nema sloja za prikaz
-  k.vis ? map.removeLayer(k.grp) : k.grp.addTo(map);
+  if (k.vis) { map.removeLayer(k.grp); k._zoomSakriven = false; }
+  else if (typeof _ozrSkriveno === 'function' && _ozrSkriveno('kml')) { k._zoomSakriven = true; showToast('Sloj je uključen — vidi se od ' + _ozrRazmjeraTxt(_ozrPostavke().kml) + ' (Meni → Prikaz oznaka u razmjeri)'); }
+  else k.grp.addTo(map);
   k.vis = !k.vis;
   saveKmlStyles();
   _localKmlSaveAll(false);
@@ -23015,7 +23098,11 @@ async function _kmlLijenoUcitaj(k, javi) {
     k.grp = grp; k._lijeno = false;
     if (naKarti) map.removeLayer(old);
     const selecting = !!globalThis.GithubLayers?.selecting?.();
-    if (naKarti || (k.vis !== false && (!k.onlyPolygon || selecting))) grp.addTo(map);
+    if (naKarti || (k.vis !== false && (!k.onlyPolygon || selecting))) {
+      // Izbor poligona (izvještaj odjela, doznaka) mora vidjeti sloj bez obzira na razmjeru.
+      if (!naKarti && !selecting && typeof _ozrSkriveno === 'function' && _ozrSkriveno('kml')) k._zoomSakriven = true;
+      else grp.addTo(map);
+    }
     const idx = kmlLs.indexOf(k);
     if (idx >= 0) applyKmlStyle(idx);
     try { globalThis.GithubLayers?.render?.(); } catch (e) {}
@@ -23106,6 +23193,7 @@ async function _localKmlRestore() {
     // Start je uspio ako app 20 s poslije i dalje radi (tajmer ne opali u zamrznutoj/ugašenoj app).
     setTimeout(() => { try { localStorage.removeItem(_ZAPELO_KEY); } catch(e) {} }, 20000);
     _glCollapsed.delete('Lokalni / —');
+    try { _ozrPrimijeni(); } catch (e) {}   // pokretanje na sitnoj razmjeri: KML ne smije bljesnuti pa nestati
     rndGraniceModal();
     if (document.getElementById('oznake-panel')?.style.display !== 'none') _rndOznakePanel();
   } catch(e) { console.warn('_localKmlRestore error:', e); }
@@ -27872,7 +27960,7 @@ async function _msrRegProfil(id) {
 function _msrDrawAllSaved() {
   if (!window.map) return;
   if (!_msrSavedLayer) { _msrSavedLayer = L.layerGroup(); }
-  if(typeof _tvCategoryOn!=='function'||_tvCategoryOn('measurements'))_msrSavedLayer.addTo(map);
+  if((typeof _tvCategoryOn!=='function'||_tvCategoryOn('measurements'))&&!(typeof _ozrSkriveno==='function'&&_ozrSkriveno('msr')))_msrSavedLayer.addTo(map);
   else map.removeLayer(_msrSavedLayer);
   _msrSavedLayer.clearLayers();
   _msrRegistry.forEach(m => {

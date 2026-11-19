@@ -7,6 +7,7 @@ set -u
 cd "$(dirname "$0")/../.."
 SAMI="kml-50000 kml-tacke-canvas field-five-hours field-offline-5400 slow-render-289 resize-img"
 PARALELNO=(
+  tests/browser/oznake-razmjera.py
   tests/browser/foto-opis.py
   tests/browser/primljeni-poruke.py
   tests/browser/kml-lijeno.py
