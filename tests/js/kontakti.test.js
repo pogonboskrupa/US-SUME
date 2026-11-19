@@ -27,7 +27,7 @@ const mk=(ls,rpc)=>{const store=Object.assign({},ls),toasts=[];
  // UI: izbornik, dugme u biraču i u dijalogu fotografije
  assert(/async function kontaktiDodaj/.test(src)&&/id="prim-dodaj"/.test(src)&&/_shareFotoDodajKolegu/.test(src));
  assert(/const teren = isSpdField\(\) && !isAdmin\(\);[\s\S]*let entries = teren \? \[\]/.test(src),'terenski u dijalogu slike ne vidi sve korisnike');
- assert(/_primTabPostavi\(\\'k\\'\)[^;]*Kolege \(' \+ kol\.length/.test(src),'tab Kolege u Primljenim podacima');
+ assert(/tabB\('k', '👥', 'Kolege', 0, kol\.length\)/.test(src)&&/onclick="_primTabPostavi\(\\'' \+ k \+ '\\'\)"/.test(src),'tab Kolege u Primljenim podacima');
  // v4.1.1: jedan kod za više ljudi, dvosmjerno; spisak se osvježava prije izbora primaoca
  const sql=fs.readFileSync(__dirname+'/../../supabase/migrations/20261114_kontakt_poziv_vise.sql','utf8');
  const prih=sql.slice(sql.indexOf('function public.kontakt_poziv_prihvati'));
