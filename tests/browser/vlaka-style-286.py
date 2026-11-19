@@ -58,11 +58,11 @@ async def main():
   assert not await page.evaluate('VlakaDirection.isPicking()');await page.evaluate('()=>{vlake[0].poly.addTo(map)}')
   # Separate symbol and text, global inheritance and per-project exception.
   await page.evaluate('openVlakaStyle()');await page.locator('#lager-scale').fill('150');await page.locator('#lager-scale').dispatch_event('input')
-  assert await page.evaluate("VlakaLager.styleFor(vlake[2]).width===42&&VlakaLager.styleFor(vlake[2]).font===11")
+  assert await page.evaluate("VlakaLager.styleFor(vlake[2]).width===29&&VlakaLager.styleFor(vlake[2]).font===11")
   await page.locator('#lager-label').fill('14');await page.locator('#lager-label').dispatch_event('input')
-  assert await page.evaluate("vlake[2].lagerMk.options.icon.options.iconSize[0]===42&&kolegeVlakeMap['B::T2'].lagerMk.options.icon.options.iconSize[0]===42&&VlakaLager.styleFor(vlake[2]).font===14")
+  assert await page.evaluate("vlake[2].lagerMk.options.icon.options.iconSize[0]===29&&kolegeVlakeMap['B::T2'].lagerMk.options.icon.options.iconSize[0]===29&&VlakaLager.styleFor(vlake[2]).font===14")
   await page.locator('#vlaka-style-project').check();await page.locator('#vlaka-style-project-select').select_option('Q');await page.locator('#lager-scale').fill('200');await page.locator('#lager-scale').dispatch_event('input')
-  assert await page.evaluate("VlakaLager.styleFor(vlake[3]).width===56&&VlakaLager.styleFor(vlake[3]).font===14&&VlakaLager.styleFor(vlake[2]).width===42")
+  assert await page.evaluate("VlakaLager.styleFor(vlake[3]).width===39&&VlakaLager.styleFor(vlake[3]).font===14&&VlakaLager.styleFor(vlake[2]).width===29")
   await page.locator('#vlaka-style-all').check();await page.locator('#lager-position-list summary').click();await page.wait_for_function("document.querySelectorAll('.lager-position-row').length===3")
   # Day/dark, portrait/landscape; lazy rows with long names remain inside sheet.
   for theme in ['day','dark']:
@@ -97,7 +97,7 @@ async def main():
   await page.evaluate("localStorage.setItem(_bojaProjektKey('CUSTOM'),JSON.stringify({weight:6,dash:'solid',outline:false}))")
   assert await page.evaluate("_vlakaPrikazStyle({projektId:'CUSTOM'}).weight===6&&!_vlakaPrikazStyle({projektId:'CUSTOM'}).vlakaOutline&&_vlakaPrikazStyle({projektId:'NEW'}).weight===2")
   await page.reload();await page.wait_for_function('_startupRestore._done&&!!window.VlakaLager')
-  assert await page.evaluate("!!vlake.find(v=>v.nm==='T3')&&VlakaLager.styleFor(vlake.find(v=>v.nm==='T3')).width===42&&VlakaLager.styleFor(vlake.find(v=>v.nm==='T3')).font===14&&VlakaDirection.splitFor(vlake.find(v=>v.nm==='T1')).f>.7")
+  assert await page.evaluate("!!vlake.find(v=>v.nm==='T3')&&VlakaLager.styleFor(vlake.find(v=>v.nm==='T3')).width===29&&VlakaLager.styleFor(vlake.find(v=>v.nm==='T3')).font===14&&VlakaDirection.splitFor(vlake.find(v=>v.nm==='T1')).f>.7")
   assert await page.evaluate('p=>Math.abs(vlake.find(v=>v.nm==="T3").lagerPt.la-p.la)<2e-5',new)
   # Recreate downloaded shared route after restart; per-user position isolation.
   await page.evaluate("()=>{const poly=L.polyline([[44.9,16],[44.901,16.003]]).addTo(map);kolegeVlakeMap['B::T2']={nm:'T2',korisnikId:'B',projektId:'P',poly,pts:[{la:44.9,lo:16},{la:44.901,lo:16.003}],lager:'LC',lagerPt:{la:44.9,lo:16}};VlakaLager.refresh()}")

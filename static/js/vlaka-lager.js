@@ -15,7 +15,9 @@ function styleFor(v){
  const b=typeof _loadBoje==='function'?_loadBoje(project(v)):{};
  const legacy=typeof _lineStyle!=='undefined'?bounded(_lineStyle.lagerScale,50,250,100):100;
  const scale=bounded(b.lagerScale,50,250,legacy),font=bounded(b.lagerLabel,8,28,Math.max(11,Math.round(11*legacy/100)));
- return {scale,width:Math.round(28*scale/100),height:Math.round(13*scale/100),font};
+ // Vizuelno 30 % manji nego ranije (LAGER_K); korisnikove brojke (%, px) ostaju iste.
+ const K=.7,fontPx=Math.max(8,Math.round(font*K));
+ return {scale,width:Math.round(28*scale/100*K),height:Math.round(13*scale/100*K),font,fontPx};
 }
 function rows(){return [...(typeof vlake!=='undefined'?vlake:[]).map((v,i)=>({v,shared:false,key:'own:'+i})),...Object.entries(typeof kolegeVlakeMap!=='undefined'?kolegeVlakeMap:{}).map(([key,v])=>({v,shared:true,key:'peer:'+key}))].filter(r=>!r.v._deleted&&r.v.lager&&r.v.pts?.length&&(Number(r.v.kr||0)===0||r.v.naPutu||r.v.na_putu));}
 function positionFor(v,shared=false){const saved=shared?read(project(v))[identity(v)]:null;return valid(saved)?saved:valid(v.lagerPt)?v.lagerPt:(v.naPutu||v.na_putu)&&Number(v.kr)>0?v.pts.at(-1):v.pts[0];}
@@ -32,9 +34,9 @@ function labelHtml(text,font){
  const g='<svg width="'+(w+2)+'" height="'+(h+2)+'" viewBox="-1 -1 '+(w+2)+' '+(h+2)+'" style="vertical-align:baseline;margin-bottom:-1px;overflow:visible" aria-label="L"><path d="'+d+'" fill="none" stroke="#000" stroke-width="'+(sw+1.5)+'" stroke-linecap="square" stroke-linejoin="miter"/><path d="'+d+'" fill="none" stroke="#fbbf24" stroke-width="'+sw+'" stroke-linecap="square" stroke-linejoin="miter"/></svg>';
  return g+_escHtml(t.slice(1).toUpperCase());
 }
-function content(v){const s=styleFor(v),rot=rotOf(v);const inner=_stpLagerSvg(s.width,s.height,true)+'<div style="color:#fbbf24;font-family:ui-monospace,Roboto Mono,Courier New,monospace;font-weight:900;letter-spacing:.04em;font-size:'+s.font+'px;text-align:center;line-height:1;text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;margin-top:1px;pointer-events:none;white-space:nowrap">'+labelHtml(v.lager,s.font)+'</div>';
+function content(v){const s=styleFor(v),rot=rotOf(v);const inner=_stpLagerSvg(s.width,s.height,true)+'<div style="color:#fbbf24;font-family:ui-monospace,Roboto Mono,Courier New,monospace;font-weight:900;letter-spacing:.04em;font-size:'+s.fontPx+'px;text-align:center;line-height:1;text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 0 #000,-1px -1px 0 #000;margin-top:1px;pointer-events:none;white-space:nowrap">'+labelHtml(v.lager,s.fontPx)+'</div>';
  return rot?'<div style="width:'+s.width+'px;transform-origin:'+s.width/2+'px '+s.height/2+'px;transform:rotate('+rot+'deg)">'+inner+'</div>':inner;}
-function icon(v){const s=styleFor(v);return L.divIcon({className:'vlaka-lager-mk',iconSize:[s.width,s.height+s.font+5],iconAnchor:[s.width/2,s.height/2],html:content(v)});}
+function icon(v){const s=styleFor(v);return L.divIcon({className:'vlaka-lager-mk',iconSize:[s.width,s.height+s.fontPx+5],iconAnchor:[s.width/2,s.height/2],html:content(v)});}
 function alive(){return picking&&picking.scope===stamp()&&rows().some(r=>r.v===picking.v)&&picking.v.poly&&map.hasLayer(picking.v.poly);}
 function refresh(){
  if(typeof map==='undefined'||typeof L==='undefined')return;

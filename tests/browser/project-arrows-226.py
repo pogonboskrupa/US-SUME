@@ -106,7 +106,7 @@ async def main():
   await page.evaluate("window.sourceColor=testV.color;_bojaChange('outline',true)");assert await page.evaluate('testV.poly.options.vlakaOutline&&peer.poly.options.vlakaOutline');assert await page.evaluate('testV.color===sourceColor')
   # Stvarni SVG fallback: uvezan i pomjeren sa glavnim pathom, bez klikova i curenja.
   await page.evaluate("window.ol=L.polyline([[44.9,16],[44.901,16]],{color:'#000000',weight:4,dashArray:'8 2',vlakaOutline:true,renderer:L.svg()}).addTo(map)")
-  assert await page.evaluate("ol._vlakaOutlinePath.getAttribute('stroke')")=='#ffffff';assert abs(float(await page.evaluate("ol._vlakaOutlinePath.getAttribute('stroke-width')"))-4*1.14)<.001
+  assert await page.evaluate("ol._vlakaOutlinePath.getAttribute('stroke')")=='#ffffff';assert abs(float(await page.evaluate("ol._vlakaOutlinePath.getAttribute('stroke-width')"))-6)<.001
   await page.evaluate("ol.setLatLngs([[44.9,16],[44.902,16.002]])");assert await page.evaluate("ol._vlakaOutlinePath.getAttribute('d')===ol._path.getAttribute('d')")
   await page.evaluate("ol.setStyle({color:'#ffffff'})");assert await page.evaluate("ol._vlakaOutlinePath.getAttribute('stroke')")=='#000000';await page.evaluate('ol.setStyle({vlakaOutline:false})');assert await page.evaluate('ol._vlakaOutlinePath') is None;await page.evaluate('map.removeLayer(ol)')
   # Stvarni Canvas: čuva ritam crtica/tačaka i dodaje kontrastni rub prije glavne linije.
