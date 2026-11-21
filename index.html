@@ -5910,7 +5910,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.8.8';
+const APP_VER = 'v4.8.9';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7282,20 +7282,21 @@ function _loadLocalVlake() {
   </div>
 </div>
 <div id="vlaka-popup">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-    <span id="vp-nm" style="font-size:14px;font-weight:bold;color:#60a5fa;"></span>
-    <button onclick="closeVlakaPopup()" style="background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;line-height:1;padding:0 2px;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
+  <div class="vp-head">
+    <span class="vp-sw" id="vp-sw"></span>
+    <div class="vp-title"><span id="vp-nm"></span><small id="vp-sub"></small></div>
+    <button class="vp-x" onclick="closeVlakaPopup()" aria-label="Zatvori"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
   </div>
   <div id="vp-info"></div>
-  <div class="vp-view-actions"><button id="vp-buffer" onclick="vpBuffer()">Prikaži bafer</button><button onclick="vpZoom()">Približi</button><button onclick="vpLabele()" title="Pomjeri i zaokreni oznaku vlake"><svg class="ic"><use href="#ic-oznaka"/></svg> Oznaka vlake</button></div>
+  <div class="vp-view-actions"><button id="vp-buffer" onclick="vpBuffer()">Prikaži bafer</button><button onclick="vpZoom()"><svg class="ic"><use href="#ic-meta"/></svg> Približi</button></div>
+  <button class="vp-lbl-btn" onclick="vpLabele()" title="Pomjeri oznaku duž vlake, zaokreni je ili dodaj novu"><svg class="ic"><use href="#ic-oznaka"/></svg><span>Oznake vlake<small>pomjeri duž vlake · zaokreni · dodaj novu</small></span></button>
   <div class="vp-btns" id="vlaka-popup-btns">
-    <button onclick="vpEdit()" style="background:#1d4ed8;color:#fff;"><svg class="ic"><use href="#ic-alat"/></svg> Edituj</button>
-    <button onclick="vpLager()" style="background:#92400e;color:#fbbf24;"><svg class="ic"><use href="#ic-oznaka"/></svg> Lager</button>
-    <button onclick="vpZoom()" style="background:#0f3460;color:#fff;flex:0.5;"><svg class="ic"><use href="#ic-meta"/></svg></button>
-    <button onclick="vpDelete()" style="background:#7f1d1d;color:#fff;flex:0.5;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
+    <button class="vp-b-edit" onclick="vpEdit()"><svg class="ic"><use href="#ic-alat"/></svg> Edituj</button>
+    <button class="vp-b-lager" onclick="vpLager()"><svg class="ic"><use href="#ic-oznaka"/></svg> Lager</button>
+    <button class="vp-b-del" onclick="vpDelete()" aria-label="Obriši vlaku"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
   </div>
 </div>
-    <!-- IZMJERI PANEL -->
+        <!-- IZMJERI PANEL -->
     <div id="mjtrg-panel">
       <!-- IZMJERA -->
       <div id="mjtrg-sec-msr" class="sec msr-hud" style="border-bottom:none;">

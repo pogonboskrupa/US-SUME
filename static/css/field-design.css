@@ -918,7 +918,7 @@ html[data-field-theme=day] #profil-box :is(h3 span,#profil-stats b) {color:#713f
 html[data-field-theme=day] .sqlmap-layer-meta span {color:#334155;}
 html[data-field-theme=day] #sqlmap-box [style*="color:#4ade80"] {color:#14532d!important;}
 html[data-field-theme=day] #tem-modal .tem-ed-r .crt {color:#334155;}
-html[data-field-theme=day] #vlaka-popup :is(#vp-nm>span,.vp-row b) {color:#102033!important;}
+html[data-field-theme=day] #vlaka-popup :is(#vp-nm,.vp-row b) {color:#102033!important;}
 
 html[data-field-theme=day] table.ttm-tbl tfoot td { background:#e2e8f0; color:#102033; border-color:#94a3b8; }
 html[data-field-theme=day] table.ttm-tbl tfoot td.stick { color:#334155; }
@@ -2069,3 +2069,45 @@ html[data-field-theme=day] #tacka-modal .tkm-k{background:#f1f5f9;color:#102033}
 html[data-field-theme=day] #tacka-modal #tacka-btn-confirm.tkm-ok{background:#166534;border-color:#166534;color:#fff}
 html[data-field-theme=day] #tacka-modal #tacka-btn-confirm.tkm-ok small{color:#dcfce7}
 html[data-field-theme=day] html #tacka-nm-input,html[data-field-theme=day] #tacka-nm-input{background:#fff;color:#102033}
+
+/* Popup vlake (v4.8.9): zaglavlje sa bojom vlake, pločice podataka, jedna istaknuta radnja za oznake. */
+html #vlaka-popup{padding:12px 14px 14px;min-width:240px;max-width:min(300px,calc(100vw - 16px));border-radius:14px;border:1px solid var(--field-border,#334155);background:var(--field-card,#102032);color:var(--field-ink,#eef4ff);box-shadow:0 10px 30px rgba(0,0,0,.45)}
+#vlaka-popup .vp-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+#vlaka-popup .vp-sw{flex:0 0 auto;width:6px;align-self:stretch;min-height:34px;border-radius:3px;background:#60a5fa}
+#vlaka-popup .vp-title{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+#vlaka-popup #vp-nm{font:800 18px/1.15 system-ui;color:var(--field-ink,#eef4ff);overflow-wrap:anywhere}
+#vlaka-popup #vp-sub{font:600 11px/1.3 system-ui;color:var(--field-muted,#94a3b8);overflow-wrap:anywhere}
+#vlaka-popup .vp-x{flex:0 0 auto;width:44px;height:44px;margin:-6px -8px -6px 0;border:0;border-radius:10px;background:none;display:flex;align-items:center;justify-content:center;cursor:pointer}
+#vlaka-popup .vp-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:6px;margin-bottom:6px}
+#vlaka-popup .vp-tile{padding:7px 8px;border-radius:9px;background:var(--field-bg,#18283e);border:1px solid var(--field-border,#334155);display:flex;flex-direction:column;gap:2px;min-width:0}
+#vlaka-popup .vp-tile small{font:600 10px/1.2 system-ui;color:var(--field-muted,#94a3b8);text-transform:uppercase;letter-spacing:.04em}
+#vlaka-popup .vp-tile b{font:800 15px/1.2 system-ui;color:var(--field-ink,#eef4ff);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+html #vlaka-popup .vp-row{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid var(--field-border,#334155);font-size:12px;color:var(--field-muted,#94a3b8)}
+html #vlaka-popup .vp-row b{color:var(--field-ink,#eef4ff);text-align:right;overflow-wrap:anywhere}
+#vlaka-popup .vp-row b.vp-lager{color:#f59e0b}
+#vlaka-popup .vp-naputu{display:flex;align-items:center;gap:10px;min-height:44px;padding:4px 0;border-top:1px solid var(--field-border,#334155);cursor:pointer;font-size:12px;color:var(--field-ink,#eef4ff)}
+#vlaka-popup .vp-naputu input{width:20px;height:20px;flex:0 0 auto}
+#vlaka-popup .vp-naputu small{display:block;color:var(--field-muted,#94a3b8);font-size:10.5px}
+html #vlaka-popup .vp-view-actions{margin-top:8px}
+html #vlaka-popup .vp-view-actions button{display:flex;align-items:center;justify-content:center;gap:6px;font:700 13px system-ui}
+#vlaka-popup .vp-lbl-btn{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;margin-top:8px;padding:6px 12px;text-align:left;border:1.5px solid #fbbf24;border-radius:10px;background:rgba(251,191,36,.12);color:var(--field-ink,#eef4ff);cursor:pointer;font:700 14px system-ui}
+#vlaka-popup .vp-lbl-btn svg{width:22px;height:22px;flex:0 0 auto;color:#fbbf24}
+#vlaka-popup .vp-lbl-btn span{display:flex;flex-direction:column;gap:1px}
+#vlaka-popup .vp-lbl-btn small{font:500 10.5px/1.3 system-ui;color:var(--field-muted,#94a3b8)}
+html #vlaka-popup .vp-btns{display:flex;gap:8px;margin-top:8px}
+html #vlaka-popup .vp-btns button{flex:1;min-height:46px;border:0;border-radius:10px;font:800 14px system-ui;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer}
+html #vlaka-popup .vp-b-edit{background:#1d4ed8;color:#fff}
+html #vlaka-popup .vp-b-lager{background:#92400e;color:#fbbf24}
+html #vlaka-popup .vp-b-del{flex:0 0 52px!important;background:rgba(239,68,68,.16);color:#f87171;border:1px solid #f87171!important}
+html[data-field-theme=day] #vlaka-popup .vp-b-lager{background:#fef3c7!important;color:#713f12!important}
+html[data-field-theme=day] #vlaka-popup .vp-b-del{background:#fee2e2;color:#b91c1c}
+html[data-field-theme=day] #vlaka-popup .vp-lbl-btn{background:#fef3c7;border-color:#b45309}
+html[data-field-theme=day] #vlaka-popup .vp-lbl-btn svg{color:#92400e}
+html[data-field-theme=day] #vlaka-popup #vp-nm,html[data-field-theme=day] #vlaka-popup .vp-tile b{color:#102033!important}
+html[data-field-theme=day] #vlaka-popup .vp-row b.vp-lager{color:#92400e}
+
+/* Traka za uređivanje oznaka vlaka: položaj duž vlake, ugao, nova oznaka. */
+#lbl-edit-bar .lb-pos-l{flex:0 0 auto;font-size:12px;font-weight:700;color:#fbbf24;min-width:62px}
+#lbl-edit-bar .lb-row-akcije button{flex:1;font-size:13px}
+#lbl-edit-bar .lb-nova{background:#1d4ed8}
+#lbl-edit-bar .lb-ukloni{background:#7f1d1d}

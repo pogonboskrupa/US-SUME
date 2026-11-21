@@ -20205,25 +20205,24 @@ function showVlakaPopup(i, latlng) {
   const len = calcL(v.pts);
   const ime = v.projektantIme || getIme();
   const dat = v.updatedAt ? fmtDate(v.updatedAt.slice(0,10)) : fmtDate(todayStr());
-  const tipLabel = v.kr > 0 ? ' (krak)' : '';
-  const brLabel  = v.br != null ? `<span style="font-size:11px;color:#64748b;margin-left:5px;">br.${v.br}</span>` : '';
-  document.getElementById('vp-nm').innerHTML =
-    `<span style="color:${v.color};">${_escHtml(v.nm)}</span>${brLabel}<span style="color:#64748b;font-size:11px;">${tipLabel}</span>`;
   const proj = v.projektId ? (_projekti || []).find(p => p.id === v.projektId) : null;
-  const projRow = proj
-    ? `<div class="vp-row">📁 Projekat: <b>${_escHtml(proj.odjel || '—')}</b>${proj.gj ? ' · ' + _escHtml(proj.gj) : ''}</div>`
-    : '';
+  document.getElementById('vp-nm').textContent = v.nm;
+  const sw = document.getElementById('vp-sw'); if (sw) sw.style.background = v.color || '#60a5fa';
+  const sub = document.getElementById('vp-sub');
+  if (sub) sub.textContent = [v.kr > 0 ? 'krak' : 'vlaka', proj ? [proj.odjel, proj.gj].filter(Boolean).join(' · ') : ''].filter(Boolean).join(' · ');
+  const lbl = document.querySelector('#vlaka-popup .vp-lbl-btn'); if (lbl) lbl.style.display = '';
   document.getElementById('vp-info').innerHTML = `
-    ${projRow}
-    <div class="vp-row">🔢 Broj vlake: <b>${v.br ?? '—'}</b>${v.kr > 0 ? `&nbsp;(krak ${v.kr})` : ''}</div>
-    <div class="vp-row">📏 Dužina: <b>${fmtL(len)}</b></div>
-    <div class="vp-row">📍 Tačaka GPS: <b>${v.pts.length}</b></div>
-    <div class="vp-row">👤 Projektant: <b>${_escHtml(ime)}</b></div>
-    <div class="vp-row">📅 Ažurirano: <b>${dat}</b></div>
-    ${v.lager ? `<div class="vp-row">🪵 Lager: <b style="color:#f59e0b;">${_escHtml(v.lager)}</b></div>` : ''}
-    ${v.kr > 0 && !isReadOnly() ? `<label class="vp-row" style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:4px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.08);">
-      <input type="checkbox" onchange="vpToggleNaPutu(this.checked)" ${v.naPutu?'checked':''} style="width:15px;height:15px;flex-shrink:0;">
-      <span style="font-size:11px;color:#7dd3fc;">🛣 Završava na putu <span style="color:#64748b;">(mjeri samo dužinu kraka)</span></span>
+    <div class="vp-tiles">
+      <div class="vp-tile"><small>Dužina</small><b>${fmtL(len)}</b></div>
+      <div class="vp-tile"><small>GPS tačaka</small><b>${v.pts.length}</b></div>
+      <div class="vp-tile"><small>Broj</small><b>${v.br ?? '—'}</b></div>
+    </div>
+    <div class="vp-row"><span>Projektant</span><b>${_escHtml(ime)}</b></div>
+    <div class="vp-row"><span>Ažurirano</span><b>${dat}</b></div>
+    ${v.lager ? `<div class="vp-row"><span>Lager</span><b class="vp-lager">${_escHtml(v.lager)}</b></div>` : ''}
+    ${v.kr > 0 && !isReadOnly() ? `<label class="vp-naputu">
+      <input type="checkbox" onchange="vpToggleNaPutu(this.checked)" ${v.naPutu?'checked':''}>
+      <span>Završava na putu <small>mjeri samo dužinu kraka</small></span>
     </label>` : ''}
   `;
   if(typeof VlakaDirection!=='undefined')document.getElementById('vp-info').insertAdjacentHTML('beforeend',VlakaDirection.popup(v));
@@ -20258,13 +20257,17 @@ function showKolegeVlakaInfo(key, latlng) {
   setTimeout(() => { _vpJustOpened = false; }, 80);
   const nm = kv.nm || key.split('::').slice(1).join('::');
   const project = (_projekti || []).find(p=>p.id===(kv.projektId || _aktivniProjektId));
-  document.getElementById('vp-nm').textContent = nm + ' · vlaka kolege';
+  document.getElementById('vp-nm').textContent = nm;
+  const sw = document.getElementById('vp-sw'); if (sw) sw.style.background = kv.color || '#94a3b8';
+  const sub = document.getElementById('vp-sub'); if (sub) sub.textContent = 'vlaka kolege · pregled';
+  const lbl = document.querySelector('#vlaka-popup .vp-lbl-btn'); if (lbl) lbl.style.display = 'none';
   document.getElementById('vp-info').innerHTML = `
-    <div class="vp-row">📁 Projekat: <b>${_escHtml([project?.gj,project?.odjel].filter(Boolean).join(' · ') || '—')}</b></div>
-    <div class="vp-row">📏 Dužina: <b>${fmtL(calcL(kv.pts))}</b></div>
-    <div class="vp-row">📍 Tačaka: <b>${kv.pts.length}</b></div>
-    <div class="vp-row">👤 Projektant: <b>${_escHtml(kv.ime || 'Kolega')}</b></div>
-    <div class="vp-row">Preuzeto sa servera · pregled</div>`;
+    <div class="vp-tiles">
+      <div class="vp-tile"><small>Dužina</small><b>${fmtL(calcL(kv.pts))}</b></div>
+      <div class="vp-tile"><small>Tačaka</small><b>${kv.pts.length}</b></div>
+    </div>
+    <div class="vp-row"><span>Projekat</span><b>${_escHtml([project?.gj,project?.odjel].filter(Boolean).join(' · ') || '—')}</b></div>
+    <div class="vp-row"><span>Projektant</span><b>${_escHtml(kv.ime || 'Kolega')}</b></div>`;
   if(typeof VlakaDirection!=='undefined')document.getElementById('vp-info').insertAdjacentHTML('beforeend',VlakaDirection.popup(kv));
   document.getElementById('vlaka-popup-btns').style.display = 'none';
   _vpBufferLabel();
@@ -20492,6 +20495,71 @@ function _lblOvrSnimi() {
   catch(e) { showToast('⚠ Položaj oznake vlake nije sačuvan (memorija telefona)'); return false; }
 }
 
+// Dodatne (ručno dodane) oznake iste vlake: {kljuc: [{la,lo,rot}]}, samo lokalno kao i položaj glavne.
+var _lblExtraMem = null;
+var _LBL_EXTRA_MAX = 6;
+function _lblExtraAll() {
+  if (_lblExtraMem) return _lblExtraMem;
+  try { _lblExtraMem = JSON.parse(localStorage.getItem('tvlake_lbl_extra_v1') || '{}') || {}; } catch(e) { _lblExtraMem = {}; }
+  if (typeof _lblExtraMem !== 'object' || Array.isArray(_lblExtraMem)) _lblExtraMem = {};
+  return _lblExtraMem;
+}
+function _lblExtraGet(v) {
+  const a = _lblExtraAll()[_lblKljuc(v)];
+  return Array.isArray(a) ? a.filter(o => o && Number.isFinite(o.la) && Number.isFinite(o.lo)) : [];
+}
+function _lblExtraSet(v, arr) {
+  const k = _lblKljuc(v);
+  if (arr && arr.length) _lblExtraAll()[k] = arr.map(o => ({ la: o.la, lo: o.lo, rot: Math.max(-90, Math.min(90, Math.round(o.rot || 0))) }));
+  else delete _lblExtraAll()[k];
+}
+function _lblExtraSnimi() {
+  try { localStorage.setItem('tvlake_lbl_extra_v1', JSON.stringify(_lblExtraAll())); return true; }
+  catch(e) { showToast('⚠ Dodatna oznaka vlake nije sačuvana (memorija telefona)'); return false; }
+}
+// Geometrija duž linije u lokalnim metrima (isti princip kao _lblIdealno).
+function _lblLinija(pts) {
+  const la0 = pts[0].la, lo0 = pts[0].lo, kx = 111320 * Math.cos(la0 * Math.PI / 180), ky = 111320;
+  const P = pts.map(p => ({ x: (p.lo - lo0) * kx, y: (p.la - la0) * ky })), S = [0];
+  for (let i = 1; i < P.length; i++) S.push(S[i-1] + Math.hypot(P[i].x - P[i-1].x, P[i].y - P[i-1].y));
+  const T = S[S.length - 1];
+  const at = s => {
+    s = Math.max(0, Math.min(T, s));
+    let i = 1;
+    while (i < S.length - 1 && S[i] < s) i++;
+    const d = S[i] - S[i-1], t = d > 0 ? (s - S[i-1]) / d : 0;
+    return { x: P[i-1].x + t * (P[i].x - P[i-1].x), y: P[i-1].y + t * (P[i].y - P[i-1].y) };
+  };
+  return { la0, lo0, kx, ky, P, S, T, at };
+}
+// Tačka na vlaci na udjelu frac (0..1) + ugao teksta paralelan s linijom, u (-90, 90].
+function _lblNaFrac(pts, frac) {
+  if (!pts || pts.length < 2) return null;
+  const m = _lblLinija(pts);
+  if (!(m.T > 0)) return null;
+  const s = Math.max(0, Math.min(1, Number(frac) || 0)) * m.T, w = Math.min(15, m.T / 2);
+  const c = m.at(s), a = m.at(s - w), b = m.at(s + w);
+  let deg = Math.atan2(-(b.y - a.y), b.x - a.x) * 180 / Math.PI;
+  if (deg > 90) deg -= 180;
+  if (deg <= -90) deg += 180;
+  return { la: m.la0 + c.y / m.ky, lo: m.lo0 + c.x / m.kx, deg: Math.round(deg), frac: s / m.T };
+}
+// Najbliža tačka vlake zadanoj poziciji: {frac, dist (m)}.
+function _lblProjFrac(pts, la, lo) {
+  if (!pts || pts.length < 2) return null;
+  const m = _lblLinija(pts);
+  if (!(m.T > 0)) return null;
+  const q = { x: (lo - m.lo0) * m.kx, y: (la - m.la0) * m.ky };
+  let best = Infinity, bs = 0;
+  for (let i = 1; i < m.P.length; i++) {
+    const ax = m.P[i-1].x, ay = m.P[i-1].y, dx = m.P[i].x - ax, dy = m.P[i].y - ay, l2 = dx*dx + dy*dy;
+    const t = l2 > 0 ? Math.max(0, Math.min(1, ((q.x - ax) * dx + (q.y - ay) * dy) / l2)) : 0;
+    const d = Math.hypot(q.x - (ax + t * dx), q.y - (ay + t * dy));
+    if (d < best) { best = d; bs = m.S[i-1] + t * Math.sqrt(l2); }
+  }
+  return { frac: bs / m.T, dist: best };
+}
+
 var _lblEdit = false;      // način uređivanja: labele se mogu povući i zarotirati
 var _lblSel = null;       // {v, kind:'ime'|'lager'}
 function _lblNapraviPrimarni(v, pt, deg, pin) {
@@ -20549,6 +20617,22 @@ function updateVlakaLabel(i) {
       });
     } catch(e) { console.warn('Label err:', v.nm, e); }
   }
+  // Ručno dodane oznake iste vlake (uvijek zakačene — korisnik ih je sam postavio).
+  _lblExtraGet(v).forEach((e, k) => {
+    const sel = _lblEdit && _lblSel && _lblSel.v === v && _lblSel.kind === 'extra' && _lblSel.k === k;
+    const mk = L.marker([e.la, e.lo], {
+      icon: _lblIcon(v.nm, e.rot || 0, { edit: _lblEdit, sel, pin: true }),
+      interactive: _lblEdit, draggable: _lblEdit, zIndexOffset: 499, pane: 'vlakeLabels', bubblingMouseEvents: false
+    }).addTo(map);
+    mk._lblDeg = e.rot || 0; mk._lblExtra = k;
+    if (_lblEdit) {
+      mk.on('click', ev => { L.DomEvent.stopPropagation(ev); _lblSelect(v, 'extra', k); });
+      mk.on('dragstart', () => _lblSelect(v, 'extra', k));
+      mk.on('dragend', () => setTimeout(() => _lblDragKraj(v, mk), 0));
+    }
+    v.extraLabels.push(mk);
+    v._lblBox.push({ la: e.la, lo: e.lo, r: _lblDuzinaM(v.nm) / 2 });
+  });
   // Roditelju su se možda promijenila čvorišta (novi/pomjeren krak) — preračunaj njegovu labelu.
   if (v.kr > 0) {
     const pi = _parentOf(v), pv = pi >= 0 ? vlake[pi] : null;
@@ -20625,6 +20709,7 @@ function _lblClamp(d) { return Math.max(-90, Math.min(90, Math.round(Number(d) |
 function _lblTrenutniUgao(sel) {
   if (!sel) return 0;
   if (sel.kind === 'lager') return typeof VlakaLager !== 'undefined' && VlakaLager.rotOf ? VlakaLager.rotOf(sel.v) : 0;
+  if (sel.kind === 'extra') { const e = _lblExtraGet(sel.v)[sel.k]; return e ? (e.rot || 0) : 0; }
   const o = _lblOvrGet(sel.v);
   if (o) return o.rot || 0;
   return sel.v.labelMk && Number.isFinite(sel.v.labelMk._lblDeg) ? Math.round(sel.v.labelMk._lblDeg) : 0;
@@ -20638,19 +20723,34 @@ function _lblMarkSel() {
     const sL = _lblSel && _lblSel.v === v && _lblSel.kind === 'lager';
     if (lab) { lab.classList.toggle('lbl-sel', sI); lab.style.background = sI ? 'rgba(251,191,36,0.35)' : ''; }
     if (l) l.classList.toggle('lbl-sel', sL);
+    (v.extraLabels || []).forEach(m => {
+      if (m._lblExtra === undefined) return;
+      const el = m.getElement && m.getElement(), lb = el && el.querySelector('.vlaka-lbl');
+      const sE = _lblSel && _lblSel.v === v && _lblSel.kind === 'extra' && _lblSel.k === m._lblExtra;
+      if (lb) { lb.classList.toggle('lbl-sel', sE); lb.style.background = sE ? 'rgba(251,191,36,0.35)' : ''; }
+    });
   });
 }
-function _lblSelect(v, kind) {
+function _lblSelect(v, kind, k) {
   if (!_lblEdit) return;
-  _lblSel = { v, kind };
+  _lblSel = { v, kind, k: kind === 'extra' ? k : undefined };
   _lblMarkSel();
   _lblBarOsvjezi();
 }
 function _lblDragKraj(v, mk) {
   if (!_lblEdit || !mk || vlake.indexOf(v) < 0) return;
-  const ll = mk.getLatLng();
-  _lblOvrSet(v, { la: ll.lat, lo: ll.lng, rot: Number.isFinite(mk._lblDeg) ? mk._lblDeg : 0 });
-  _lblOvrSnimi();
+  let ll = mk.getLatLng();
+  // Povučena oznaka se lijepi na vlaku (do 30 m), da ostane uz liniju; ugao ostaje kakav je korisnik zadao.
+  const pr = _lblProjFrac(v.pts, ll.lat, ll.lng);
+  if (pr && pr.dist <= 30) { const t = _lblNaFrac(v.pts, pr.frac); if (t) ll = { lat: t.la, lng: t.lo }; }
+  const rot = Number.isFinite(mk._lblDeg) ? mk._lblDeg : 0;
+  if (mk._lblExtra !== undefined) {
+    const arr = _lblExtraGet(v);
+    if (arr[mk._lblExtra]) { arr[mk._lblExtra] = { la: ll.lat, lo: ll.lng, rot }; _lblExtraSet(v, arr); _lblExtraSnimi(); }
+  } else {
+    _lblOvrSet(v, { la: ll.lat, lo: ll.lng, rot });
+    _lblOvrSnimi();
+  }
   updateVlakaLabel(_lblIdx(v));
   _lblMarkSel();
   _lblBarOsvjezi();
@@ -20681,6 +20781,12 @@ function _lblRotiraj(deg) {
     _lblOvrSet(s.v, { la: ll.lat, lo: ll.lng, rot: deg });
     mk._lblDeg = deg;
     mk.setIcon(_lblIcon(s.v.nm, deg, { edit: true, sel: true, pin: true }));
+  } else if (s.kind === 'extra') {
+    const mk = (s.v.extraLabels || []).find(m => m._lblExtra === s.k), arr = _lblExtraGet(s.v);
+    if (!mk || !arr[s.k]) return;
+    arr[s.k].rot = deg; _lblExtraSet(s.v, arr);
+    mk._lblDeg = deg;
+    mk.setIcon(_lblIcon(s.v.nm, deg, { edit: true, sel: true, pin: true }));
   } else {
     const mk = s.v.lagerMk;
     if (!mk) return;
@@ -20694,7 +20800,64 @@ function _lblRotiraj(deg) {
 function _lblSnimi() {
   const s = _lblSel;
   if (!s) return;
-  if (s.kind === 'ime') _lblOvrSnimi(); else _lagerSnimi(s.v);
+  if (s.kind === 'ime') _lblOvrSnimi(); else if (s.kind === 'extra') _lblExtraSnimi(); else _lagerSnimi(s.v);
+}
+// Pomjeri izabranu oznaku duž vlake (slajder 0..1); ugao prati pravac linije na tom mjestu.
+function _lblPomjeriDuz(frac) {
+  const s = _lblSel;
+  if (!s || !_lblEdit || s.kind === 'lager') return;
+  const t = _lblNaFrac(s.v.pts, frac);
+  if (!t) return;
+  let mk;
+  if (s.kind === 'extra') {
+    mk = (s.v.extraLabels || []).find(m => m._lblExtra === s.k);
+    const arr = _lblExtraGet(s.v);
+    if (!mk || !arr[s.k]) return;
+    arr[s.k] = { la: t.la, lo: t.lo, rot: t.deg }; _lblExtraSet(s.v, arr);
+  } else {
+    mk = s.v.labelMk;
+    if (!mk) return;
+    _lblOvrSet(s.v, { la: t.la, lo: t.lo, rot: t.deg });
+  }
+  mk.setLatLng([t.la, t.lo]);
+  mk._lblDeg = t.deg;
+  mk.setIcon(_lblIcon(s.v.nm, t.deg, { edit: true, sel: true, pin: true }));
+  _lblBarOsvjezi(true);
+  _scheduleDeclutterLabels();
+}
+// Nova dodatna oznaka: na mjesto na vlaci koje je najdalje od postojećih oznaka.
+function _lblNova() {
+  const s = _lblSel;
+  if (!s || !_lblEdit) { showToast('Prvo dodirni vlaku ili njenu oznaku'); return; }
+  const v = s.v, arr = _lblExtraGet(v);
+  if (arr.length >= _LBL_EXTRA_MAX) { showToast('Najviše ' + _LBL_EXTRA_MAX + ' dodatnih oznaka po vlaci'); return; }
+  const postojece = [];
+  if (v.labelMk) { const l = v.labelMk.getLatLng(); postojece.push({ la: l.lat, lo: l.lng }); }
+  arr.forEach(e => postojece.push(e));
+  let best = null;
+  for (let k = 3; k <= 17; k++) {
+    const t = _lblNaFrac(v.pts, k / 20);
+    if (!t) continue;
+    const d = postojece.length ? Math.min(...postojece.map(p => ptDist(p, t))) : 0;
+    if (!best || d > best.d) best = { t, d };
+  }
+  if (!best) return;
+  arr.push({ la: best.t.la, lo: best.t.lo, rot: best.t.deg });
+  _lblExtraSet(v, arr); _lblExtraSnimi();
+  updateVlakaLabel(_lblIdx(v));
+  _lblSelect(v, 'extra', arr.length - 1);
+  showToast('Nova oznaka: pomjeri je slajderom ili povuci');
+}
+function _lblUkloni() {
+  const s = _lblSel;
+  if (!s || s.kind !== 'extra') return;
+  const arr = _lblExtraGet(s.v);
+  arr.splice(s.k, 1);
+  _lblExtraSet(s.v, arr); _lblExtraSnimi();
+  _lblSel = { v: s.v, kind: 'ime' };
+  updateVlakaLabel(_lblIdx(s.v));
+  _lblMarkSel();
+  _lblBarOsvjezi();
 }
 function _lblKorak(d) { _lblRotiraj(_lblTrenutniUgao(_lblSel) + d); _lblSnimi(); }
 // "Auto": labela imena se vraća na idealan položaj; lager gubi rotaciju (i položaj,
@@ -20719,12 +20882,20 @@ function _lblBarGradi() {
   b.hidden = true;
   b.innerHTML = `
     <div class="lb-row"><b>🏷 Oznake vlaka</b><span id="lb-ime" class="lb-ime"></span><button type="button" class="lb-ok" onclick="_lblEditToggle(false)">✓ Gotovo</button></div>
+    <div class="lb-row" id="lb-pos-row">
+      <span class="lb-pos-l">Duž vlake</span>
+      <input type="range" id="lb-pos" min="0" max="1000" step="1" value="500" oninput="_lblPomjeriDuz(this.value/1000)" onchange="_lblSnimi()" aria-label="Položaj oznake duž vlake">
+    </div>
     <div class="lb-row" id="lb-ctl">
       <button type="button" onclick="_lblKorak(-15)" title="Zaokreni −15°" aria-label="Zaokreni ulijevo">↺</button>
       <input type="range" id="lb-rot" min="-90" max="90" step="1" value="0" oninput="_lblRotiraj(this.value)" onchange="_lblSnimi()" aria-label="Ugao oznake vlake">
       <button type="button" onclick="_lblKorak(15)" title="Zaokreni +15°" aria-label="Zaokreni udesno">↻</button>
       <span id="lb-deg" class="lb-deg">0°</span>
-      <button type="button" onclick="_lblAuto()" title="Vrati na automatski položaj">Auto</button>
+      <button type="button" id="lb-auto" onclick="_lblAuto()" title="Vrati na automatski položaj">Auto</button>
+    </div>
+    <div class="lb-row lb-row-akcije">
+      <button type="button" class="lb-nova" onclick="_lblNova()">＋ Nova oznaka</button>
+      <button type="button" class="lb-ukloni" id="lb-ukloni" onclick="_lblUkloni()" style="display:none">🗑 Ukloni oznaku</button>
     </div>
     <div class="lb-hint" id="lb-hint"></div>`;
   document.body.appendChild(b);
@@ -20741,10 +20912,23 @@ function _lblBarOsvjezi(samoUgao) {
   if (r && String(r.value) !== String(ug)) r.value = ug;
   if (samoUgao) return;
   ctl.style.display = s ? '' : 'none';
-  b.querySelector('#lb-ime').textContent = s ? (s.kind === 'lager' ? 'lager ' + (s.v.lager || '') + ' · ' + s.v.nm : s.v.nm) : '';
+  const ime = s && s.kind !== 'lager', ex = s && s.kind === 'extra';
+  const pr = b.querySelector('#lb-pos-row'), pos = b.querySelector('#lb-pos');
+  pr.style.display = ime ? '' : 'none';
+  if (ime) {
+    const mk = ex ? (s.v.extraLabels || []).find(m => m._lblExtra === s.k) : s.v.labelMk;
+    const ll = mk && mk.getLatLng();
+    const f = ll ? _lblProjFrac(s.v.pts, ll.lat, ll.lng) : null;
+    if (f && pos) pos.value = Math.round(f.frac * 1000);
+  }
+  b.querySelector('#lb-auto').style.display = ex ? 'none' : '';
+  b.querySelector('#lb-ukloni').style.display = ex ? '' : 'none';
+  b.querySelector('#lb-ime').textContent = s
+    ? (s.kind === 'lager' ? 'lager ' + (s.v.lager || '') + ' · ' + s.v.nm : s.v.nm + (ex ? ' · oznaka ' + (s.k + 2) : ''))
+    : '';
   b.querySelector('#lb-hint').textContent = s
-    ? 'Povuci oznaku vlake da je pomjeriš, slajder je rotira.'
-    : 'Dodirni oznaku vlake/kraka ili lager, pa je povuci ili zarotiraj.';
+    ? (s.kind === 'lager' ? 'Povuci lager da ga pomjeriš, slajder ga rotira.' : 'Slajder “Duž vlake” klizi oznaku po liniji, povlačenje je lijepi uz vlaku, ↺ ↻ je rotiraju.')
+    : 'Dodirni oznaku vlake/kraka ili lager, pa je pomjeri ili zarotiraj. “Nova oznaka” dodaje još jednu.';
 }
 function _lblEditToggle(on, v) {
   const nova = on === undefined ? !_lblEdit : !!on;

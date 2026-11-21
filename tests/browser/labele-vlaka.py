@@ -11,9 +11,9 @@ const showToast=m=>toasts.push(m),sbFlushVlaka=i=>flushed.push(vlake[i].nm),_sav
 const sbUser=null,_aktivniProjektId='P1',_loadBoje=()=>({}),kolegeVlakeMap={};
 const _stpLagerSvg=(w,h)=>'<svg width="'+w+'" height="'+h+'" style="display:block"><rect width="'+w+'" height="'+h+'" fill="#92400e"/></svg>';
 '''
-for n in ['_escHtml','ptDist','calcL','_parentOf','_labelFracs','_labelHtml','_lblIcon','_lblDuzinaM','_lblIdealno','_lblObb','_lblObbPresjek','_declutterVlakaLabels','_lblBroj','_lblJunkcije','_lblZauzetoOd','_lblOvrAll','_lblKljuc','_lblOvrGet','_lblOvrSet','_lblOvrDel','_lblOvrSnimi','_lblNapraviPrimarni','updateVlakaLabel','_lblIdx','_lblClamp','_lblTrenutniUgao','_lblMarkSel','_lblSelect','_lblDragKraj','_lagerSnimi','_lagerDragKraj','_lblRotiraj','_lblSnimi','_lblKorak','_lblAuto','_lblBarGradi','_lblBarOsvjezi','_lblEditToggle']:
+for n in ['_escHtml','ptDist','calcL','_parentOf','_labelFracs','_labelHtml','_lblIcon','_lblDuzinaM','_lblIdealno','_lblObb','_lblObbPresjek','_declutterVlakaLabels','_lblBroj','_lblJunkcije','_lblZauzetoOd','_lblOvrAll','_lblKljuc','_lblOvrGet','_lblOvrSet','_lblOvrDel','_lblOvrSnimi','_lblNapraviPrimarni','updateVlakaLabel','_lblIdx','_lblClamp','_lblTrenutniUgao','_lblMarkSel','_lblSelect','_lblDragKraj','_lagerSnimi','_lagerDragKraj','_lblRotiraj','_lblSnimi','_lblKorak','_lblAuto','_lblBarGradi','_lblBarOsvjezi','_lblEditToggle','_lblExtraAll','_lblExtraGet','_lblExtraSet','_lblExtraSnimi','_lblLinija','_lblNaFrac','_lblProjFrac','_lblPomjeriDuz','_lblNova','_lblUkloni']:
     js+='\n'+b.function(n)
-js+='\nconst _LBL_OFFS_PX=9,_LBL_REF_MPP=2.65;var _lblOvrMem=null,_lblEdit=false,_lblSel=null;\n'
+js+='\nconst _LBL_OFFS_PX=9,_LBL_REF_MPP=2.65;var _lblOvrMem=null,_lblExtraMem=null,_LBL_EXTRA_MAX=6,_lblEdit=false,_lblSel=null;\n'
 js+=(b.ROOT/'static/js/vlaka-lager.js').read_text()
 html='<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/static/libs/leaflet.min.css"><style>'+b.styles+'#map{position:fixed;inset:0}</style></head><body><div id="map"></div><div id="lager-position-toolbar" hidden><span id="lager-position-title"></span></div><script src="/static/libs/leaflet.min.js"></script><script>'+js+'</script></body></html>'
 LA,LO=44.9,16.0
@@ -82,6 +82,29 @@ async def main():
   # Auto za lager koji je uredilo ovo uređivanje → nazad na zadani položaj bez lagerPt
   await ev('_lblSelect(vlake[0],"lager")');await page.get_by_text('Auto',exact=True).click()
   assert await ev('vlake[0].lagerPt') is None
+  # --- v4.8.9: pomjeranje duž vlake i nova oznaka
+  await ev('_lblSelect(vlake[0],"ime")')
+  await page.locator('#lb-pos').fill('200');await page.locator('#lb-pos').dispatch_event('change')
+  o=await ev('_lblOvrGet(vlake[0])');assert o,'duž vlake pravi override'
+  pr=await ev('_lblProjFrac(vlake[0].pts,_lblOvrGet(vlake[0]).la,_lblOvrGet(vlake[0]).lo)')
+  assert abs(pr['frac']-0.2)<0.02 and pr['dist']<0.5,pr
+  await page.locator('#lb-pos').fill('800');await page.locator('#lb-pos').dispatch_event('change')
+  pr=await ev('_lblProjFrac(vlake[0].pts,_lblOvrGet(vlake[0]).la,_lblOvrGet(vlake[0]).lo)');assert abs(pr['frac']-0.8)<0.02,pr
+  await page.get_by_text('＋ Nova oznaka').click()
+  assert await ev('_lblExtraGet(vlake[0]).length')==1 and await ev('_lblSel.kind')=='extra'
+  assert await ev('vlake[0].extraLabels.filter(m=>m._lblExtra!==undefined).length')==1
+  # nova oznaka je daleko od glavne i zaokretljiva
+  d=await ev('()=>{const a=vlake[0].labelMk.getLatLng(),e=_lblExtraGet(vlake[0])[0];return ptDist({la:a.lat,lo:a.lng},e)}');assert d>40,d
+  await page.locator('#lb-rot').fill('-25');await page.locator('#lb-rot').dispatch_event('change')
+  assert await ev('_lblExtraGet(vlake[0])[0].rot')==-25
+  assert await ev('JSON.parse(localStorage.getItem("tvlake_lbl_extra_v1"))["P1|T1"].length')==1
+  await page.locator('#lb-pos').fill('500');await page.locator('#lb-pos').dispatch_event('change')
+  pr=await ev('()=>{const e=_lblExtraGet(vlake[0])[0];return _lblProjFrac(vlake[0].pts,e.la,e.lo)}');assert abs(pr['frac']-0.5)<0.02,pr
+  # restart: dodatna oznaka se vraća
+  await ev('()=>{_lblExtraMem=null;updateVlakaLabel(0)}');assert await ev('vlake[0].extraLabels.filter(m=>m._lblExtra!==undefined).length')==1
+  await page.get_by_text('Ukloni oznaku').click()
+  assert await ev('_lblExtraGet(vlake[0]).length')==0 and await ev('_lblSel.kind')=='ime'
+  await ev('_lblOvrDel(vlake[0]);updateVlakaLabel(0)')
   # --- izlazak iz uređivanja
   await ev('_lblEditToggle(false)')
   assert not await page.locator('#lbl-edit-bar').is_visible()
