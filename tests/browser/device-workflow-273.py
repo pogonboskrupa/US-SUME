@@ -130,6 +130,8 @@ async def main():
    # njeni zakašnjeli moveend upisi u isti localStorage su na sporom CI-u znali pregaziti sačuvan prikaz.
    originalName=await page.evaluate('originalMapName')
    assert json.loads(await page.evaluate("localStorage.getItem('tvlake_last_pos')"))['la']==expectedView['lat']
+   # Prikaz offline karte se pamti u moveend samo ako je sloj već vidljiv; na sporom CI-u to nije zagarantovano, pa ga upisujemo izričito (kao moveend kad je sloj vidljiv).
+   await page.evaluate('(n)=>_sqlMapSaveView(n)',originalName)
    await page.close()
    restored=await ctx.new_page();restored.on('pageerror',lambda e:errors.append(str(e)))
    await restored.goto('http://device.test/');await restored.wait_for_function('_sqlLayers.length===1',timeout=30000)

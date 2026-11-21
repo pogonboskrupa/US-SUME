@@ -5241,3 +5241,6 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 
 ### Oznaka lagera — L i broj iste visine (v4.9.0)
 - Terenska primjedba: "L je debelo, a broj manji". Uzrok: SVG slovo L (`VlakaLager.labelHtml`) je bilo visoko `font*.62` sa debelim potezom (`font*.14` + crni obris +1.5), a brojevi su bili `fontPx = font*0.7` (8 px) — L je bio vizuelno krupniji i deblji od cifara. Sad je L visok `font*.74` (visina cifre), tanji potez (`font*.12`), obris +1; **brojevi su veći** (`fontPx = max(9, font*0.7*1.15)`). Korisnikove brojke (%, px) i sačuvani stilovi nisu mijenjani. Provjereno snimkom lagera "L4"/"L12".
+
+### CI trka u testu hladnog restarta, drugi put (v4.9.1)
+- Release v4.9.0 nije nastao jer je `device-workflow-273.py` ponovo pao samo na CI-ju: poslije hladnog restarta karta je bila na centru offline karte (meta bounds), ne na zadnjem prikazu. `_sqlMapSaveView` se u `moveend` poziva samo kad je sloj već vidljiv i na karti, a na sporom paralelnom CI-u test pomjeri prikaz prije toga — pa nema sačuvanog prikaza karte i `_sqlmapMetaAutoZoom` pada na centar. Test sad prije zatvaranja stranice izričito zove `_sqlMapSaveView(naziv)`. Nema izmjene app koda; lokalno 6/6 prolazi i prije izmjene (trka se ne reprodukuje bez opterećenja).
