@@ -5910,7 +5910,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.8.7';
+const APP_VER = 'v4.8.8';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7943,20 +7943,22 @@ function _loadLocalVlake() {
 
 <!-- Tačka modal — unos naziva -->
 <div id="tacka-modal-bg" onclick="_tackaCancelModal()"></div>
-<div id="tacka-modal">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-    <h3 style="margin:0;">📍 Nova tačka</h3>
-    <button onclick="_tackaCancelModal()"
-      style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:4px 8px;line-height:1;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
+<div id="tacka-modal" role="dialog" aria-modal="true" aria-label="Nova tačka">
+  <div class="tkm-h">
+    <span class="tkm-ik"><svg class="ic"><use href="#ic-pozicija"/></svg></span>
+    <div class="tkm-t"><b>Nova tačka</b><small id="tkm-sub">Tačka 1</small></div>
+    <button type="button" class="tkm-x" onclick="_tackaCancelModal()" aria-label="Zatvori"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
   </div>
-  <input id="tacka-nm-input" type="text" placeholder="" autocomplete="off" maxlength="40"
+  <label class="tkm-l" for="tacka-nm-input">Naziv <i>(nije obavezan)</i></label>
+  <input id="tacka-nm-input" type="text" placeholder="npr. Sabirno mjesto, Izvor, Prelaz" autocomplete="off" maxlength="40"
     onkeydown="if(event.key==='Enter'){_tackaConfirm();}">
+  <div class="tkm-l">Gdje postaviti</div>
   <div class="tacka-modal-btns">
-    <button id="tacka-btn-confirm" onclick="_tackaConfirm()" style="flex:1;background:#16a34a;color:#fff;"><svg class="ic"><use href="#ic-pozicija"/></svg> GPS</button>
-    <button onclick="_tackaAtCenter()" style="flex:1;background:#2563eb;color:#fff;"><svg class="ic"><use href="#ic-meta"/></svg> Centar</button>
-    <button onclick="var nm=document.getElementById('tacka-nm-input').value.trim();_tackaCancelModal();_tackaPlaceOnMap(nm);" style="flex:1;background:#0f3460;color:#60a5fa;"><svg class="ic"><use href="#ic-dodir"/></svg> Karta</button>
-    <button id="tacka-btn-cancel" onclick="_tackaCancelModal()"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
+    <button id="tacka-btn-confirm" type="button" class="tkm-k tkm-gps" onclick="_tackaConfirm()"><svg class="ic"><use href="#ic-pozicija"/></svg><b>Moja pozicija</b><small id="tkm-gps-txt">GPS</small></button>
+    <button type="button" class="tkm-k" onclick="_tackaAtCenter()"><svg class="ic"><use href="#ic-meta"/></svg><b>Centar karte</b><small>na križić</small></button>
+    <button type="button" class="tkm-k" onclick="var nm=document.getElementById('tacka-nm-input').value.trim();_tackaCancelModal();_tackaPlaceOnMap(nm);"><svg class="ic"><use href="#ic-dodir"/></svg><b>Dodirni kartu</b><small>prstom</small></button>
   </div>
+  <button id="tacka-btn-cancel" type="button" class="tkm-odustani" onclick="_tackaCancelModal()">Odustani</button>
 </div>
 <!-- Tačka place-on-map banner -->
 <div id="tacka-place-banner">📍 Tapni na karti za postavljanje tačke</div>

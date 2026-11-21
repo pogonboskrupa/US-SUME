@@ -125,7 +125,10 @@ async function reliableFetch(url, options = {}, timeoutMs = 15000) {
     // veze i ne smije obojiti mjerenje kao lošu vezu.
     const prekinuoPozivalac = !!(upstream && upstream.aborted && error && error.name === 'AbortError');
     if (!prekinuoPozivalac) {
-      _javiPosmatracu({ ok:false, ms:Date.now() - t0,
+      let host = '';
+      try { host = new URL(typeof url === 'string' ? url : (url && url.url) || '').host; } catch (e) {}
+      _javiPosmatracu({ ok:false, ms:Date.now() - t0, host,
+        poruka:String((error && error.message) || error).slice(0, 80),
         vrsta:(error && error.name === 'TimeoutError') ? 'istek' : 'greska' });
     }
     throw error;

@@ -25,7 +25,7 @@ function _netZabiljezi(ishod) {
   // Odziv linka je vrijeme do zaglavlja (ttfb); ukupno trajanje uključuje i
   // veličinu odgovora, pa bi velik uredan odgovor vezu lažno proglasio slabom.
   const ms = ishod.ttfb != null ? ishod.ttfb : ishod.ms;
-  _netUzorci.push({ ok:!!ishod.ok, ms:Number(ms) || 0, vrsta:ishod.vrsta || 'ok', t:Date.now() });
+  _netUzorci.push({ ok:!!ishod.ok, ms:Number(ms) || 0, vrsta:ishod.vrsta || 'ok', t:Date.now(), host:ishod.host || '', poruka:ishod.poruka || '' });
   // Neuspjela proba zatvara kratki prolaz odmah. Inače svi zahtjevi iz
   // narednih 20 s koriste već dokazano mrtvu vezu.
   if (!ishod.ok) _netSilaDo = 0;
@@ -40,6 +40,95 @@ function _netZabiljezi(ishod) {
   }
   try { _netPrimijeniRezim(); } catch(e) {}
 }
+// ─── SONDA I DIJAGNOSTIKA VEZE (v4.8.8) ──────────────────────────────────────
+// Prijava: "na jednom telefonu piše da nema veze iako je ima, drugi sajtovi rade". Stanje se mjeri SAMO iz poziva
+// ka našem serveru, pa "nema" znači "server ne odgovara", ne "nema interneta". Sonda je jedan JEFTIN zahtjev
+// (no-cors, bez tijela) i to SAMO dok je stanje "nema" — na mrtvoj vezi nema propusnosti koju bi mogla oteti.
+// Uspjeh: veza je tu, pa se kvarovi brišu i OS-ov onLine=false se ignoriše; neuspjeh se pamti sa razlogom.
+const _NET_SONDA_MS = 30 * 1000;
+var _netSondaZadnja = null, _netSondaBusy = false, _netDijagnozaTxt = '';
+function _netHostTxt(url) { try { return new URL(url).host; } catch (e) { return ''; } }
+async function _netSondaZahtjev(url, ms) {
+  const t0 = Date.now(), ctl = new AbortController();
+  const tmr = setTimeout(() => ctl.abort(), ms);
+  try {
+    await fetch(url, { mode: 'no-cors', cache: 'no-store', signal: ctl.signal });   // opaque odgovor je dovoljan: server je dohvaćen
+    return { ok: true, ms: Date.now() - t0 };
+  } catch (e) {
+    return { ok: false, ms: Date.now() - t0, vrsta: ctl.signal.aborted ? 'istek' : 'odbijeno', poruka: String((e && e.message) || e).slice(0, 80) };
+  } finally { clearTimeout(tmr); }
+}
+async function _netSonda() {
+  if (_netSondaBusy || typeof SUPA_URL === 'undefined') return;
+  _netSondaBusy = true;
+  try {
+    const r = await _netSondaZahtjev(SUPA_URL + '/auth/v1/health', 6000);
+    _netSondaZadnja = Object.assign({ t: Date.now(), host: _netHostTxt(SUPA_URL) }, r);
+    if (r.ok) {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) _netOsLazeDo = Date.now() + 5 * 60 * 1000;
+      _netZabiljezi({ ok: true, ms: r.ms, ttfb: r.ms, vrsta: 'ok', host: _netHostTxt(SUPA_URL) });
+      try { if (typeof _serverSazetakRender === 'function') _serverSazetakRender(); } catch (e) {}
+    }
+  } finally { _netSondaBusy = false; }
+}
+function _netSondaTik() {
+  try {
+    if (document.hidden || _netKvalitet() !== 'nema') return;
+    const z = _netUzorci.length ? _netUzorci[_netUzorci.length - 1].t : 0;
+    if (Date.now() - z < _NET_SONDA_MS) return;   // nešto je upravo pokušalo — ne dupliraj
+    _netSonda();
+  } catch (e) {}
+}
+try { setInterval(_netSondaTik, _NET_SONDA_MS); } catch (e) {}
+
+// Razlog zbog kojeg app misli da nema veze — jednom rečenicom, za korisnika (ne samo admina).
+function _netRazlog() {
+  const st = _netKvalitet();
+  if (st === 'dobra' || st === 'nepoznato') return '';
+  if (_netOsOffline()) return 'Telefon javlja da nije povezan na mrežu (Wi-Fi / mobilni podaci isključeni ili avionski mod).';
+  const u = _netSvjezi(), p = u.filter(x => !x.ok), zadnji = p[p.length - 1];
+  if (st === 'slaba') return 'Server odgovara sporo (medijan ' + (_netMedijanMs() || '?') + ' ms) ili poneki poziv padne.';
+  if (zadnji) {
+    const kako = zadnji.vrsta === 'istek' ? 'ne odgovara na vrijeme (veza visi)' : 'odbija vezu odmah (blokada, DNS, VPN ili nema mreže)';
+    return 'Server' + (zadnji.host ? ' ' + zadnji.host : '') + ' ' + kako + '. Zadnjih ' + p.length + ' poziva nije prošlo.';
+  }
+  return 'Zadnji pozivi ka serveru nisu prošli.';
+}
+// Izričita provjera iz panela Server (SVI korisnici): razlikuje "nema interneta" od "internet radi, ali naš server
+// nije dostupan sa ove mreže" — baš ono što se ne vidi iz običnog browsera na istom telefonu.
+async function _netProvjeriVezu() {
+  const btn = document.getElementById('btn-net-provjeri'), out = document.getElementById('net-dijagnoza-out');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Provjeravam…'; }
+  _netSondaBusy = false;
+  const host = typeof SUPA_URL !== 'undefined' ? SUPA_URL : '';
+  const [srv, net] = await Promise.all([
+    host ? _netSondaZahtjev(host + '/auth/v1/health', 8000) : Promise.resolve({ ok: false, vrsta: 'odbijeno', poruka: 'nema adrese servera' }),
+    _netSondaZahtjev('https://www.gstatic.com/generate_204', 8000)   // isti probni URL koji koristi sam Android; bez ijednog podatka o korisniku
+  ]);
+  const os = typeof navigator !== 'undefined' ? navigator.onLine : null;
+  let zakljucak;
+  if (srv.ok) {
+    zakljucak = '✅ Server odgovara (' + srv.ms + ' ms). Veza je u redu — aplikacija se vraća na online.';
+    if (os === false) _netOsLazeDo = Date.now() + 5 * 60 * 1000;
+    _netZabiljezi({ ok: true, ms: srv.ms, ttfb: srv.ms, vrsta: 'ok', host: _netHostTxt(host) });
+    try { _mrezaSila(); _netVezaVracena(); } catch (e) {}
+  } else if (net.ok) {
+    zakljucak = '⚠ Internet RADI, ali naš server nije dostupan sa ove mreže (' + (srv.vrsta === 'istek' ? 'nema odgovora na vrijeme' : 'odbijeno odmah') + '). ' +
+      'Najčešće: Private DNS / blokator reklama, VPN, ili mreža (Wi-Fi/operater) koja blokira adresu. Probaj druge podatke ili isključi VPN/Private DNS.';
+  } else {
+    zakljucak = '⛔ Ni internet ni server ne odgovaraju (' + (net.vrsta === 'istek' ? 'istek' : 'odbijeno') + '). Provjeri Wi-Fi/mobilne podatke i avionski mod.';
+  }
+  _netSondaZadnja = { t: Date.now(), ok: srv.ok, ms: srv.ms, vrsta: srv.vrsta, poruka: srv.poruka, host: _netHostTxt(host) };
+  const txt = zakljucak + '\nServer: ' + (srv.ok ? 'OK ' + srv.ms + ' ms' : (srv.vrsta || 'greška') + (srv.poruka ? ' — ' + srv.poruka : '')) +
+    '\nInternet (gstatic): ' + (net.ok ? 'OK ' + net.ms + ' ms' : (net.vrsta || 'greška')) + '\nTelefon javlja online: ' + os + ' · stanje aplikacije: ' + _netKvalitet();
+  try { _debugUpsert('net-provjera', 'Provjera veze (korisnik)', txt, srv.ok ? 'uspjeh' : 'aktivno'); } catch (e) {}
+  _netDijagnozaTxt = txt;
+  if (out) out.textContent = txt;
+  if (btn) { btn.disabled = false; btn.textContent = '📶 Provjeri vezu'; }
+  try { _serverSazetakRender(); } catch (e) {}
+  return txt;
+}
+
 function _netSvjezi() {
   const sad = Date.now();
   return _netUzorci.filter(u => sad - u.t <= _NET_SVJEZE_MS);
@@ -48,9 +137,13 @@ function _netMedijanMs() {
   const uspjeli = _netSvjezi().filter(u => u.ok).map(u => u.ms).sort((a, b) => a - b);
   return uspjeli.length ? uspjeli[Math.floor(uspjeli.length / 2)] : null;
 }
+// navigator.onLine === false je ZADNJE vrijeme smatrano pouzdanim, ali neki OEM WebView-i ga javljaju i kad veza
+// postoji (promjena mreže, VPN, Private DNS) — app tada ne bi ni pokušala. Sonda (_netSonda) pokuša DOKAZATI
+// suprotno: kad server odgovori uprkos onLine=false, OS se ignoriše do _netOsLazeDo.
+var _netOsLazeDo = 0;
+function _netOsOffline() { return typeof navigator !== 'undefined' && navigator.onLine === false && Date.now() >= _netOsLazeDo; }
 function _netKvalitet() {
-  // Kad OS KAŽE da nema veze, to je pouzdano (laže samo u drugom smjeru).
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'nema';
+  if ((typeof navigator !== 'undefined' && navigator.onLine === false && !(typeof _netOsLazeDo !== 'undefined' && Date.now() < _netOsLazeDo))) return 'nema';
   const u = _netSvjezi();
   if (!u.length) return 'nepoznato';
   const palo = u.filter(x => !x.ok).length;
@@ -80,7 +173,7 @@ const _NET_PROBA_MS = 30 * 1000;
 const _NET_PROZOR_MS = 20 * 1000;   // koliko dugo dodijeljena proba smije slati zahtjeve
 let _netProbaDo = 0, _netSilaDo = 0;
 function _mrezaProbaj(traziDobru, proba = false) {
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+  if ((typeof navigator !== 'undefined' && navigator.onLine === false && !(typeof _netOsLazeDo !== 'undefined' && Date.now() < _netOsLazeDo))) return false;
   const k = _netKvalitet();
   const sad = Date.now();
   if (sad < _netSilaDo && !traziDobru) return true;
@@ -108,20 +201,20 @@ function _netDozvoliZahtjev() {
   // takav neuspjeh ponavlja 3 puta (1+2+4 s) — izmjereno: oporavak prekinutog
   // snimanja bez signala se zato pojavljivao tek poslije ~16 s. Odbijanje na
   // vratima ide bez ponavljanja. Izričita radnja korisnika (_mrezaSila) prolazi.
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return Date.now() < _netSilaDo;
+  if ((typeof navigator !== 'undefined' && navigator.onLine === false && !(typeof _netOsLazeDo !== 'undefined' && Date.now() < _netOsLazeDo))) return Date.now() < _netSilaDo;
   return _mrezaProbaj();
 }
 try { if (typeof setNetGate === 'function') setNetGate(_netDozvoliZahtjev); } catch(e) {}
 // Samo ČITA stanje (za poruke korisniku) — za razliku od _mrezaProbaj ne troši probu.
 function _mrezaStanje() {
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'nema';
+  if ((typeof navigator !== 'undefined' && navigator.onLine === false && !(typeof _netOsLazeDo !== 'undefined' && Date.now() < _netOsLazeDo))) return 'nema';
   return _netKvalitet();
 }
 // Veliko preuzimanje koje je korisnik SAM tražio: bez veze se ne počinje (ne
 // ostavljati ga pred progress barom koji ne mrdne), a na slaboj vezi se pita —
 // korisnik zna je li mu to sad vrijedno trošiti, app ne zna.
 async function _mrezaZaPreuzimanje(sta) {
-  if (navigator.onLine === false) { showToast('📴 ' + sta + ' traži internet — sad nema veze'); return false; }
+  if ((typeof navigator !== 'undefined' && navigator.onLine === false && !(typeof _netOsLazeDo !== 'undefined' && Date.now() < _netOsLazeDo))) { showToast('📴 ' + sta + ' traži internet — sad nema veze'); return false; }
   if (_mrezaStanje() === 'slaba' && !await _dlgConfirm(sta + ' na slabom signalu može trajati dugo i trošiti mobilne podatke. Pokušati ipak?',
     { title: '📶 Slab signal', okLabel: 'Pokušaj' })) return false;
   _mrezaSila(60000);
@@ -501,6 +594,14 @@ function _serverSazetakRender() {
     (n.blok ? '<div style="font-size:11px;color:#fbbf24;margin-top:6px">⚠ ' + n.blok + ' stavk' + (n.blok === 1 ? 'a' : 'e') + ' server odbija — pogledaj Problemi.</div>' : '') +
     (_serverSaljem ? '<div style="font-size:12px;color:#60a5fa;margin-top:8px">⏳ Šaljem…</div>' : '');
   if(typeof _serverPanelSazetak==='function') el.innerHTML=_serverPanelSazetak(n,st,z);
+  if (st === 'nema' || st === 'slaba') {
+    const rz = _netRazlog(), zad = _netSondaZadnja;
+    el.innerHTML += '<div id="net-dijagnoza" style="margin-top:8px;padding:8px 10px;border-radius:10px;border:1px solid rgba(251,191,36,.45);background:rgba(251,191,36,.1);font-size:12px;line-height:1.45">' +
+      '<b>Zašto piše da nema veze?</b><div style="margin-top:3px">' + _escHtml(rz) + '</div>' +
+      (zad && !zad.ok ? '<div style="margin-top:3px;color:#94a3b8">Zadnja sonda ' + _escHtml(String(_fmtAgo(zad.t)).toLowerCase()) + ': ' + (zad.vrsta === 'istek' ? 'istek' : 'odbijeno') + '</div>' : '') +
+      '<div id="net-dijagnoza-out" style="margin-top:4px;white-space:pre-line;color:#cbd5e1">' + _escHtml(_netDijagnozaTxt) + '</div>' +
+      '<button type="button" id="btn-net-provjeri" onclick="_netProvjeriVezu()" style="margin-top:7px;min-height:42px;padding:0 14px;border-radius:10px;border:0;background:#2563eb;color:#fff;font-weight:700">📶 Provjeri vezu</button></div>';
+  }
   if (n.siroce) el.innerHTML += '<div style="font-size:11px;color:#94a3b8;margin-top:6px">📍 ' + n.siroce +
     ' GPS tačaka pripada odjelu koji je obrisan sa servera — ostaju na telefonu (izvoz pojasa), ne šalju se.</div>';
   const b = document.getElementById('syncq-posalji');
@@ -7557,8 +7658,19 @@ function _escSvg(s) {
 }
 
 // ── Modal ──
+// Podnaslov modala: koja je ovo tačka po redu i stanje GPS-a — da se vidi PRIJE izbora da "Moja pozicija"
+// nema šta da postavi (bez fiksa je dugme onemogućeno, a ne tiho prelazi na dodir karte).
+function _tackaModalOsvjezi() {
+  const sub = document.getElementById('tkm-sub'), g = document.getElementById('tkm-gps-txt'), btn = document.getElementById('tacka-btn-confirm');
+  const ima = typeof lastP !== 'undefined' && !!lastP;
+  const ac = ima && Number.isFinite(lastP.ac) ? Math.round(lastP.ac) : null;
+  if (sub) sub.textContent = 'Tačka ' + (_tacke.length + 1) + (ima ? ' · GPS' + (ac != null ? ' ±' + ac + ' m' : ' spreman') : ' · GPS isključen');
+  if (g) g.textContent = ima ? (ac != null ? '±' + ac + ' m' : 'GPS spreman') : 'nema GPS-a';
+  if (btn) { btn.disabled = !ima; btn.classList.toggle('tkm-ok', ima); }
+}
 function _tackaOpenModal() {
   switchTab('karta');
+  _tackaModalOsvjezi();
   document.getElementById('tacka-modal-bg').style.display = 'block';
   document.getElementById('tacka-modal').style.display    = 'block';
   setTimeout(() => document.getElementById('tacka-nm-input').focus(), 80);
@@ -7598,7 +7710,7 @@ function _createTacka(la, lo, nm) {
   const ts  = Date.now();
   const idx = _tacke.length;
   const m   = L.marker([la, lo], {icon: _tačkaIcon(idx+1, nm)});
-  if(typeof _tvCategoryOn!=='function'||_tvCategoryOn('points'))m.addTo(map);
+  if((typeof _tvCategoryOn!=='function'||_tvCategoryOn('points'))&&!_ozrSkriveno('tacke'))m.addTo(map);
   _setupTackaPopup(m, idx, la, lo, ts, nm);
   _tacke.push({la, lo, ts, nm, marker: m});
   _saveTacke();
@@ -7607,30 +7719,55 @@ function _createTacka(la, lo, nm) {
 }
 
 // ── Popup ──
+// v4.8.8: kartica umjesto gole kolone teksta — broj + naziv + vrijeme u zaglavlju, koordinate koje se
+// kopiraju dodirom, tri podatka (od tebe / smjer / N.V.) i jedna glavna radnja (Vodi me). Brisanje traži potvrdu.
+var _TK_STRANE = ['S', 'SI', 'I', 'JI', 'J', 'JZ', 'Z', 'SZ'];
+function _tackaStrana(b) { return _TK_STRANE[Math.round((((b % 360) + 360) % 360) / 45) % 8]; }
+function _tackaKoordTxt(la, lo) {
+  const gk = wgsToMGI(la, lo);
+  return gk ? { y: String(gk.y), x: String(gk.x), txt: 'Y ' + gk.y + '  X ' + gk.x } : { y: la.toFixed(6), x: lo.toFixed(6), txt: la.toFixed(6) + ', ' + lo.toFixed(6) };
+}
+function _tackaPopupHtml(idx, la, lo, ts, nm) {
+  const title = nm || ('Tačka ' + (idx + 1));
+  const dt = new Date(ts).toLocaleString('hr', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const k = _tackaKoordTxt(la, lo);
+  const ima = typeof lastP !== 'undefined' && lastP;
+  const cel = (naziv, vrijednost, id) => '<div class="tk-c"><small>' + naziv + '</small><b' + (id ? ' id="' + id + '"' : '') + '>' + vrijednost + '</b></div>';
+  let nv = '—';
+  try { const v = _nvDemSync(la, lo); if (typeof v === 'number') nv = Math.round(v) + ' m'; } catch (e) {}
+  const red = (ima
+    ? cel('Od tebe', _fmtDist(_haversine(lastP.la, lastP.lo, la, lo))) + cel('Smjer', (b => _tackaStrana(b) + ' ' + Math.round(b) + '°')(_bearing(lastP.la, lastP.lo, la, lo)))
+    : cel('Od tebe', '<span class="tk-nema">GPS isključen</span>')) + cel('N.V.', nv, 'tk-nv-' + idx);
+  return '<div class="tk-pop">' +
+    '<div class="tk-h"><span class="tk-br">' + (idx + 1) + '</span><div class="tk-t"><b>' + _escHtml(title) + '</b><small>' + dt + '</small></div></div>' +
+    '<button type="button" class="tk-koo" onclick="_tackaKopiraj(' + idx + ')" aria-label="Kopiraj koordinate"><span><i>Y</i> ' + _escHtml(k.y) + '</span><span><i>X</i> ' + _escHtml(k.x) + '</span><svg class="ic"><use href="#ic-kopiraj"/></svg></button>' +
+    '<div class="tk-red">' + red + '</div>' +
+    '<div class="tk-akc"><button type="button" class="tk-vodi" onclick="vodiMeDoTacke(' + idx + ')"><svg class="ic"><use href="#ic-kompas"/></svg> Vodi me</button>' +
+    '<button type="button" class="tk-ik" onclick="_renameTacka(' + idx + ')" aria-label="Preimenuj"><svg class="ic"><use href="#ic-crtaj"/></svg></button>' +
+    '<button type="button" class="tk-ik tk-del" onclick="_tackaObrisiPitaj(' + idx + ')" aria-label="Obriši"><svg class="ic"><use href="#ic-obrisi"/></svg></button></div></div>';
+}
+function _tackaKopiraj(idx) {
+  const t = _tacke[idx]; if (!t) return;
+  const txt = _tackaKoordTxt(t.la, t.lo).txt;
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(() => showToast('📋 Koordinate kopirane'), () => showToast(txt));
+  else showToast(txt);
+}
+async function _tackaObrisiPitaj(idx) {
+  const t = _tacke[idx]; if (!t) return;
+  const ok = await _dlgConfirm('Obrisati tačku „' + (t.nm || 'Tačka ' + (idx + 1)) + '“? Ovo se ne može poništiti.', { title: 'Obriši tačku', danger: true, okLabel: 'Obriši' });
+  if (ok) deleteTacka(idx);
+}
 function _setupTackaPopup(m, idx, la, lo, ts, nm) {
-  const title = nm || ('Tačka ' + (idx+1));
-  const dt    = new Date(ts).toLocaleString('hr', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
   m.bindPopup(() => {
-    const distHtml = lastP
-      ? `<div style="margin:5px 0 2px;font-size:11px;color:#475569;">
-           ✈️ Vazdušna linija: <b style="color:#3b82f6;">${_fmtDist(_haversine(lastP.la,lastP.lo,la,lo))}</b>
-         </div>`
-      : '';
-    const gk = wgsToMGI(la, lo);
-    const coordStr = gk ? `Y: ${gk.y}  X: ${gk.x}` : `${la.toFixed(6)}, ${lo.toFixed(6)}`;
-    return `<div style="font-size:12px;min-width:160px;color:#1e293b;">
-      <b style="font-size:13px;color:#1e293b;">📍 ${_escHtml(title)}</b><br>
-      <span style="color:#64748b;font-size:10px;">${dt}</span><br>
-      <code style="font-size:9px;color:#475569;">${coordStr}</code>
-      ${distHtml}
-      <div style="display:flex;gap:5px;margin-top:7px;">
-        <button class="tacka-popup-btn" style="background:#1d4ed8;color:#bfdbfe;flex:1;"
-          onclick="vodiMeDoTacke(${idx})"><svg class="ic"><use href="#ic-kompas"/></svg> Vodi me</button>
-        <button class="tacka-popup-btn" onclick="_renameTacka(${idx})" style="flex:0 0 auto;" title="Preimenuj"><svg class="ic"><use href="#ic-crtaj"/></svg>️</button>
-        <button class="tacka-popup-btn" onclick="deleteTacka(${idx})" style="flex:0 0 auto;"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
-      </div>
-    </div>`;
-  }, {className:'tvlake-popup'});
+    // Visina iz DEM-a stiže asinhrono (pločica može još biti u keširanju) — upiši je kad stigne.
+    try {
+      if (typeof _nvDemSync === 'function' && _nvDemSync(la, lo) === undefined) _nvDemUcitaj(la, lo).then(ok => {
+        const el = document.getElementById('tk-nv-' + idx), v = ok ? _nvDemSync(la, lo) : null;
+        if (el && typeof v === 'number') el.textContent = Math.round(v) + ' m';
+      }).catch(() => {});
+    } catch (e) {}
+    return _tackaPopupHtml(idx, la, lo, ts, nm);
+  }, { className: 'tk-popup', minWidth: 230, maxWidth: 290, autoPanPaddingTopLeft: [70, 84], autoPanPaddingBottomRight: [16, 96] });
 }
 
 // ── Road routing (Dijkstra on putevi.geojson graph) ──
@@ -7955,7 +8092,7 @@ function _restoreTacke() {
     const d = JSON.parse(localStorage.getItem(_TACKE_KEY) || '[]');
     d.forEach(({la,lo,ts,nm}, i) => {
       const m = L.marker([la,lo], {icon: _tačkaIcon(i+1, nm)});
-      if(typeof _tvCategoryOn!=='function'||_tvCategoryOn('points'))m.addTo(map);
+      if((typeof _tvCategoryOn!=='function'||_tvCategoryOn('points'))&&!_ozrSkriveno('tacke'))m.addTo(map);
       _setupTackaPopup(m, i, la, lo, ts, nm);
       _tacke.push({la, lo, ts, nm, marker: m});
     });
@@ -8000,6 +8137,7 @@ document.addEventListener('click', function(e) {
 function _tackaFromTragovi() { addTacka(); }
 function addTacka() {
   switchTab('karta');
+  _tackaModalOsvjezi();
   document.getElementById('tacka-nm-input').value = '';
   document.getElementById('tacka-modal-bg').style.display = 'block';
   document.getElementById('tacka-modal').style.display    = 'block';
@@ -13484,15 +13622,15 @@ map.on('moveend', () => {
 });
 
 // === PRIKAZ OZNAKA U RAZMJERI (v4.8.2) ===
-// Do koje razmjere se vide fotografije, mjerenja i KML fajlovi — korisnik bira (Meni → Prikaz oznaka u
-// razmjeri), zadano 1:12 500 / 1:12 500 / 1:50 000. Oznaka se vidi na izabranoj razmjeri i krupnijoj
+// Do koje razmjere se vide fotografije, mjerenja, KML fajlovi i tačke — korisnik bira (Meni → Prikaz oznaka u
+// razmjeri), zadano 1:12 500 / 1:12 500 / 1:50 000 / 1:25 000 (tačke). Oznaka se vidi na izabranoj razmjeri i krupnijoj
 // (1:12 500, 1:5 000…), a pri sitnijoj (1:25 000…) se samo privremeno skloni sa karte — nikad ne mijenja
 // korisnikov Prikaži/Sakrij. 0 = uvijek vidljivo. `var` jer _updMapScale i _buildFotoMarker znaju
 // doći prije ovog reda (TDZ).
 var _OZR_KEY = 'tvlake_oznake_razmjera_v1';
-var _OZR_ZADANO = { foto: 12500, msr: 12500, kml: 50000 };
+var _OZR_ZADANO = { foto: 12500, msr: 12500, kml: 50000, tacke: 25000 };
 var _OZR_IZBOR = [5000, 10000, 12500, 25000, 50000, 100000, 0];
-var _OZR_NAZIV = { foto: '📷 Fotografije', msr: '📏 Mjerenja', kml: '🗺 KML fajlovi' };
+var _OZR_NAZIV = { foto: '📷 Fotografije', msr: '📏 Mjerenja', kml: '🗺 KML fajlovi', tacke: '📍 Tačke' };
 var _ozrMem = null, _ozrRazmjera = 0;
 function _ozrPostavke() {
   if (_ozrMem) return _ozrMem;
@@ -13523,6 +13661,15 @@ function _ozrPrimijeni() {
       const vis = !sF && (typeof _tvPhotoVisible !== 'function' || _tvPhotoVisible(f, shared));
       if (!vis && map.hasLayer(f.marker)) map.removeLayer(f.marker);
       else if (vis && !map.hasLayer(f.marker)) map.addLayer(f.marker);
+    }
+  } catch (e) {}
+  try {
+    const sT = _ozrSkriveno('tacke');
+    for (const t of (typeof _tacke !== 'undefined' ? _tacke : [])) {
+      if (!t.marker) continue;
+      const vis = !sT && (typeof _tvCategoryOn !== 'function' || _tvCategoryOn('points'));
+      if (!vis && map.hasLayer(t.marker)) map.removeLayer(t.marker);
+      else if (vis && !map.hasLayer(t.marker)) map.addLayer(t.marker);
     }
   } catch (e) {}
   try {

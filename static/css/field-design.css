@@ -812,7 +812,6 @@ html[data-field-theme=day] :is(#stil-modal,#tacka-modal) h3 {color:#102033;}
 html[data-field-theme=day] #mapmgr-box h3 {color:#102033;}
 html[data-field-theme=day] #doz-create-box h3 {color:#14532d;}
 html[data-field-theme=day] #mapmgr-box button[onclick="_mapMgrClearAll()"] {color:#991b1b!important;}
-html[data-field-theme=day] #tacka-btn-confirm {background:#166534!important;color:#fff!important;}
 html[data-field-theme=day] #admin-panel :is([style*="color:#fbbf24"],[style*="color:#fde68a"],[style*="color:#a16207"]) {color:#713f12!important;}
 html[data-field-theme=day] #admin-panel :is([style*="color:#93c5fd"],[style*="color:#60a5fa"],[style*="color:#38bdf8"]):not(button) {color:#1e40af!important;}
 html[data-field-theme=day] #admin-panel :is([style*="color:#4ade80"],[style*="color:#bbf7d0"]):not(button) {color:#14532d!important;}
@@ -2019,3 +2018,54 @@ html[data-field-theme=day]{--x-crvena:#b91c1c}
 button[style*="#7f1d1d"],button[style*="#991b1b"]{--x-crvena:#fecaca}
 html button[aria-label^="Zatvori"],html button.nalog-x,html button.mdrop-x,html button.tiz-x,html button.por-x,html button.ozr-x,html button.shr-pz-x,html button.vsd-x,html button.rs-x,html button.rk-close,html button.stl-x,html button.ttm-x,html button.np-close,html button.imv-x,html button.vpick-close,html #loadmap-close,html #pm-close-btn,html #izv-close-btn,html #help-close,html #foto-fullscreen-close,html #spd-close{color:var(--x-crvena)!important;background-color:rgba(248,113,113,.14)!important;border-color:rgba(248,113,113,.5)!important;font-weight:700}
 html[data-field-theme=day] button[aria-label^="Zatvori"],html[data-field-theme=day] button.nalog-x,html[data-field-theme=day] button.mdrop-x,html[data-field-theme=day] button.tiz-x,html[data-field-theme=day] button.por-x,html[data-field-theme=day] button.ozr-x,html[data-field-theme=day] button.rs-x,html[data-field-theme=day] button.stl-x{background-color:rgba(185,28,28,.07)!important;border-color:rgba(185,28,28,.4)!important}
+
+/* ── Tačka: kartica popupa i modal nove tačke (v4.8.8) ── */
+.tk-popup .leaflet-popup-content-wrapper{background:var(--field-card,#0f172a);color:var(--field-ink,#f1f5f9);border:1px solid var(--field-border,#475569);border-radius:15px;box-shadow:0 8px 26px rgba(0,0,0,.45);padding:0}
+.tk-popup .leaflet-popup-content{margin:0;width:auto!important}
+.tk-popup .leaflet-popup-tip{background:var(--field-card,#0f172a);border:1px solid var(--field-border,#475569)}
+.tk-popup a.leaflet-popup-close-button{display:none}
+.tk-pop{box-sizing:border-box;min-width:230px;padding:11px 12px 12px;font-family:system-ui,sans-serif;color:var(--field-ink,#f1f5f9)}
+.tk-h{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.tk-br{flex:0 0 auto;display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:#fbbf24;color:#451a03;font-weight:900;font-size:15px;box-shadow:0 0 0 3px rgba(251,191,36,.25)}
+.tk-t{min-width:0}.tk-t b{display:block;font-size:15px;line-height:1.2;overflow-wrap:anywhere}.tk-t small{display:block;margin-top:2px;font-size:11px;color:var(--field-muted,#b0bfd2)}
+.tk-koo{display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;margin:0 0 8px;padding:8px 10px;border-radius:10px;border:1px solid var(--field-border,#475569);background:rgba(148,163,184,.12);color:inherit;font:inherit;font-size:12.5px;text-align:left;cursor:pointer}
+.tk-koo span{flex:1 1 auto;font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}.tk-koo i{font-style:normal;font-weight:600;color:var(--field-muted,#b0bfd2);margin-right:2px}
+.tk-koo .ic{flex:0 0 auto;width:16px;height:16px;opacity:.8}
+.tk-red{display:grid;grid-template-columns:repeat(auto-fit,minmax(64px,1fr));gap:6px;margin-bottom:10px}
+.tk-c{padding:6px 8px;border-radius:9px;background:rgba(148,163,184,.12);min-width:0}.tk-c small{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--field-muted,#b0bfd2)}.tk-c b{display:block;margin-top:1px;font-size:14px;font-weight:800;font-variant-numeric:tabular-nums}
+.tk-nema{font-size:11px;font-weight:600;color:var(--field-muted,#b0bfd2)}
+.tk-akc{display:flex;gap:7px}
+.tk-vodi,.tk-ik{min-height:44px;border:0;border-radius:11px;font:inherit;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.tk-vodi{flex:1;background:#2563eb;color:#fff;font-size:14px}.tk-ik{flex:0 0 46px;background:rgba(148,163,184,.18);color:inherit;border:1px solid var(--field-border,#475569)}
+.tk-ik.tk-del{color:#fca5a5;border-color:rgba(248,113,113,.5);background:rgba(248,113,113,.12)}
+.tk-vodi:active,.tk-ik:active,.tk-koo:active{opacity:.75}
+.tk-vodi .ic,.tk-ik .ic{width:18px;height:18px}
+html[data-field-theme=day] .tk-popup .leaflet-popup-content-wrapper,html[data-field-theme=day] .tk-popup .leaflet-popup-tip{background:#fff;color:#102033;border-color:#64748b}
+html[data-field-theme=day] .tk-br{background:#f59e0b;color:#451a03}
+html[data-field-theme=day] .tk-koo,html[data-field-theme=day] .tk-c{background:#f1f5f9}
+html[data-field-theme=day] .tk-t small,html[data-field-theme=day] .tk-c small,html[data-field-theme=day] .tk-koo i,html[data-field-theme=day] .tk-nema{color:#334155}
+html[data-field-theme=day] .tk-vodi{background:#1d4ed8}
+html[data-field-theme=day] .tk-ik{background:#f1f5f9;color:#102033}
+html[data-field-theme=day] .tk-ik.tk-del{color:#b91c1c;background:#fee2e2;border-color:#b91c1c}
+
+html #tacka-modal{background:var(--field-card,#0f172a);color:var(--field-ink,#f1f5f9);border-top:2px solid var(--field-border,#475569);padding:14px 14px calc(18px + env(safe-area-inset-bottom,0px))}
+#tacka-modal .tkm-h{display:flex;align-items:center;gap:11px;margin-bottom:12px}
+#tacka-modal .tkm-ik{flex:0 0 auto;display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:rgba(251,191,36,.18);color:#fbbf24}.tkm-ik .ic{width:22px;height:22px}
+#tacka-modal .tkm-t{flex:1;min-width:0}#tacka-modal .tkm-t b{display:block;font-size:17px}#tacka-modal .tkm-t small{display:block;margin-top:1px;font-size:12px;color:var(--field-muted,#b0bfd2)}
+#tacka-modal .tkm-x{flex:0 0 auto;width:44px;height:44px;border-radius:12px;border:0;background:none;cursor:pointer;display:grid;place-items:center}
+#tacka-modal .tkm-l{margin:2px 0 6px;font-size:12px;font-weight:800;letter-spacing:.3px;color:var(--field-muted,#b0bfd2)}#tacka-modal .tkm-l i{font-style:normal;font-weight:600}
+html #tacka-nm-input{background:rgba(148,163,184,.12);color:var(--field-ink,#f1f5f9);border:1px solid var(--field-border,#475569);font-size:16px;min-height:46px;margin-bottom:12px}
+html #tacka-nm-input::placeholder{color:var(--field-muted,#b0bfd2);opacity:.75}
+html #tacka-nm-input:focus{border-color:#60a5fa;box-shadow:0 0 0 3px rgba(96,165,250,.25)}
+#tacka-modal .tacka-modal-btns{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+#tacka-modal .tkm-k{flex:none;flex-direction:column;gap:2px;min-height:84px;padding:10px 4px;border-radius:13px;border:1px solid var(--field-border,#475569);background:rgba(148,163,184,.14);color:inherit;text-align:center}
+#tacka-modal .tkm-k .ic{width:24px;height:24px;margin-bottom:2px}#tacka-modal .tkm-k b{font-size:13px;font-weight:800}#tacka-modal .tkm-k small{font-size:11px;font-weight:600;color:var(--field-muted,#b0bfd2)}
+#tacka-modal #tacka-btn-confirm.tkm-ok{background:#15803d;border-color:#15803d;color:#fff}#tacka-modal #tacka-btn-confirm.tkm-ok small{color:#dcfce7}
+#tacka-modal #tacka-btn-confirm:disabled{opacity:.55;cursor:not-allowed}
+#tacka-modal .tkm-odustani{display:block;width:100%;min-height:46px;border-radius:12px;border:1px solid var(--field-border,#475569);background:none;color:inherit;font:inherit;font-weight:700;font-size:14px;cursor:pointer}
+html[data-field-theme=day] #tacka-modal .tkm-ik{background:#fef3c7;color:#92400e}
+html[data-field-theme=day] #tacka-modal .tkm-t small,html[data-field-theme=day] #tacka-modal .tkm-l,html[data-field-theme=day] #tacka-modal .tkm-k small{color:#334155}
+html[data-field-theme=day] #tacka-modal .tkm-k{background:#f1f5f9;color:#102033}
+html[data-field-theme=day] #tacka-modal #tacka-btn-confirm.tkm-ok{background:#166534;border-color:#166534;color:#fff}
+html[data-field-theme=day] #tacka-modal #tacka-btn-confirm.tkm-ok small{color:#dcfce7}
+html[data-field-theme=day] html #tacka-nm-input,html[data-field-theme=day] #tacka-nm-input{background:#fff;color:#102033}

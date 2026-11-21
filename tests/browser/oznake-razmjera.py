@@ -18,7 +18,7 @@ KML = '<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Documen
 async def stanje(page):
     return await page.evaluate("""() => ({ r: _ozrRazmjera,
       foto: map.hasLayer(_locFotos[0].marker), msr: !!_msrSavedLayer && map.hasLayer(_msrSavedLayer),
-      kml: map.hasLayer(kmlLs[kmlLs.length-1].grp) })""")
+      kml: map.hasLayer(kmlLs[kmlLs.length-1].grp), tacka: map.hasLayer(_tacke[0].marker) })""")
 
 
 async def zum(page, z):
@@ -55,6 +55,7 @@ async def main():
           _locFotos.push({la:44.905, lo:16.155, ts:777, thumb:'', full:'', marker:m, shared:false, opis:''});
           _msrRegistry.push({id:'mr_t', name:'M', mode:'dist', color:'#fbbf24', pts:[{lat:44.905,lng:16.155},{lat:44.906,lng:16.157}]});
           _msrDrawAllSaved();
+          _createTacka(44.905, 16.155, 'Test');
           await _localLayerKml('test-razmjera.kml', kml, sbUser.id);
         }""", KML)
         # z16 ≈ 1:10 000 (sve vidljivo), z14 ≈ 1:25 000-ish, z12 ≈ 1:100 000
@@ -67,6 +68,7 @@ async def main():
             assert s['foto'] == (s['r'] <= 12500), ('foto', z, s)
             assert s['msr'] == (s['r'] <= 12500), ('msr', z, s)
             assert s['kml'] == (s['r'] <= 50000), ('kml', z, s)
+            assert s['tacka'] == (s['r'] <= 25000), ('tacka', z, s)
         assert any(not s['foto'] for s in oc.values()) and any(s['foto'] for s in oc.values())
         assert any(s['kml'] and not s['foto'] for s in oc.values()), 'postoji razmjera gdje se KML vidi a foto ne'
         # isključen KML ne vaskrsava zumiranjem
@@ -86,7 +88,7 @@ async def main():
         # Meni: promjena praga za fotografije na "Uvijek" i za KML na 1:12 500
         await page.evaluate("ozrOtvori()")
         await page.wait_for_selector('#ozr-bg .ozr-sh')
-        assert await page.locator('#ozr-bg .ozr-red').count() == 3
+        assert await page.locator('#ozr-bg .ozr-red').count() == 4
         m = await page.evaluate("""() => ({ over: document.documentElement.scrollWidth - innerWidth,
           mete: [...document.querySelectorAll('#ozr-bg button')].filter(b => b.getBoundingClientRect().height < 44).length })""")
         assert m['over'] <= 1 and m['mete'] == 0, m
@@ -98,7 +100,7 @@ async def main():
         await zum(page, 13)
         s = await stanje(page)
         assert s['foto'] and not s['kml'] and not s['msr'], s
-        assert json.loads(await page.evaluate("localStorage.getItem('tvlake_oznake_razmjera_v1')")) == {'foto': 0, 'msr': 12500, 'kml': 12500}
+        assert json.loads(await page.evaluate("localStorage.getItem('tvlake_oznake_razmjera_v1')")) == {'foto': 0, 'msr': 12500, 'kml': 12500, 'tacke': 25000}
         await page.click('#ozr-bg .ozr-zad')
         s = await stanje(page)
         assert not s['foto'] and s['kml'], ('vrati zadano', s)
