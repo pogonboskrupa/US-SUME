@@ -260,6 +260,7 @@ function _netVezaVracena() {
     _serverPodsjetnik();
     try { if (typeof _processOfflineQueue === 'function') _processOfflineQueue(true); } catch(e) {}
     try { if (typeof _reloadCoreData === 'function') _reloadCoreData(); } catch(e) {}
+    try { if (typeof sbStartRealtime === 'function' && (typeof _rtVlakeChannel === 'undefined' || !_rtVlakeChannel || _rtVlakeChannel.state !== 'joined')) sbStartRealtime(); } catch(e) {}
   }, 800);
 }
 
@@ -9649,7 +9650,7 @@ function _updSyncDot(status) {
   if (!dot) return;
   dot.className = 'sync-dot sync-dot--' + status;
   dot.title = status === 'ok' ? 'Realtime sync aktivan'
-            : status === 'err' ? 'Sync prekinut — reconnect...'
+            : status === 'err' ? 'Uživo veza nije uspostavljena — pokušavam ponovo (provjeri mrežu)'
             : 'Sync neaktivan';
 }
 
@@ -9681,7 +9682,11 @@ function _notifKolegaName(korisnikId) {
 }
 
 function sbStartRealtime() {
-  if (!sbProfile?.sumarija || !_mrezaProbaj(true)) return;
+  if (!sbProfile?.sumarija) return;
+  // WebSocket je lagan pa se pokušava i na SLABOM signalu (raniji _mrezaProbaj(true) ga je tamo
+  // trajno odbijao, pa zelena tačka nikad nije stigla). Čeka se samo kad stvarno nema veze.
+  const osOff = typeof navigator !== 'undefined' && navigator.onLine === false && !(typeof _netOsLazeDo !== 'undefined' && Date.now() < _netOsLazeDo);
+  if (osOff || (typeof _netKvalitet === 'function' && _netKvalitet() === 'nema')) { _updSyncDot('err'); _rtZakaziObnovu(); return; }
   _sbRemoveRtChannels();
 
   const vCh = sb.channel('vlake-rt-' + Date.now())

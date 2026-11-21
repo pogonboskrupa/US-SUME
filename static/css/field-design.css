@@ -2111,3 +2111,6 @@ html[data-field-theme=day] #vlaka-popup .vp-row b.vp-lager{color:#92400e}
 #lbl-edit-bar .lb-row-akcije button{flex:1;font-size:13px}
 #lbl-edit-bar .lb-nova{background:#1d4ed8}
 #lbl-edit-bar .lb-ukloni{background:#7f1d1d}
+
+/* Uživo veza (v4.9.2): kad nije uspostavljena, tačka je vidljiva (žuta) umjesto da korisnik ne vidi ništa. */
+html #sync-status-dot.sync-dot--err{display:inline-block;width:8px;height:8px;margin:9px 2px 0 4px!important;border-radius:50%;background:#f59e0b;animation:none}
