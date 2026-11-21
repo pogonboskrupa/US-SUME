@@ -10,7 +10,9 @@ function owner(){return typeof sbUser!=='undefined'?sbUser?.id:null;}
 function touch(gps=false){const uid=owner();if(!uid||!gps&&document.visibilityState!=='visible')return;try{localStorage.setItem(key(uid),String(Date.now()));}catch(e){}flush();}
 async function flush(){
  const uid=owner();if(!uid||busy||Date.now()<missingUntil||typeof sb==='undefined'||!sb||Date.now()-lastTry<60000)return;
- if(typeof _mrezaProbaj==='function'?!_mrezaProbaj():!navigator.onLine)return;
+ // Sitan zahtjev (nekoliko stotina bajtova) se šalje i na SLABOJ vezi: raniji _mrezaProbaj() je na slaboj
+ // vezi uvijek odbijao, pa se prisustvo korisnika sa slabim signalom nikad nije bilježilo.
+ if(typeof _netKvalitet==='function'?_netKvalitet()==='nema':!navigator.onLine)return;
  let stamp;try{stamp=Number(localStorage.getItem(key(uid)));}catch(e){return;}if(!Number.isFinite(stamp)||stamp<=0)return;
  busy=true;lastTry=Date.now();
  const controller=new AbortController();let timer;
