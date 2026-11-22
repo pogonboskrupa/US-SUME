@@ -33954,6 +33954,7 @@ async function _loadmapRenderRecent() {
   const el=document.getElementById('loadmap-recent');if(!el)return;
   const token=++_loadmapRecentToken,maps=(await _mapMgrCollect()).slice(0,10);if(token!==_loadmapRecentToken)return;
   _loadmapRecentShown=maps;const count=document.getElementById('loadmap-recent-count');if(count)count.textContent=maps.length?maps.length+' '+(maps.length===1?'karta':maps.length<5?'karte':'karata'):'';
+  const sec=document.getElementById('loadmap-recent-sec');if(sec)sec.hidden=!maps.length;
   el.innerHTML=maps.length?maps.map((m,i)=>'<button type="button" class="lm-recent-card'+(m.visible?' active':'')+'" onclick="_loadmapRecentTap('+i+')" aria-label="'+_escHtml('Prikaži kartu '+m.name)+'">'+_loadmapThumbHtml(m.name)+'<span class="lm-recent-copy"><b>'+_escHtml(m.name)+'</b><small>'+_escHtml(_mapMgrFmtLabel(m.fmt))+(m.visible?' · trenutno prikazana':'')+'</small></span></button>').join(''):'<div class="lm-empty">Karte koje dodaš bit će ovdje za brzi pristup.</div>';
 }
 async function _loadmapShow(name) {
@@ -33980,13 +33981,34 @@ async function _loadmapRecentDel(i) {
 }
 
 // ── UPRAVLJANJE (sve karte: aktiviraj/deaktiviraj/info/obriši + prozirnost + z-index) ──
+// Redoslijed liste "Moje karte": prikazane prve su uvijek na vrhu (da se vidi šta je sada na karti), pa izabrani sort.
+const _LOADMAP_SORT_KEY='tvlake_loadmap_sort',_LOADMAP_SORTOVI=[['novo','Najnovije'],['naziv','Naziv'],['velicina','Veličina']];
+function _loadmapSortGet(){try{const v=localStorage.getItem(_LOADMAP_SORT_KEY);if(_LOADMAP_SORTOVI.some(x=>x[0]===v))return v;}catch(e){}return 'novo';}
+function _loadmapSortiraj(maps,nacin){
+  const cmp=nacin==='naziv'?(a,b)=>String(a.name).localeCompare(String(b.name),'bs',{numeric:true})
+    :nacin==='velicina'?(a,b)=>(b.size||0)-(a.size||0)
+    :(a,b)=>(b.savedAt||0)-(a.savedAt||0);
+  return maps.slice().sort((a,b)=>((b.visible?1:0)-(a.visible?1:0))||cmp(a,b));
+}
+function _loadmapSortSet(nacin){try{localStorage.setItem(_LOADMAP_SORT_KEY,nacin);}catch(e){}_loadmapRenderManage();}
+// Jedan red sažetka: koliko karata, koliko prostora, šta je prikazano — i izbor sorta (samo kad ima šta sortirati).
+function _loadmapSazetakRender(maps){
+  const el=document.getElementById('loadmap-summary');if(!el)return;
+  if(!maps.length){el.hidden=true;el.innerHTML='';return;}
+  const vis=maps.filter(m=>m.visible).length,ukupno=maps.reduce((n,m)=>n+(m.size||0),0),sort=_loadmapSortGet();
+  el.hidden=false;
+  el.innerHTML='<div class="lm-sum-txt"><b>'+maps.length+' '+(maps.length===1?'karta':maps.length<5?'karte':'karata')+'</b> · '+_escHtml(_mapMgrFmtSize(ukupno))+(vis?' · '+vis+' prikazana':' · nijedna nije prikazana')+'</div>'
+    +(maps.length>1?'<div class="lm-sort" role="group" aria-label="Redoslijed karata">'+_LOADMAP_SORTOVI.map(x=>'<button type="button" aria-pressed="'+(x[0]===sort)+'" onclick="_loadmapSortSet(\''+x[0]+'\')">'+x[1]+'</button>').join('')+'</div>':'');
+}
 function _loadmapManageSearch(q) { _loadmapManageQ = q || ''; _loadmapRenderManage(); }
 async function _loadmapRenderManage() {
   const list=document.getElementById('loadmap-manage');if(!list)return;
   const token=++_loadmapManageToken,maps=await _mapMgrCollect();if(token!==_loadmapManageToken)return;
   const szEl=document.getElementById('loadmap-size');if(szEl)szEl.textContent=_mapMgrFmtSize(maps.reduce((n,m)=>n+(m.size||0),0));
   const count=document.getElementById('loadmap-count');if(count)count.textContent=maps.length;
-  const q=_loadmapManageQ.trim().toLocaleLowerCase('bs');_loadmapManageShown=q?maps.filter(m=>m.name.toLocaleLowerCase('bs').includes(q)):maps;
+  const jos=document.getElementById('loadmap-add-more');if(jos)jos.hidden=!maps.length;
+  const q=_loadmapManageQ.trim().toLocaleLowerCase('bs');_loadmapManageShown=_loadmapSortiraj(q?maps.filter(m=>m.name.toLocaleLowerCase('bs').includes(q)):maps,_loadmapSortGet());
+  _loadmapSazetakRender(maps);
   list.innerHTML=_loadmapManageShown.length?_loadmapManageShown.map((m,i)=>{
     const sl=_sqlLayers.find(l=>l.name===m.name),op=sl?Math.round((sl.layer.options.opacity??1)*100):100;
     return '<article class="lm-card'+(m.visible?' active':'')+'">'+_loadmapThumbHtml(m.name,true)+'<div class="lm-card-top"><div class="lm-card-info"><div class="lm-card-nm">'+_escHtml(m.name)+'</div><div class="lm-card-meta">'+_escHtml(_mapMgrFmtLabel(m.fmt))+(m.size?' · '+_mapMgrFmtSize(m.size):'')+'</div>'+_loadmapBadges(m)+'</div><button type="button" class="lm-fav" aria-label="'+_escHtml('Omiljena karta '+m.name)+'" aria-pressed="'+_mapMgrIsFav(m.name)+'" onclick="_loadmapToggleFav('+i+')"><svg class="ic"><use href="#ic-zvijezda"/></svg></button></div><div class="lm-card-btns"><button class="lm-primary" onclick="_loadmapActivate('+i+')"><svg class="ic"><use href="#ic-prikazi"/></svg> Prikaži na karti</button>'+(m.visible?'<button class="lm-secondary" onclick="_loadmapDeactivate('+i+')"><svg class="ic"><use href="#ic-sakrij"/></svg> Sakrij</button>':'')+'</div><details class="lm-card-details"><summary>Detalji i podešavanja</summary>'+(m.savedAt?'<p>Dodana: '+_escHtml(_mapMgrFmtDate(m.savedAt))+'</p>':'')+(m.meta?.minzoom!=null?'<p>Uvećanje: '+_escHtml(String(m.meta.minzoom))+'–'+_escHtml(String(m.meta.maxzoom))+'</p>':'')+(sl?'<label class="lm-opacity"><span>Jačina prikaza <b id="lm-op-'+i+'">'+op+'%</b></span><input aria-label="'+_escHtml('Jačina prikaza '+m.name)+'" type="range" min="0" max="100" value="'+op+'" oninput="_loadmapSetOpacity('+i+',this.value)"></label><div class="lm-layer-order"><span>Redoslijed sloja</span><button onclick="_loadmapZ('+i+',-1)" aria-label="Pomjeri sloj ispod">↓ Ispod</button><button onclick="_loadmapZ('+i+',1)" aria-label="Pomjeri sloj iznad">↑ Iznad</button></div>':'<p>Karta je sačuvana. Prikaži je da otvoriš podešavanja.</p>')+'<div class="lm-details-actions"><button onclick="_loadmapInfo('+i+')">Informacije o karti</button><button class="lm-delete" onclick="_loadmapDelete('+i+')"><svg class="ic"><use href="#ic-obrisi"/></svg> Obriši</button></div></details></article>';

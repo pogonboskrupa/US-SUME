@@ -1362,7 +1362,6 @@ function _temModalRender(preserveDraft = false) {
         <button class="tem-ib" onclick="_temRenameCol('${jid}')" ${m.theme ? '' : 'disabled'} title="Preimenuj naziv atributa"><svg class="ic"><use href="#ic-crtaj"/></svg></button>
       </div>`}
       ${m.sourceThemes?.[m.theme] ? `<details class="tem-source-info"><summary>Legenda i opis iz fajla</summary><p>${_escHtml(m.sourceThemes[m.theme].description)}</p><p>Prazne ćelije nemaju prikazanu ocjenu i skrivene su na karti.</p></details>` : ''}
-      ${m.theme ? _temPregledHtml(m) : ''}
       ${m.theme ? `<div class="tem-op">
         <span>Jačina boje</span>
         <input type="range" min="5" max="100" step="1" value="${op}"
@@ -1377,6 +1376,7 @@ function _temModalRender(preserveDraft = false) {
         <button class="del" onclick="_temRemoveMap('${jid}')"><svg class="ic"><use href="#ic-zatvori"/></svg> Ukloni kartu</button>
       </div>
       ${edOpen ? _temClassEdHtml(m) : ''}
+      ${m.theme ? _temPregledHtml(m) : ''}
     </div>`;
   }).join('');
   const listing = rows.map(m => {
@@ -1397,7 +1397,7 @@ function _temModalRender(preserveDraft = false) {
   body.innerHTML = _temView === 'files'
     ? `${rows.length ? '<div class="tem-bulk"><button onclick="_temSetAllVisible(true)">Prikaži sve</button><button onclick="_temSetAllVisible(false)">Sakrij sve</button></div>' : ''}${listing || empty}`
     : sadnja ? `${sadnjaIntro}${sadnjaMaps.length > 1 ? `<label class="tem-picker">Fajl za sadnju<select class="tem-sel" onchange="_temOpenSadnja(this.value)">${sadnjaMaps.map(m => `<option value="${_escHtml(m.id)}"${m.id === _temSelectedId ? ' selected' : ''}>${_escHtml(m.name)}</option>`).join('')}</select></label>` : ''}${cards || sadnjaEmpty}`
-    : `${_temMaps.length ? `<label class="tem-picker">Postavke fajla<select class="tem-sel" onchange="_temChoose(this.value)">${_temMaps.map(m => `<option value="${_escHtml(m.id)}"${m.id === _temSelectedId ? ' selected' : ''}>${_escHtml(m.name)}</option>`).join('')}</select></label>` : ''}${cards || empty}`;
+    : `${_temMaps.length > 1 ? `<label class="tem-picker">Postavke fajla<select class="tem-sel" onchange="_temChoose(this.value)">${_temMaps.map(m => `<option value="${_escHtml(m.id)}"${m.id === _temSelectedId ? ' selected' : ''}>${_escHtml(m.name)}</option>`).join('')}</select></label>` : ''}${cards || empty}`;
   body.scrollTop = scroll;
   if (focusId) document.getElementById(focusId)?.focus({ preventScroll: true });
 

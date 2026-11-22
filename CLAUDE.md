@@ -5251,3 +5251,8 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 
 ### Prisustvo korisnika se nije bilježilo na slaboj vezi (v4.9.3)
 - Admin → Korisnici prikazuje `last_active_at` koji piše `UserActivity.flush` (`static/js/user-activity.js`, RPC `app_record_activity_ver`). `flush` je počinjao sa `_mrezaProbaj()`, a taj poziv na izmjereno **slaboj** vezi uvijek vraća `false` (ista klasa greške kao zelena tačka u v4.9.2) — korisnik koji radi na slabom signalu je bio u aplikaciji, a admin ga nije vidio. Sad se sitan zahtjev šalje i na slaboj vezi; čeka se samo kad je izmjereno "nema" (`_netKvalitet()==='nema'`, uključuje OS offline). Zapis čeka u `dendro_activity_pending_v1:<uid>` pa stigne čim veza proradi. Svaka nova "lagana" radnja ne smije koristiti `_mrezaProbaj()` bez `traziDobru`/`proba` razmišljanja: ono na 'slaba' uvijek odbija.
+
+### Tematska karta i Učitaj kartu — preglednost (v4.9.4)
+- **Tematska**: kartica teme ima redoslijed zaglavlje → brza tema/birač → jačina boje → radnje (Zumiraj/Tabela/Klase i boje u tri kolone, "Ukloni kartu" zasebno) → klase → legenda (pregled). Legenda je bila ispred radnji pa su kontrole ispadale iz vidokruga. Birač "Postavke fajla" se prikazuje samo uz više od jednog fajla; tabovi su kratki (Fajlovi / Tema i stil / Sadnja). `data-tem-view` i ID-jevi isti.
+- **Učitaj kartu → Moje karte**: sažetak (`#loadmap-summary`: broj karata, ukupna veličina, koliko je prikazano) i sort Najnovije/Naziv/Veličina (`_loadmapSortiraj`, `tvlake_loadmap_sort`; prikazane karte su UVIJEK na vrhu). "Brzi pristup" i donje dugme "Dodaj još jednu kartu" se skrivaju dok nema karata (prazno stanje je imalo tri dugmeta za istu radnju).
+- Test: `tests/js/loadmap-sort-tem-redoslijed.test.js`.

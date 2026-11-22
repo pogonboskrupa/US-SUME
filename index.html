@@ -5910,7 +5910,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.9.3';
+const APP_VER = 'v4.9.4';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -7177,11 +7177,12 @@ function _loadLocalVlake() {
     <section id="loadmap-pane-maps" role="tabpanel" aria-labelledby="loadmap-tab-maps" hidden>
       <section class="lm-section" id="loadmap-recent-sec"><div class="lm-section-heading"><div><h3>Brzi pristup</h3><small>Nedavno dodane karte</small></div><span id="loadmap-recent-count"></span></div><div id="loadmap-recent"></div><div id="loadmap-startup-debug" class="lm-startup-diag"></div></section>
       <section class="lm-section"><div class="lm-section-heading"><div><h3>Moje karte</h3><small>Prepoznaj kartu po isječku, prikaži je i podesi njen izgled.</small></div></div>
+        <div id="loadmap-summary" class="lm-summary" hidden></div>
         <div class="lm-library-tools"><svg class="ic"><use href="#ic-trazi"/></svg><input type="search" id="loadmap-search" placeholder="Traži kartu po nazivu…" aria-label="Traži lokalnu kartu" oninput="_loadmapManageSearch(this.value)"></div>
         <div id="loadmap-manage"></div>
       </section>
       <details class="lm-help lm-storage"><summary>Prostor za karte <b id="loadmap-size">–</b></summary><p>Iskorišteni prostor aplikacije: <span id="loadmap-quota">–</span></p><div class="mapmgr-bar"><div class="mapmgr-bar-fill" id="loadmap-bar" style="width:0%"></div></div><p>Brisanje karte uklanja njenu kopiju iz aplikacije. Izvorni fajl sačuvaj za ponovno učitavanje.</p></details>
-      <button class="lm-secondary" onclick="_loadmapTab('add')"><svg class="ic"><use href="#ic-dodaj"/></svg> Dodaj još jednu kartu</button>
+      <button class="lm-secondary" id="loadmap-add-more" onclick="_loadmapTab('add')"><svg class="ic"><use href="#ic-dodaj"/></svg> Dodaj još jednu kartu</button>
     </section>
   </div>
 </div>
@@ -7217,7 +7218,7 @@ function _loadLocalVlake() {
 <div id="tem-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="tem-title" onclick="if(event.target===this)closeTemModal()">
   <section class="tem-panel">
     <header class="tem-panel-head"><div><h3 id="tem-title">Tematske karte</h3><small id="tem-file-count">GPKG fajlovi</small></div><button onclick="closeTemModal()" aria-label="Zatvori tematske karte">✕</button></header>
-    <nav class="tem-tabs" role="tablist" aria-label="Pregled tematskih karata"><button role="tab" data-tem-view="files" aria-controls="tem-modal-body" onclick="_temSwitchView('files')">Učitani fajlovi</button><button role="tab" data-tem-view="style" aria-controls="tem-modal-body" onclick="_temSwitchView('style')">Tema i stil</button><button role="tab" data-tem-view="sadnja" aria-controls="tem-modal-body" onclick="_temSwitchView('sadnja')">Sadnja · 7 vrsta</button></nav>
+    <nav class="tem-tabs" role="tablist" aria-label="Pregled tematskih karata"><button role="tab" data-tem-view="files" aria-controls="tem-modal-body" onclick="_temSwitchView('files')">Fajlovi</button><button role="tab" data-tem-view="style" aria-controls="tem-modal-body" onclick="_temSwitchView('style')">Tema i stil</button><button role="tab" data-tem-view="sadnja" aria-controls="tem-modal-body" onclick="_temSwitchView('sadnja')">Sadnja</button></nav>
     <div id="tem-modal-body" role="tabpanel"></div>
     <input type="file" id="tem-file-input" accept=".gpkg" multiple style="display:none;" onchange="_gpkgLoadFiles(this.files);this.value=''">
     <footer class="tem-panel-foot"><button class="tem-ucitaj" onclick="document.getElementById('tem-file-input').click()">＋ Učitaj GPKG fajlove</button><small id="tem-load-status" role="status" aria-live="polite"></small></footer>

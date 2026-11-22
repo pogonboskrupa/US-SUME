@@ -2114,3 +2114,18 @@ html[data-field-theme=day] #vlaka-popup .vp-row b.vp-lager{color:#92400e}
 
 /* Uživo veza (v4.9.2): kad nije uspostavljena, tačka je vidljiva (žuta) umjesto da korisnik ne vidi ništa. */
 html #sync-status-dot.sync-dot--err{display:inline-block;width:8px;height:8px;margin:9px 2px 0 4px!important;border-radius:50%;background:#f59e0b;animation:none}
+
+/* ── Tematska karta i Učitaj kartu — preglednost (v4.9.4) ── */
+html #tem-modal .tem-akc {grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:12px;}
+html #tem-modal .tem-akc button {height:46px;flex-direction:column;gap:2px;font-size:11px;white-space:normal;line-height:1.15;padding:4px;}
+html #tem-modal .tem-akc button .ic {width:18px;height:18px;}
+html #tem-modal .tem-akc button.del {grid-column:1/-1;flex-direction:row;height:40px;font-size:12px;}
+html #tem-modal .tem-op {margin:12px 0 0;}
+html #tem-modal .tem-pg {margin-top:12px;}
+html .tem-tabs button {min-height:44px;}
+html #loadmap-modal [hidden],html #loadmap-modal #loadmap-recent-sec[hidden],html #loadmap-modal #loadmap-add-more[hidden] {display:none !important;}
+.lm-summary {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin:0 0 12px;}
+.lm-sum-txt {font:12px/1.5 system-ui;color:var(--field-muted);}.lm-sum-txt b {color:var(--field-ink);font-weight:700;}
+.lm-sort {display:flex;gap:4px;padding:3px;border:1px solid var(--field-border);border-radius:10px;background:var(--field-card);}
+.lm-sort button {min-height:36px;padding:4px 10px;border:0;border-radius:7px;background:transparent;color:var(--field-muted);font:650 12px system-ui;cursor:pointer;}
+.lm-sort button[aria-pressed=true] {background:var(--lm-tone);color:var(--lm-accent);}
