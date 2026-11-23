@@ -129,6 +129,101 @@ async function _netProvjeriVezu() {
   return txt;
 }
 
+// ─── PUNA DIJAGNOSTIKA VEZE (v4.9.5) ─────────────────────────────────────────
+// Prijava: korisnik je na netu, a aplikacija radi kao offline. Iz razvojnog okruženja se telefon korisnika ne može
+// dosegnuti, pa dijagnostika mora biti na NJEGOVOM telefonu: jedan dodir skuplja sve što razlikuje uzroke (OS
+// javlja offline / aplikacija zaključila "nema" / sesija je samo keš / server blokiran / WebSocket blokiran /
+// pogrešan sat telefona) i daje tekst koji se šalje adminu preko Viber/SMS (ne traži mrežu aplikacije).
+async function _netCorsProbe(url, ms, headers) {
+  const t0 = Date.now(), ctl = new AbortController(), tmr = setTimeout(() => ctl.abort(), ms);
+  try {
+    const r = await fetch(url, { cache: 'no-store', signal: ctl.signal, headers: headers || {} });
+    let date = null; try { date = r.headers.get('date'); } catch (e) {}
+    return { ok: true, status: r.status, ms: Date.now() - t0, date };
+  } catch (e) {
+    return { ok: false, ms: Date.now() - t0, vrsta: ctl.signal.aborted ? 'istek' : 'odbijeno', poruka: String((e && e.message) || e).slice(0, 60) };
+  } finally { clearTimeout(tmr); }
+}
+function _netWsProbe(url, ms) {
+  return new Promise(resolve => {
+    const t0 = Date.now(); let gotov = false, ws = null;
+    const kraj = r => { if (gotov) return; gotov = true; try { ws && ws.close(); } catch (e) {} resolve(Object.assign({ ms: Date.now() - t0 }, r)); };
+    try { ws = new WebSocket(url); } catch (e) { return kraj({ ok: false, poruka: String((e && e.message) || e).slice(0, 60) }); }
+    ws.onopen = () => kraj({ ok: true });
+    ws.onerror = () => kraj({ ok: false, poruka: 'greška pri otvaranju' });
+    ws.onclose = ev => kraj({ ok: false, poruka: 'zatvoreno kod ' + (ev && ev.code) });
+    setTimeout(() => kraj({ ok: false, vrsta: 'istek' }), ms);
+  });
+}
+function _netProbaTxt(r) { return r.ok ? 'OK' + (r.status != null ? ' HTTP ' + r.status : '') + ' ' + r.ms + ' ms' : (r.vrsta === 'istek' ? 'ISTEK ' + r.ms + ' ms' : 'ODBIJENO' + (r.poruka ? ' (' + r.poruka + ')' : '')); }
+async function _netDijagnostikaPuna() {
+  const btn = document.getElementById('btn-net-puna'), out = document.getElementById('net-dijagnoza-out');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Skupljam…'; }
+  const L = [], sad = Date.now();
+  const host = typeof SUPA_URL !== 'undefined' ? SUPA_URL : '', kljuc = typeof SUPA_KEY !== 'undefined' ? SUPA_KEY : '';
+  const ws = host ? host.replace(/^http/, 'ws') + '/realtime/v1/websocket?apikey=' + encodeURIComponent(kljuc) + '&vsn=1.0.0' : '';
+  const [health, rest, net, wsr] = await Promise.all([
+    host ? _netCorsProbe(host + '/auth/v1/health', 8000, { apikey: kljuc }) : Promise.resolve({ ok: false, poruka: 'nema adrese' }),
+    host ? _netCorsProbe(host + '/rest/v1/', 8000, { apikey: kljuc }) : Promise.resolve({ ok: false, poruka: 'nema adrese' }),
+    _netSondaZahtjev('https://www.gstatic.com/generate_204', 8000),
+    ws ? _netWsProbe(ws, 8000) : Promise.resolve({ ok: false, poruka: 'nema adrese' })
+  ]);
+  let sesija = 'nema podataka';
+  try {
+    const g = await Promise.race([sb.auth.getSession(), new Promise(r => setTimeout(() => r({ timeout: true }), 3000))]);
+    if (g && g.timeout) sesija = 'getSession ISTEK (3 s)';
+    else if (g && g.error) sesija = 'greška: ' + g.error.message;
+    else if (g && g.data && g.data.session) {
+      const ex = g.data.session.expires_at;
+      sesija = 'postoji, token ističe za ' + (ex ? Math.round((ex * 1000 - sad) / 60000) + ' min' : '?');
+    } else sesija = 'NEMA prave sesije';
+  } catch (e) { sesija = 'izuzetak: ' + String((e && e.message) || e).slice(0, 60); }
+  let sat = 'nije mjerljivo (server ne otkriva vrijeme)';
+  const d = (health.ok && health.date) || (rest.ok && rest.date) || null;
+  if (d && Date.parse(d)) { const dz = Math.round((sad - Date.parse(d)) / 1000); sat = (Math.abs(dz) > 120 ? '⚠ ' : '') + 'sat telefona ' + (dz >= 0 ? 'kasni/ide ispred' : 'kasni') + ' ' + Math.abs(dz) + ' s u odnosu na server'; }
+  const nav = typeof navigator !== 'undefined' ? navigator : {}, cn = nav.connection || {};
+  L.push('DIJAGNOSTIKA VEZE — Dendro Map ' + (typeof APP_VER !== 'undefined' ? APP_VER : '?') + ' (' + (window.AndroidUpdate ? 'APK' : 'web') + ')');
+  L.push('Korisnik: ' + ((sbProfile && (sbProfile.ime + ' ' + (sbProfile.prezime || ''))) || '?') + ' · ' + (sbUser && sbUser.id ? String(sbUser.id).slice(0, 8) : '—'));
+  L.push('Vrijeme telefona: ' + new Date(sad).toISOString() + ' (pomak ' + (-new Date(sad).getTimezoneOffset()) + ' min) · ' + sat);
+  L.push('Telefon javlja online: ' + nav.onLine + (cn.effectiveType ? ' · ' + cn.effectiveType + ' ' + (cn.downlink || '?') + ' Mb/s' + (cn.saveData ? ' · ušteda podataka' : '') : ''));
+  L.push('Aplikacija: offline režim=' + !!_isOfflineMode + ' · stanje=' + _netKvalitet() + ' · OS offline (računa se)=' + _netOsOffline() + ' · vrata=' + (_netDozvoliZahtjev() ? 'otvorena' : 'ZATVORENA'));
+  L.push('Sesija: ' + sesija + ' · keš-profil=' + !!(sbUser && sbUser._cachedStub) + ' · odobren=' + (sbProfile ? sbProfile.odobren : '?'));
+  L.push('— Probe sada —');
+  L.push('Server /auth health: ' + _netProbaTxt(health));
+  L.push('Server /rest: ' + _netProbaTxt(rest));
+  L.push('Realtime WebSocket: ' + (wsr.ok ? 'OK ' + wsr.ms + ' ms' : (wsr.vrsta === 'istek' ? 'ISTEK' : 'NE RADI' + (wsr.poruka ? ' (' + wsr.poruka + ')' : ''))));
+  L.push('Internet (gstatic): ' + (net.ok ? 'OK ' + net.ms + ' ms' : net.vrsta === 'istek' ? 'ISTEK' : 'ODBIJENO'));
+  try {
+    const sw = nav.serviceWorker;
+    L.push('Service worker: ' + (sw && sw.controller ? 'aktivan' : 'nema kontrolera') + (window.AndroidUpdate ? '' : ''));
+  } catch (e) {}
+  const u = _netUzorci.slice(-8);
+  L.push('— Zadnjih ' + u.length + ' poziva ka serveru —');
+  u.forEach(x => L.push(Math.round((sad - x.t) / 1000) + ' s | ' + (x.ok ? 'ok ' : 'PAO ') + x.ms + ' ms ' + (x.vrsta || '') + ' ' + (x.host || '') + (x.poruka ? ' ' + x.poruka : '')));
+  let zakljucak = '';
+  if (!health.ok && !rest.ok && net.ok) zakljucak = 'Internet radi, a server ne odgovara → blokada (Private DNS / VPN / mreža / blokator).';
+  else if (!health.ok && !net.ok) zakljucak = 'Ni internet ni server ne odgovaraju → mobilni podaci / Wi-Fi.';
+  else if ((health.ok || rest.ok) && !wsr.ok) zakljucak = 'Server radi, ali WebSocket ne → realtime blokiran (zelena tačka ne svijetli); ostalo bi trebalo raditi.';
+  else if ((health.ok || rest.ok) && (_isOfflineMode || _netKvalitet() === 'nema')) zakljucak = 'Server RADI, a aplikacija misli da nema veze → greška stanja u aplikaciji (ne u mreži). Pošalji ovaj izvještaj.';
+  else if ((health.ok || rest.ok) && /NEMA|ISTEK|greška|izuzetak/.test(sesija)) zakljucak = 'Veza radi, ali nema valjane sesije → problem prijave (token/PIN), ne mreže.';
+  else if (/⚠/.test(sat)) zakljucak = 'Sat telefona je pogrešan → sigurnosna provjera/token mogu padati. Uključi automatsko vrijeme.';
+  else zakljucak = 'Sve izgleda u redu.';
+  L.splice(1, 0, 'ZAKLJUČAK: ' + zakljucak);
+  const txt = L.join('\n');
+  _netDijagnozaPuna = txt;
+  try { _debugUpsert('net-puna', 'Puna dijagnostika veze', txt, zakljucak.startsWith('Sve') ? 'uspjeh' : 'aktivno'); } catch (e) {}
+  if (out) out.textContent = txt;
+  if (btn) { btn.disabled = false; btn.textContent = '🩺 Dijagnostika'; }
+  return txt;
+}
+var _netDijagnozaPuna = '';
+async function _netDijagnostikaPosalji() {
+  const txt = _netDijagnozaPuna || await _netDijagnostikaPuna();
+  try { if (window.AndroidShare && AndroidShare.shareText) { AndroidShare.shareText('Dijagnostika veze', txt); return; } } catch (e) {}
+  try { if (navigator.share) { await navigator.share({ title: 'Dijagnostika veze', text: txt }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(txt); showToast('📋 Kopirano — zalijepi u poruku'); } catch (e) { showToast('Kopiranje nije uspjelo'); }
+}
+
 function _netSvjezi() {
   const sad = Date.now();
   return _netUzorci.filter(u => sad - u.t <= _NET_SVJEZE_MS);
@@ -595,13 +690,13 @@ function _serverSazetakRender() {
     (n.blok ? '<div style="font-size:11px;color:#fbbf24;margin-top:6px">⚠ ' + n.blok + ' stavk' + (n.blok === 1 ? 'a' : 'e') + ' server odbija — pogledaj Problemi.</div>' : '') +
     (_serverSaljem ? '<div style="font-size:12px;color:#60a5fa;margin-top:8px">⏳ Šaljem…</div>' : '');
   if(typeof _serverPanelSazetak==='function') el.innerHTML=_serverPanelSazetak(n,st,z);
-  if (st === 'nema' || st === 'slaba') {
-    const rz = _netRazlog(), zad = _netSondaZadnja;
+  if (st === 'nema' || st === 'slaba' || _isOfflineMode) {
+    const rz = _netRazlog() || (_isOfflineMode ? 'Aplikacija je u offline režimu.' : ''), zad = _netSondaZadnja;
     el.innerHTML += '<div id="net-dijagnoza" style="margin-top:8px;padding:8px 10px;border-radius:10px;border:1px solid rgba(251,191,36,.45);background:rgba(251,191,36,.1);font-size:12px;line-height:1.45">' +
       '<b>Zašto piše da nema veze?</b><div style="margin-top:3px">' + _escHtml(rz) + '</div>' +
       (zad && !zad.ok ? '<div style="margin-top:3px;color:#94a3b8">Zadnja sonda ' + _escHtml(String(_fmtAgo(zad.t)).toLowerCase()) + ': ' + (zad.vrsta === 'istek' ? 'istek' : 'odbijeno') + '</div>' : '') +
-      '<div id="net-dijagnoza-out" style="margin-top:4px;white-space:pre-line;color:#cbd5e1">' + _escHtml(_netDijagnozaTxt) + '</div>' +
-      '<button type="button" id="btn-net-provjeri" onclick="_netProvjeriVezu()" style="margin-top:7px;min-height:42px;padding:0 14px;border-radius:10px;border:0;background:#2563eb;color:#fff;font-weight:700">📶 Provjeri vezu</button></div>';
+      '<div id="net-dijagnoza-out" style="margin-top:4px;white-space:pre-line;color:#cbd5e1">' + _escHtml(_netDijagnozaPuna || _netDijagnozaTxt) + '</div>' +
+      '<button type="button" id="btn-net-provjeri" onclick="_netProvjeriVezu()" style="margin-top:7px;min-height:42px;padding:0 14px;border-radius:10px;border:0;background:#2563eb;color:#fff;font-weight:700">📶 Provjeri vezu</button> <button type="button" id="btn-net-puna" onclick="_netDijagnostikaPuna()" style="margin-top:7px;min-height:42px;padding:0 14px;border-radius:10px;border:0;background:#0f766e;color:#fff;font-weight:700">🩺 Dijagnostika</button> <button type="button" onclick="_netDijagnostikaPosalji()" style="margin-top:7px;min-height:42px;padding:0 14px;border-radius:10px;border:1px solid #64748b;background:transparent;color:#e2e8f0;font-weight:700">📤 Pošalji adminu</button></div>';
   }
   if (n.siroce) el.innerHTML += '<div style="font-size:11px;color:#94a3b8;margin-top:6px">📍 ' + n.siroce +
     ' GPS tačaka pripada odjelu koji je obrisan sa servera — ostaju na telefonu (izvoz pojasa), ne šalju se.</div>';
