@@ -690,8 +690,8 @@ function _serverSazetakRender() {
     (n.blok ? '<div style="font-size:11px;color:#fbbf24;margin-top:6px">⚠ ' + n.blok + ' stavk' + (n.blok === 1 ? 'a' : 'e') + ' server odbija — pogledaj Problemi.</div>' : '') +
     (_serverSaljem ? '<div style="font-size:12px;color:#60a5fa;margin-top:8px">⏳ Šaljem…</div>' : '');
   if(typeof _serverPanelSazetak==='function') el.innerHTML=_serverPanelSazetak(n,st,z);
-  if (st === 'nema' || st === 'slaba' || _isOfflineMode) {
-    const rz = _netRazlog() || (_isOfflineMode ? 'Aplikacija je u offline režimu.' : ''), zad = _netSondaZadnja;
+  if (st === 'nema' || st === 'slaba' || (typeof _isOfflineMode !== 'undefined' && _isOfflineMode)) {
+    const rz = _netRazlog() || (typeof _isOfflineMode !== 'undefined' && _isOfflineMode ? 'Aplikacija je u offline režimu.' : ''), zad = _netSondaZadnja;
     el.innerHTML += '<div id="net-dijagnoza" style="margin-top:8px;padding:8px 10px;border-radius:10px;border:1px solid rgba(251,191,36,.45);background:rgba(251,191,36,.1);font-size:12px;line-height:1.45">' +
       '<b>Zašto piše da nema veze?</b><div style="margin-top:3px">' + _escHtml(rz) + '</div>' +
       (zad && !zad.ok ? '<div style="margin-top:3px;color:#94a3b8">Zadnja sonda ' + _escHtml(String(_fmtAgo(zad.t)).toLowerCase()) + ': ' + (zad.vrsta === 'istek' ? 'istek' : 'odbijeno') + '</div>' : '') +
