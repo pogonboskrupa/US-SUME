@@ -9830,7 +9830,8 @@ function sbStartRealtime() {
   // Projekt clanovi realtime — obavijest kad te neko doda u projekat
   _rtClanoviChannel = sb.channel('clanovi-rt-' + Date.now())
     .on('postgres_changes', {
-      event: 'INSERT', schema: 'public', table: 'projekt_clanovi'
+      event: 'INSERT', schema: 'public', table: 'projekt_clanovi',
+      filter: `korisnik_id=eq.${typeof sbUser !== 'undefined' && sbUser ? sbUser.id : ''}`
     }, payload => {
       if (payload.new?.korisnik_id === sbUser?.id && payload.new?.added_by !== sbUser?.id) {
         _notifBump('vlake');
@@ -15684,8 +15685,13 @@ window.addEventListener('pagehide', () => {
 });
 
 // Periodični sync — fallback ako 'online' event izostane (čest slučaj na Androidu)
+var _syncTikBr = 0;
 setInterval(async () => {
   if (!navigator.onLine || !sbUser || !sbProfile) return;
+  // Pozadinsko održavanje (token, realtime, sandučić) nema smisla dok ekran ne gleda niko —
+  // štedi zahtjeve besplatnog Supabase naloga. Nadoknađuje se na visibilitychange.
+  if (typeof document !== 'undefined' && document.hidden) return;
+  _syncTikBr++;
   // Terenski podaci čekaju izričit zahtjev. Jedini automatski upis je
   // trajno sačuvan novi projekat, da članstvo ne prethodi roditelju.
   // Sve ispod je neobavezno održavanje (token, tragovi, realtime) — na
@@ -15717,7 +15723,8 @@ setInterval(async () => {
   } catch(e) {}
   // Doznaka per-projekat kanal — isti tretman (SUBSCRIBED okida catch-up pojaseva)
   try { _dozEnsureChannel(); } catch(e) {}
-  try { _primljeniSync(); } catch(e) {}   // rezerva ako realtime događaj izostane
+  // Sandučić stiže realtime-om; polling je samo rezerva, pa 5 min umjesto 60 s (5× manje upita).
+  if (_syncTikBr % 5 === 0) { try { _primljeniSync(); } catch(e) {} }
 }, 60000);
 
 function _updWakeLockIcon() {
