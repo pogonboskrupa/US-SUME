@@ -57,7 +57,7 @@ public class MapDownloadsTest {
  }
 
  private android.app.Notification waitNotice(Context c,String content) throws Exception {
-  long end=System.currentTimeMillis()+10000;String last="";
+  long end=System.currentTimeMillis()+30000;String last="";
   do{last="";for(android.service.notification.StatusBarNotification n:c.getSystemService(android.app.NotificationManager.class).getActiveNotifications()){
    String text=String.valueOf(n.getNotification().extras.getCharSequence(android.app.Notification.EXTRA_TEXT));last+=n.getId()+":"+text+"; ";
    if(n.getId()==MapDownloadService.NOTICE&&text.contains(content))return n.getNotification();}

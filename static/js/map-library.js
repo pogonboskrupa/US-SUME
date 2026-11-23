@@ -14,7 +14,7 @@
     sync();const rows=[];const center=map.getCenter();
     const add=r=>{const m=meta[r.key]||{};r.title=m.title||r.title;r.odjel=department(m.odjel??r.odjel);r.gj=m.gj??r.gj??'';r.note=m.note||'';r.distance=Infinity;try{if(r.position)r.distance=map.distance(center,r.position);}catch(e){}rows.push(r);};
     kmlLs.forEach((k,i)=>{let position;try{const b=k.grp?.getBounds();if(b?.isValid())position=b.getCenter();}catch(e){}
-      add({key:key(k._key?'server':'local',k._key||k._origName||k.name),category:k._key?'server':'local',ref:k,index:i,title:k.name||'Fajl',odjel:k.tag||'',gj:k._folder?.split('/')[0]||'',ts:date(k._loadedAt),position,visible:!!k.grp&&k.vis!==false&&map.hasLayer(k.grp),ready:!!k.grp,detail:k.grp?_kmlFeatureCount(k.grp)+' elemenata':'Nije preuzeto',color:k.col});});
+      add({key:key(k._key?'server':'local',k._key||k._origName||k.name),category:k._key?'server':'local',ref:k,index:i,title:k.name||'Fajl',odjel:k.tag||'',gj:k._folder?.split('/')[0]||'',ts:date(k._loadedAt),position,visible:!!k.grp&&k.vis!==false&&(map.hasLayer(k.grp)||!!k._zoomSakriven),ready:!!k.grp,detail:k.grp?_kmlFeatureCount(k.grp)+' elemenata':'Nije preuzeto',color:k.col});});
     for(const [list,shared]of [[_locFotos,false],[_sharedFotos,true]])for(const f of list)add({key:key('photos',_tvPhotoKey(f,shared)),category:'photos',ref:f,shared,title:'Fotografija',odjel:f.odjel||'',gj:f.gj||'',ts:date(f.ts),position:[f.la,f.lo],visible:!!f.marker&&map.hasLayer(f.marker),ready:true,detail:shared?'Podijeljena fotografija':'Moja fotografija',thumb:f.thumb});
     for(const t of _tragRegistry){const pts=t.pts||[],mid=pts[Math.floor(pts.length/2)];add({key:key('tracks',t.id),category:'tracks',ref:t,title:_tragIme(t),odjel:t.odjel||'',gj:t.gj||'',ts:date(t.date)||date(pts[0]?.[3]),position:mid?[mid[0],mid[1]]:null,visible:typeof _tvTrackVisible==='function'?_tvTrackVisible(t):t.visible!==false,ready:true,detail:_tragFmtLen(_tragCalcLen(pts))+' · '+pts.length+' tačaka',color:t.color});}
     return rows;
@@ -42,7 +42,7 @@
     // Kompaktan red: vrsta, naziv, jedan red podataka i tri brze radnje. Sve ostalo je iza "⋯".
     const meta=[r.odjel==='Bez odjela'?'':r.odjel,r.gj,r.detail,when,dist].filter(Boolean).map(esc).join(' · ');
     const quick=r.ready?btn('visibility',r.key,'<svg class="ic" aria-hidden="true"><use href="#ic-'+(r.visible?'prikazi':'sakrij')+'"/></svg>','class="ml-q ml-q-vis" aria-pressed="'+r.visible+'" aria-label="'+(r.visible?'Sakrij':'Prikaži')+'" title="'+(r.visible?'Sakrij sa karte':'Prikaži na karti')+'"')+btn('zoom',r.key,'<svg class="ic" aria-hidden="true"><use href="#ic-meta"/></svg>','class="ml-q" aria-label="Na karti" title="Prikaži na karti"')+btn('edit',r.key,otv?'×':'⋯','class="ml-q ml-q-more" aria-expanded="'+otv+'" aria-label="'+(otv?'Zatvori uređivanje':'Uredi')+'" title="Uredi i više radnji"'):btn('download',r.key,'↓ Preuzmi','class="ml-q ml-q-dl" aria-label="Preuzmi za offline"');
-    const extras=(r.category==='photos'&&!r.shared?btn('share',r.key,'Podijeli fotografiju'):'')+(r.category==='local'?btn('export-file',r.key,'Sačuvaj KML fajl')+btn('send',r.key,'Pošalji korisniku')+btn('klik',r.key,r.ref.klikOff?'🔓 Uključi klik na karti':'🔒 Isključi klik na karti'):'')+(r.category==='tracks'?btn('send',r.key,'Pošalji korisniku'):'')+(r.category==='tracks'?btn('export',r.key,'Izvezi / podijeli KML'):'')+btn('remove',r.key,r.category==='server'?'Ukloni offline kopiju':r.shared?'Ukloni s ovog telefona':'Obriši','class="ml-danger"');
+    const extras=(r.category==='photos'&&!r.shared?btn('share',r.key,'Pošalji fotografiju (KML)'):'')+(r.category==='local'?btn('export-file',r.key,'Sačuvaj KML fajl')+btn('send',r.key,'Pošalji korisniku')+btn('klik',r.key,r.ref.klikOff?'🔓 Uključi klik na karti':'🔒 Isključi klik na karti'):'')+(r.category==='tracks'?btn('send',r.key,'Pošalji korisniku'):'')+(r.category==='tracks'?btn('export',r.key,'Izvezi / podijeli KML'):'')+btn('remove',r.key,r.category==='server'?'Ukloni offline kopiju':r.shared?'Ukloni s ovog telefona':'Obriši','class="ml-danger"');
     const naslov=r.ready?'<button type="button" class="ml-title" data-action="zoom" data-key="'+esc(r.key)+'" onclick="_libraryAction(this.dataset.action,this.dataset.key)" title="Prikaži na karti">'+esc(r.title)+'</button>':'<span class="ml-title">'+esc(r.title)+'</span>';
     const own=/^#[a-f\d]{6}$/i.test(r.color||'')?r.color:'';
     return '<article class="ml-card'+(r.visible?'':' ml-hidden')+(otv?' ml-open':'')+(own?' ml-own':'')+'"'+(own?' style="--ml-own:'+own+';--ml-own-ink:'+(function(h){const l=[1,3,5].map(i=>{const v=parseInt(h.slice(i,i+2),16)/255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4);}),L=.2126*l[0]+.7152*l[1]+.0722*l[2];return (L+.05)/.0722>=(1.05)/(L+.05)?'#14202a':'#fff';})(own)+'"':'')+' data-category="'+r.category+'" data-row-key="'+esc(r.key)+'"><div class="ml-card-head">'+main+'<div class="ml-txt"><h3>'+naslov+'</h3><small>'+[r.category==='photos'?'<b class="ml-type">Slika</b>':'',r.ready?'':'na serveru',meta].filter(Boolean).join(' · ')+'</small>'+(bezOdjela?btn('assign',r.key,'Dodijeli odjelu','class="ml-assign"'):'')+'</div><div class="ml-quick">'+quick+'</div></div>'+(r.note?'<p class="ml-note">'+esc(r.note)+'</p>':'')+(otv&&r.ready?'<div class="ml-actions">'+extras+'</div>'+editor(r):'')+'</article>';
@@ -75,11 +75,11 @@
       visible([r],true);closeOznakePanel();if(r.category==='local'||r.category==='server')_ozZoomKml(r.index);else if(r.category==='tracks')_tragRegZoom(r.ref.id);else if(r.position){map.setView(r.position,Math.max(map.getZoom(),17));r.ref.marker?.openPopup();}return;
     }
     if(actionName==='open'){closeOznakePanel();await openFotoFullscreen(r.ref.ts,r.shared);return;}
-    if(actionName==='share'){closeOznakePanel();await openShareFotoDlg(r.ref.ts);return;}
+    if(actionName==='share'){closeOznakePanel();await _fotoPosalji(r.ref.ts);return;}
     if(actionName==='klik'){if(r.category==='local'||r.category==='server'){_kmlKlikPostavi(r.ref,r.ref.klikOff!==true);showToast(r.ref.klikOff?'🔒 Klik na fajl isključen':'🔓 Klik na fajl uključen');}return;}
     if(actionName==='send'){
       if(r.category==='local'){await _layerPosalji(r.index);return;}
-      if(r.category==='tracks'){podaciPosalji('trag',_tragIme(r.ref),_tragToKml(r.ref));return;}
+      if(r.category==='tracks'){if(r.ref.fotos?.length&&typeof _tragPosaljiSaSlikama==='function')_tragPosaljiSaSlikama(r.ref);else podaciPosalji('trag',_tragIme(r.ref),_tragToKml(r.ref));return;}
       return;
     }
     if(actionName==='export'){await _tragKmlMeni(r.ref.id);return;}
@@ -110,5 +110,16 @@
     _libraryFilter(value){sync();category=Object.hasOwn(labels,value)?value:'all';limit=40;opened='';saveView();render();},
     _librarySearch(value){sync();query=String(value).slice(0,160);limit=40;saveView();render();},_librarySort(value){sync();sortRucno=true;sort=['department','date','proximity','name'].includes(value)?value:'department';limit=40;saveView();render();},
     _libraryGroup(on,group){visible(filtered().filter(r=>!group||JSON.stringify([r.gj,r.odjel])===group),!!on);},_libraryMore(){limit+=40;render();}});
-  map.on('moveend',()=>{if(sort==='proximity'&&el('oznake-panel')?.style.display!=='none')render();});
+  // Sort "najbliže sredini karte" se osvježava na pomak karte — ali NE dok je otvoreno uređivanje stavke ili
+  // dok je fokus u polju preglednika: "Prati me" pomjera kartu na svaki GPS fiks, a otvaranje tastature
+  // mijenja veličinu prikaza (i to je moveend), pa je ponovno crtanje brisalo polje čim se dodirne i
+  // ništa se nije moglo upisati. Uz to najviše jedno crtanje u 1,5 s.
+  let moveT=0;
+  function moveRender(){
+    if(sort!=='proximity'||el('oznake-panel')?.style.display==='none')return;
+    const a=document.activeElement;
+    if(opened||(a&&el('oznake-panel')?.contains?.(a)&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)))return;
+    const sad=Date.now();if(sad-moveT<1500)return;moveT=sad;render();
+  }
+  map.on('moveend',moveRender);
 })();

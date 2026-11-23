@@ -58,6 +58,12 @@
     const q = input ? input.value : lastQuery;
     lastQuery = q;
     if (!norm(q)) { el.innerHTML = ''; return; }
+    // Granice se ne parsiraju pri pokretanju (glavni.js _kmlLijenoUcitaj) — učitaj ih pa pretraži ponovo.
+    if (typeof kmlLs !== 'undefined' && typeof _kmlLijenoUcitajSve === 'function' && kmlLs.some(k => k && k._lijeno)) {
+      el.innerHTML = '<p class="gt-empty">Učitavam granice…</p>';
+      if (!render._ucitava) { render._ucitava = true; _kmlLijenoUcitajSve().finally(() => { render._ucitava = false; render(); }); }
+      return;
+    }
     const all = search(q), esc = typeof _escHtml === 'function' ? _escHtml : String;
     if (!candidates().length) { el.innerHTML = '<p class="gt-empty">Nema učitanih granica. Preuzmi granice ispod ili dodaj vlastiti KML.</p>'; return; }
     if (!all.length) { el.innerHTML = '<p class="gt-empty">Nema odjela za „' + esc(q) + '“.</p>'; return; }

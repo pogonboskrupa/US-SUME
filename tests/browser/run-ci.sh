@@ -5,13 +5,19 @@
 # da im paralelni Chromiumi ne kvare mjerenje (lažni istek roka).
 set -u
 cd "$(dirname "$0")/../.."
-SAMI="kml-50000 kml-tacke-canvas field-five-hours field-offline-5400 slow-render-289"
+SAMI="kml-50000 kml-tacke-canvas field-five-hours field-offline-5400 slow-render-289 resize-img"
 PARALELNO=(
+  tests/browser/oznake-razmjera.py
+  tests/browser/foto-opis.py
+  tests/browser/primljeni-poruke.py
+  tests/browser/kml-lijeno.py
   tests/browser/terrain-workspace-243.py
   tests/browser/inline-split-startup.py
   tests/browser/labele-vlaka.py
   tests/browser/offline-import-240.py
   tests/browser/explorer-full-239.py
+  tests/browser/explorer-glide.py
+  tests/browser/nalog-modal.py
   tests/browser/explorer-239.py
   tests/browser/access-238.py
   tests/browser/overlays-237.py
@@ -61,6 +67,7 @@ SAMI_LISTA=(
   tests/browser/kml-tacke-canvas.py
   tests/browser/field-five-hours.py
   tests/browser/slow-render-289.py
+  tests/browser/resize-img.py
   tests/browser/field-offline-5400.py
 )
 LOG=$(mktemp -d)

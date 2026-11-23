@@ -19,7 +19,6 @@ function sync(){
  for(const id of ['spd-menu-launch','trn-profile-open']){const e=el(id);if(e)e.hidden=!active;}
  for(const id of ['mdrop-upravljanje']){const e=el(id);if(e)e.hidden=active;}
  text('menu-project-section-title',active?'Zapisi i izvoz':'Projekti i izvoz');
- const sub=el('menu-context');if(sub)sub.textContent=active?'Teren, lični zapisi i karte':'Alati, projekti i aplikacija';
  if(!active||owner!==null&&owner!==sbUser.id){
   close(false);
   el('spd-profile')?.querySelectorAll('[data-spd-value]').forEach(e=>e.textContent='');

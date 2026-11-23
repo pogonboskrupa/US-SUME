@@ -50,12 +50,14 @@ test('Primljeno zamjenjuje samo potvrđeni projekat i ne čuva geometriju',()=>{
 test('doznaka prikazuje autora zone i pojas grupiše po projektantu',()=>{const h=setup();h.e._dozOdjeli=[{id:'D',name:'Odjel 105'}];h.e._serverDozReceived('D',[{id:'z',user_id:'other'}],[{user_id:'other'},{user_id:'other'},{user_id:'me'}],[{user_id:'other',_korisnik:{ime:'Amir',prezime:'Kolega'}}],'me');const r=h.e._serverTransfers('received');assert.equal(r.length,3);assert.equal(r[0].author,'Amir Kolega');assert.equal(r[1].detail,'2 GPS tačke');h.e._serverDozReceived('D',[],[],[],'other');assert.equal(h.e._serverTransfers('received').length,3);});
 test('prikaz potvrda escapira nazive i ograničava historiju bez diranja reda',()=>{const h=setup();h.e._serverSaljem=true;for(let i=0;i<510;i++)h.e._serverTransferConfirmed({type:'upsert_vlaka',payload:row('<img src=x>','me','v'+i)},'me');assert.equal(h.e._serverTransfers('sent').length,200);assert.equal(h.e._serverTransferCount('sent'),30);h.e._serverPanelRender();assert.ok(h.elements.get('server-sent-items').innerHTML.includes('Prikazano zadnjih 30'));h.e._serverPanelRender();assert.ok(!h.elements.get('server-sent-items').innerHTML.includes('<img'));assert.ok(h.elements.get('server-sent-items').innerHTML.includes('&lt;img'));assert.equal(h.queue.length,0);});
 test('pregled ograničava oba taba na ista posljednja tri projekta, dan je sarajevski',()=>{const h=setup();
- const rows=['P','Q','R','S'].map((id,i)=>({projectKey:'project:'+id,project:id,uid:'me',author:'Emina',item:'Vlaka · T1',ts:Date.parse('2026-10-03T23:30:00Z')+i*1000}));
+ // Jučer u 23:30 UTC = danas 00:30 ili 01:30 u Sarajevu (spisak pamti samo 7 dana, pa datum ne smije biti fiksan).
+ const _j=new Date(Date.now()-86400000),_jucer2330=Date.UTC(_j.getUTCFullYear(),_j.getUTCMonth(),_j.getUTCDate(),23,30),_danSa=String(new Date(_jucer2330+3*3600000).getUTCDate());
+ const rows=['P','Q','R','S'].map((id,i)=>({projectKey:'project:'+id,project:id,uid:'me',author:'Emina',item:'Vlaka · T1',ts:_jucer2330+i*1000}));
  h.store.set('tvlake_transfer_items_v1_me_received',JSON.stringify(rows));
  h.e._serverPanelRender();let g=h.e._serverTransferGroups('received');assert.deepEqual(Array.from(g,r=>r.key),['project:S','project:R','project:Q']);
  assert.equal((h.elements.get('server-received-items').innerHTML.match(/<details /g)||[]).length,3);
  assert.ok(!h.elements.get('server-received-items').innerHTML.includes(' open'));
- h.e._serverTransferGroup('day');g=h.e._serverTransferGroups('received');assert.equal(g.length,1);assert.equal(g[0].rows.length,3);assert.match(g[0].title,/4/);
+ h.e._serverTransferGroup('day');g=h.e._serverTransferGroups('received');assert.equal(g.length,1);assert.equal(g[0].rows.length,3);assert.ok(g[0].title.includes(_danSa),g[0].title);
  h.store.set('tvlake_transfer_items_v1_me_sent',JSON.stringify([{...rows[0],ts:rows[3].ts+1000}]));
  h.e._serverTransferGroup('project');assert.deepEqual(Array.from(h.e._serverTransferGroups('received'),r=>r.key),['project:S','project:R','project:P']);
 });

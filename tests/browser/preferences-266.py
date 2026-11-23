@@ -33,6 +33,10 @@ async def main():
     const styles=JSON.parse(localStorage.getItem(_KML_USER_STYLES_KEY));styles['karte/odjeli.shp']={col:'#0891b2',weight:3,vis:true,fill:true,fillCol:'#dc2626',fillPattern:'solid',fillOpacity:.31,tag:'107'};localStorage.setItem(_KML_USER_STYLES_KEY,JSON.stringify(styles));}''',{'shp':list(b.polygon()),'dbf':list(b.dbf())})
   await page.reload();await page.evaluate('''async()=>{_bufRestorePrefs();_lsTab(localStorage.getItem('tvlake_layer_sheet_tab'));await _localKmlRestore();await _kmlcInit();await Promise.all([_serverKmlRestore(),_serverKmlRestore()]);}''')
   assert await page.evaluate('kmlLs.length')==3
+  # Sakriven lokalni sloj se pri pokretanju ne parsira (prazna grupa); učita se tek kad zatreba i ostaje sakriven.
+  assert await page.evaluate("kmlLs.find(k=>k._origName==='lokalno.kml')._lijeno===true&&kmlLs.find(k=>k._origName==='lokalno.kml').grp.getLayers().length===0")
+  await page.evaluate('async()=>{await _kmlLijenoUcitajSve();}')
+  assert await page.evaluate("kmlLs.find(k=>k._origName==='lokalno.kml')._lijeno===false")
   result=await page.evaluate('''()=>kmlLs.map(k=>{let leaf;const walk=g=>g.eachLayer(l=>{if(l._kmlIsPolygon)leaf=l;else if(l.eachLayer)walk(l)});walk(k.grp);return {name:k._origName||k._key,col:k.col,tag:k.tag,vis:k.vis,on:map.hasLayer(k.grp),fill:k.fill,pattern:k.fillPattern,options:leaf?.options};})''')
   rows={k['name']:k for k in result}
   local=rows['lokalno.kml'];assert local['col']=='#dc2626' and local['tag']=='105' and not local['on'] and local['pattern']=='diagonal' and local['options']['weight']==5 and local['options']['opacity']==.55,local

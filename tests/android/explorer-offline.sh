@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 # Jedan shell: emulator-runner inače svaku liniju script ulaza pokreće zasebno.
 set -euo pipefail
-adb root
+# Odmah poslije boot-a adbd zna odbiti "adb root" ("unable to connect for
+# root: closed") jer se upravo restartuje; to nije greška aplikacije.
+for i in 1 2 3 4 5 6; do
+  if adb root; then break; fi
+  echo "adb root nije uspio (pokušaj $i), čekam 5 s"
+  sleep 5
+  adb wait-for-device || true
+done
 adb wait-for-device
 adb shell settings put global airplane_mode_on 1
 adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true

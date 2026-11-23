@@ -125,9 +125,9 @@ async def main():
     await page.locator('#project-reports>summary').click();assert await page.locator('#rekap-card').is_visible()
     assert await page.locator('#fixture-project').evaluate('e=>e.scrollWidth<=e.clientWidth+1')
     await page.evaluate("markup=>{const root=document.querySelector('#fixture-project');root.innerHTML=markup;root.scrollTop=0;const p=document.querySelector('#panel');p.style.cssText='display:block;width:100%;height:auto;position:static;overflow:visible'}",full_vlake)
-    assert not await page.locator('#vlake-buffers').evaluate('e=>e.open') and not await page.locator('#reference-card').evaluate('e=>e.open')
+    assert not await page.locator('#vlake-buffers').evaluate('e=>e.open')
     await page.locator('#vlake-buffers>summary').click();assert await page.locator('#buf-sel').is_visible()
-    await page.locator('#reference-card>summary').click();assert await page.locator('#refkarta-file').count()==1
+    assert await page.locator('#refkarta-file').count()==0
     assert await page.locator('#fixture-project').evaluate('e=>e.scrollWidth<=e.clientWidth+1')
     await page.locator('#fixture-project').evaluate('e=>e.scrollTop=0');await page.screenshot(path=str(b.OUT/f'vlake-workflow-{theme}-{w}-{h}.png'))
   # Već ugrađene upute rade nakon isključivanja mreže, bez dodatnog zahtjeva.

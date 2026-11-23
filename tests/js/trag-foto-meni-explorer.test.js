@@ -21,8 +21,8 @@ assert.strictEqual(pokreni({ _tragOn: true, _tragLiveMeta: { fotos: new Array(30
 assert.strictEqual(pokreni({ _tragOn: true, _tragLiveMeta: { fotos: [] }, lastP: null }), false, 'bez GPS-a zastavica se ne ostavlja');
 
 // 2) Izvoz traga sa slikama nudi sa/bez slika; bez slika ostaje kratak meni.
-const meni = fn(src, '_tragKmlMeni');
-assert(/_tragRegShare\(id, true\)/.test(meni) && /_tragKmlSacuvaj\(id, true\)/.test(meni) && /SA slikama/.test(meni) && /SAMO trag/.test(meni));
+const meni = fn(src, '_tragIzvozIzvrsi'), list = fn(src, '_tizHtml');
+assert(/_tragRegShare\(id, true\)/.test(meni) && /_tragKmlSacuvaj\(id, true\)/.test(meni) && /Sa slikama/.test(list) && /Samo trag/.test(list));
 assert(/async function _tragRegShare\(id, bezSlika\)/.test(src) && /if \(!bezSlika\) \{ try \{ kmz = await _tragKmzBajti\(t\)/.test(src));
 assert(/async function _tragKmlSacuvaj\(id, bezSlika\)/.test(src));
 

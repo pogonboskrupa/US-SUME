@@ -15,9 +15,9 @@ const c=f.p(r);assert(Math.abs(c[0]-44.001)<0.0003&&Math.abs(c[1]-16.002)<0.0006
 // linija: polovina dužine, ne srednji vrh
 const l=f.l([{lat:44,lng:16},{lat:44,lng:16.001},{lat:44,lng:16.01}]);
 assert(l[1]>16.004&&l[1]<16.006,'tačka na polovini dužine');
-// po defaultu nema oznake; samo uz showLbl
-assert(/m\.showLbl === true\) \{\s*const c = _msrLblPoligon/.test(src)&&/m\.showLbl === true && m\.pts\.length >= 2/.test(src));
+// v4.5.6: oznake su uvijek tu (površina u ha u sredini, dužina/nagib pored linije), bez prekidača
+assert(/_msrOznake\(m\.pts, 'area', color\)/.test(src)&&/_msrOznake\(m\.pts, mode, color\)/.test(src)&&/_msrOznake\(pts, _msrMode, _msrColor\)/.test(src));
+assert(!/showLbl/.test(src.slice(src.indexOf('function _msrRegAdd'))),'nema više prekidača oznake');
+assert(!/id="mqm-lbl"/.test(html));
 assert(/msrArea: false, msrLen: false/.test(src));
-assert(/id="mqm-lbl"/.test(html)&&/mreg-ei-lbl-/.test(src)&&/m\.showLbl = !!/.test(src));
-assert(/transform:translate\(-50%,-50%\)/.test(src.slice(src.indexOf('const _msrTextMk'),src.indexOf('const _msrOpenPopup'))),'centriran tekst');
 console.log('OK msr oznaka');

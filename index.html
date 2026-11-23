@@ -1492,6 +1492,7 @@ body.ab-on #rec-row2 .rb { flex:1 1 0; }
 #vsd-panel .vsd-x { border:none; background:#f1f5f9; color:#334155; border-radius:8px; width:30px; height:30px; cursor:pointer; font-size:14px; }
 .vsd-row { display:flex; gap:6px; flex-wrap:wrap; }
 .vsd-b { flex:1 1 0; min-width:0; overflow:hidden; text-overflow:clip; border:none; cursor:pointer; font-size:12px; font-weight:700; padding:9px 5px; border-radius:10px; background:#f1f5f9; color:#334155; white-space:nowrap; }
+.vsd-rb { display:block; width:100%; border:none; cursor:pointer; font-size:12px; font-weight:700; padding:9px 5px; border-radius:10px; background:#f1f5f9; color:#334155; margin-bottom:6px; }
 .vsd-b:hover:not(:disabled) { filter:brightness(0.96); }
 .vsd-b:disabled { opacity:0.4; cursor:default; }
 .vsd-b.pri { background:linear-gradient(135deg,#0369a1,#0ea5e9); color:#fff; }
@@ -4553,7 +4554,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
      ISKLJUČIVO dugmad. Vraćanje: docs/BACKUP_ikonice_dugmadi.md
 ═══════════════════════════════════════════════════════════════════════════ -->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
-<symbol id="ic-zatvori" viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></symbol>
+<symbol id="ic-zatvori" viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18" style="stroke:var(--x-crvena,#f87171);stroke-width:2.8"/><line x1="18" y1="6" x2="6" y2="18" style="stroke:var(--x-crvena,#f87171);stroke-width:2.8"/></symbol>
 <symbol id="ic-potvrdi" viewBox="0 0 24 24"><polyline points="4,12.5 9.5,18 20,6.5"/></symbol>
 <symbol id="ic-dodaj" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
 <symbol id="ic-obrisi" viewBox="0 0 24 24"><polyline points="4,6.5 20,6.5"/><path d="M9 6.5V4.2h6v2.3"/><path d="M6.3 6.5l1 13.3h9.4l1-13.3"/><line x1="10.2" y1="10" x2="10.5" y2="16.5"/><line x1="13.8" y1="10" x2="13.5" y2="16.5"/></symbol>
@@ -4969,138 +4970,6 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         </div>
       </details>
 
-      <!-- REFERENTNA KARTA -->
-      <details class="sec reference-card workflow-group" id="reference-card">
-        <summary><b>Referentna karta · 1:10.000</b><small>Slika papirne karte, poravnanje i prepoznavanje vlaka</small></summary>
-        <input type="file" id="refkarta-file" accept="image/*" style="display:none" onchange="refKartaLoad(event)">
-        <button class="btn g" style="width:100%;margin-bottom:6px;" onclick="document.getElementById('refkarta-file').click()">
-          <svg class="ic"><use href="#ic-kamera"/></svg> Učitaj sliku karte
-        </button>
-        <!-- Kontrole (vidljive tek nakon učitavanja) -->
-        <div id="refkarta-ctrl" style="display:none;">
-          <div style="display:flex;gap:6px;margin-bottom:6px;">
-            <button class="btn" style="flex:1;font-size:11px;" onclick="refKartaFitView()" title="Postavi sliku na trenutni prikaz mape"><svg class="ic"><use href="#ic-uglomjer"/></svg> Fituj u prikaz</button>
-            <button class="btn" style="flex:1;font-size:11px;" onclick="refKartaFitOdjel()" title="Postavi sliku na učitani KML odjel"><svg class="ic"><use href="#ic-uglomjer"/></svg> Fituj u odjel</button>
-          </div>
-          <div style="display:flex;gap:6px;margin-bottom:6px;">
-            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#cbd5e1;cursor:pointer;flex:1;">
-              <input type="checkbox" id="refkarta-clip" onchange="_refToggleClip(this.checked)" style="width:14px;height:14px;accent-color:#38bdf8;">
-              ✂ Isijeci po odjelu
-            </label>
-            <button class="btn" id="refkarta-manfit-btn" style="flex:1;font-size:11px;background:#1e293b;color:#94a3b8;border:1px solid #334155;"
-                    onclick="_refToggleManualFit()" title="Ručno razvuci sliku po uglovima i stranama"><svg class="ic"><use href="#ic-rucno"/></svg> Ručno fitovanje</button>
-          </div>
-          <button class="btn g" id="refkarta-align-btn" style="width:100%;margin-bottom:6px;font-size:12px;"
-                  onclick="refKartaAlign()" title="Pronađi granicu odjela u slici i precizno poravnaj na KML poligon">
-            <svg class="ic"><use href="#ic-meta"/></svg> Precizno poravnaj na granicu odjela
-          </button>
-          <button class="btn" id="refkarta-calib-btn" style="width:100%;margin-bottom:6px;font-size:12px;background:#1e3a5f;color:#38bdf8;"
-                  onclick="_refCalibToggle()" title="Postavi kontrolne tačke (klik na slici → klik gdje treba)">
-            <svg class="ic"><use href="#ic-meta"/></svg> Kalibriraj (kontrolne tačke)
-          </button>
-          <div id="refkarta-calib-hint" style="display:none;font-size:11px;color:#94a3b8;line-height:1.5;background:#0f172a;border:1px solid #1e3a5f;border-radius:6px;padding:6px 8px;margin-bottom:6px;"></div>
-          <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:#cbd5e1;margin-bottom:6px;cursor:pointer;">
-            <input type="checkbox" id="refkarta-calib-snap" checked onchange="_refCalibSnapChanged(this.checked)" style="width:14px;height:14px;accent-color:#22c55e;">
-            <span>📍 Veži na <b>broj odjela</b> (snap na centar)</span>
-          </label>
-          <div style="font-size:11px;color:#64748b;margin-bottom:3px;">Providnost slike:</div>
-          <input type="range" id="refkarta-opa" min="5" max="95" value="55" style="width:100%;margin-bottom:6px;accent-color:#38bdf8;"
-                 oninput="refKartaSetOpacity(this.value)">
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#cbd5e1;margin-bottom:8px;cursor:pointer;">
-            <input type="checkbox" id="refkarta-vis" checked onchange="refKartaSetVisible(this.checked)" style="width:15px;height:15px;accent-color:#38bdf8;">
-            Prikaži sliku karte
-          </label>
-          <!-- Detekcija linija -->
-          <div style="border-top:1px solid #1e293b;padding-top:8px;margin-top:4px;">
-            <h4 class="ref-heading">Vlake označene na papiru</h4><p class="ref-note">U obzir ulaze samo linije uz oznaku <b>T + broj</b>, npr. T12. Granice i izohipse bez takve oznake se odbacuju. Nejasnu vezu oznake i linije provjeri prije uvoza.</p><div class="ref-presets"><button type="button" onclick="ReferenceVlakePreset('dark')">Crne vlake</button><button type="button" onclick="ReferenceVlakePreset('blue')">Plave vlake</button></div>
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-              <span style="font-size:11px;color:#64748b;white-space:nowrap;">Detektuj po:</span>
-              <select id="refkarta-detect-mode" style="flex:1;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:2px 4px;font-size:11px;"
-                      onchange="_refDetModeChanged()">
-                <option value="dark">Tama (tamni pikseli)</option>
-                <option value="color">Boja (izoliraj boju vlake)</option>
-              </select>
-            </div>
-            <div id="refkarta-dark-opts">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-                <span style="font-size:11px;color:#64748b;white-space:nowrap;">Prag tame:</span>
-                <input type="range" id="refkarta-thr" min="30" max="220" value="110" style="flex:1;accent-color:#f97316;"
-                       oninput="document.getElementById('refkarta-thr-val').textContent=this.value">
-                <span id="refkarta-thr-val" style="font-size:11px;color:#f97316;min-width:24px;text-align:right;">110</span>
-              </div>
-            </div>
-            <div id="refkarta-color-opts" style="display:none;">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-                <span style="font-size:11px;color:#64748b;white-space:nowrap;">Boja vlake:</span>
-                <input type="color" id="refkarta-detect-color" value="#1e40af" style="width:32px;height:22px;border:1px solid #334155;border-radius:3px;cursor:pointer;padding:0;">
-                <button onclick="_refPickColorFromMap()" style="padding:2px 6px;background:#1e3a5f;color:#38bdf8;border:none;border-radius:4px;font-size:10px;cursor:pointer;" title="Uzmi boju sa slike"><svg class="ic"><use href="#ic-pipeta"/></svg> Uzmi</button>
-              </div>
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-                <span style="font-size:11px;color:#64748b;white-space:nowrap;">Tolerancija:</span>
-                <input type="range" id="refkarta-color-tol" min="20" max="140" value="70" style="flex:1;accent-color:#a855f7;"
-                       oninput="document.getElementById('refkarta-color-tol-val').textContent=this.value">
-                <span id="refkarta-color-tol-val" style="font-size:11px;color:#a855f7;min-width:24px;text-align:right;">70</span>
-              </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-              <span style="font-size:11px;color:#64748b;white-space:nowrap;">Min. dužina:</span>
-              <input type="range" id="refkarta-minlen" min="8" max="120" value="25" style="flex:1;accent-color:#f97316;"
-                     oninput="document.getElementById('refkarta-minlen-val').textContent=this.value+'px'">
-              <span id="refkarta-minlen-val" style="font-size:11px;color:#f97316;min-width:28px;text-align:right;">25px</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-              <span style="font-size:11px;color:#64748b;white-space:nowrap;" title="Zadrži samo deblje (olovkom) crtane linije — izbaci tanke štampane izohipse i tekst.">Debljina olovke:</span>
-              <input type="range" id="refkarta-bold" min="0" max="3" value="0" style="flex:1;accent-color:#22c55e;"
-                     oninput="document.getElementById('refkarta-bold-val').textContent=this.value==0?'sve':this.value">
-              <span id="refkarta-bold-val" style="font-size:11px;color:#22c55e;min-width:24px;text-align:right;">sve</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-              <span style="font-size:11px;color:#64748b;white-space:nowrap;" title="Spoji krajeve linija koji su blizu i približno u istom smjeru — vlaka prekinuta na presjeku postaje jedna.">Spoji prekide:</span>
-              <input type="range" id="refkarta-join" min="0" max="40" value="14" style="flex:1;accent-color:#38bdf8;"
-                     oninput="document.getElementById('refkarta-join-val').textContent=this.value==0?'ne':this.value+'px'">
-              <span id="refkarta-join-val" style="font-size:11px;color:#38bdf8;min-width:28px;text-align:right;">14px</span>
-            </div>
-            <button class="btn g" style="width:100%;font-size:12px;" id="refkarta-detect-btn"
-                    onclick="refKartaRunDetect()"><svg class="ic"><use href="#ic-trazi"/></svg> Detektuj vlake uz T + broj</button>
-            <button class="btn ref-manual-label" type="button" onclick="ReferenceVlake.addLabel()">Označi natpis T + broj ručno</button>
-            <p id="refkarta-detect-status" class="ref-note" role="status" aria-live="polite">Prepoznavanje radi uz internet, na uređaju bez slanja fotografije. Za nečitljiv rukopis označi natpis ručno.</p>
-            <div style="border-top:1px dashed #1e293b;margin:8px 0 6px;padding-top:8px;">
-              <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:#cbd5e1;margin-bottom:6px;cursor:pointer;">
-                <input type="checkbox" id="refkarta-chain" checked style="width:14px;height:14px;accent-color:#c084fc;">
-                <span>🔗 Lančano trasiranje (auto sljedeća vlaka)</span>
-              </label>
-              <button class="btn" style="width:100%;font-size:12px;background:#1e293b;color:#c084fc;border:1px solid #6b21a8;"
-                      onclick="_refStartTrace()" title="Tapaj tačke duž vlake preko slike; dupli tap = kraj i (ako je lančano) odmah počni sljedeću."><svg class="ic"><use href="#ic-crtaj"/></svg> Trasiraj vlake preko slike</button>
-            </div>
-          </div>
-          <button id="refkarta-save-btn" class="btn" style="display:none;width:100%;margin-top:6px;background:#164e63;color:#38bdf8;border:1px solid #0e7490;font-size:12px;"
-                  onclick="refKartaSaveToServer()"><svg class="ic"><use href="#ic-server"/></svg> Sačuvaj na server</button>
-          <button class="btn" style="width:100%;margin-top:6px;background:#2d0a0a;color:#f87171;border:1px solid #7f1d1d;font-size:12px;"
-                  onclick="refKartaRemove()"><svg class="ic"><use href="#ic-obrisi"/></svg> Ukloni kartu</button>
-        </div>
-        <!-- Detektovane vlake toggle -->
-        <div id="refkarta-imp-ctrl" style="display:none;margin-top:6px;border-top:1px solid #1e293b;padding-top:8px;">
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#cbd5e1;cursor:pointer;">
-            <input type="checkbox" id="refkarta-imp-vis" checked onchange="refKartaImportedVisible(this.checked)" style="width:15px;height:15px;accent-color:#f97316;">
-            <span>Prikaži detektovane vlake <b id="refkarta-imp-count" style="color:#f97316;"></b></span>
-          </label>
-          <div id="refkarta-results" class="ref-results"></div>
-          <button class="btn" style="width:100%;margin-top:5px;font-size:12px;background:#14532d;color:#4ade80;border:1px solid #166534;"
-                  id="refkarta-import-btn" onclick="refKartaImportDetected()"><svg class="ic"><use href="#ic-dodaj"/></svg> Pretvori u vlake</button>
-          <button class="btn" style="width:100%;margin-top:5px;font-size:11px;background:#1c0c02;color:#fb923c;border:1px solid #7c2d12;"
-                  onclick="refKartaClearImported()"><svg class="ic"><use href="#ic-obrisi"/></svg> Briši detektovane</button>
-        </div>
-        <!-- Repozitorij -->
-        <div style="margin-top:10px;border-top:1px solid #1e293b;padding-top:10px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-            <span style="font-size:12px;font-weight:700;color:#94a3b8;">☁ Repozitorij slika</span>
-            <button onclick="_refRepoLoad()" style="padding:2px 8px;background:#1e3a5f;color:#38bdf8;border:none;border-radius:5px;font-size:11px;cursor:pointer;"><svg class="ic"><use href="#ic-osvjezi"/></svg> Osvježi</button>
-          </div>
-          <div id="refkarta-repo-list" style="max-height:220px;overflow-y:auto;">
-            <div style="font-size:11px;color:#475569;">Klikni ↺ Osvježi za prikaz.</div>
-          </div>
-        </div>
-      </details>
 
     </div><!-- /panel -->
 
@@ -5149,7 +5018,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         </select>
         <input class="pinput" id="np-gj-custom" placeholder="Upiši naziv GJ" style="display:none;margin-top:4px;">
         <!-- Dropdown GJ lista je specifična za Šumariju Bos. Krupa — ostale šumarije GJ upisuju slobodno. -->
-        <input class="pinput" id="np-gj-plain" placeholder="Upišite naziv G.J." style="display:none;">
+        <input class="pinput" id="np-gj-plain" list="np-gj-lista" autocomplete="off" placeholder="Upišite naziv G.J." style="display:none;"><datalist id="np-gj-lista"></datalist>
         <div style="display:flex;gap:8px;">
           <div style="flex:1;">
             <span class="lbl">Površina (ha)</span>
@@ -5298,6 +5167,18 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         <button onclick="showProjectManagement()"
           style="display:block;width:calc(100% - 32px);margin:12px 16px 0;padding:10px;background:#1e3a5f;border:1px solid #3b82f6;border-radius:8px;color:#93c5fd;font-size:13px;font-weight:600;cursor:pointer;">
           <svg class="ic"><use href="#ic-statistika"/></svg> Pregled svih projekata (sve šumarije)
+        </button>
+        <button id="admin-grupe-btn" onclick="grupeAdminOtvori()"
+          style="display:block;width:calc(100% - 32px);margin:8px 16px 0;padding:10px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#bbf7d0;font-size:13px;font-weight:600;cursor:pointer;">
+          👥 Grupe korisnika (povezivanje kolega za slanje)
+        </button>
+        <button id="admin-gj-btn" onclick="gjAdminOtvori()"
+          style="display:block;width:calc(100% - 32px);margin:8px 16px 0;padding:10px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#bbf7d0;font-size:13px;font-weight:600;cursor:pointer;">
+          🌲 Gospodarske jedinice (po šumarijama)
+        </button>
+        <button id="admin-azur-btn" onclick="adminAzurirajStarije()"
+          style="display:block;width:calc(100% - 32px);margin:8px 16px 0;padding:10px;background:#14532d;border:1px solid #22c55e;border-radius:8px;color:#bbf7d0;font-size:13px;font-weight:600;cursor:pointer;">
+          📢 Obavijest o ažuriranju (korisnici sa starijom verzijom)
         </button>
         <!-- Statistika je stajala uvijek otvorena (7 redova) i gurala listu
              korisnika ispod pregiba — sad je iza prekidača, izbor se pamti. -->
@@ -5494,7 +5375,7 @@ table.ttm-tbl tfoot td.stick { z-index:4;color:#94a3b8;font-size:11px;font-weigh
         <section class="trn-card trn-explorer" id="trn-explorer">
           <div class="trn-explorer-art" aria-hidden="true"><svg viewBox="0 0 320 100"><path d="M0 90L65 30 111 65 185 12 246 64 289 35 320 70V100H0Z" fill="currentColor" opacity=".16"/><path d="M60 100L151 60 200 46 260 0" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="6 6"/><path d="M149 57L160 34 171 57 160 51Z" fill="currentColor"/></svg></div>
           <div class="trn-section-label">Orijentacija i navođenje</div>
-          <h3>Explorer mod</h3><p>Pregled ispred tebe — karta prati položaj i smjer telefona.</p>
+          <h3>Explorer mode - 3D prikaz</h3><p>3D pogled ispred tebe — karta prati položaj i smjer telefona, sa ili bez odredišta.</p>
           <label class="trn-explorer-switch"><input type="checkbox" id="trn-explorer-toggle" onchange="TerenWorkspace.explorerToggle(this.checked)"><span>Koristi Explorer pri navođenju</span></label>
           <div id="trn-explorer-state" role="status">Odaberi odredište za prikaz u smjeru kretanja.</div>
           <button type="button" id="trn-explorer-open" class="trn-btn trn-btn-accent" onclick="TerenWorkspace.explorerOpen()">Odaberi odredište</button>
@@ -6029,7 +5910,7 @@ window.addEventListener('unhandledrejection', function(ev) {
   console.error('Neuhvaćeno odbijeno obećanje:', ev.reason);
   _sigurnosnaMrezaPokusaj();
 });
-const APP_VER = 'v4.0.4';
+const APP_VER = 'v4.9.6';
 // Prikaži verziju na login ekranu (footer je već parsiran iznad ovog scripta).
 // I gornja statusna traka nosi verziju — ranije je tu bilo hardkodovano "v2.4"
 // koje se nikad nije ažuriralo uz stvarne izmjene, pa je login ekran mjesecima
@@ -6253,11 +6134,12 @@ function _loadLocalVlake() {
 
 <!-- Glavni Meni: korisnik i verzija su na kraju skrolabilnog sadržaja. -->
 <div id="menu-dropdown" aria-label="Glavni Meni" style="display:none;">
-  <div class="mdrop-top"><div><b>Meni</b><small id="menu-context">Alati, projekti i aplikacija</small></div><button type="button" onclick="closeMenuDropdown()" aria-label="Zatvori Meni">✕</button></div>
+  <div class="mdrop-top"><b>Meni</b><button type="button" class="mdrop-user" id="menu-user-btn" onclick="nalogOtvori()" aria-label="Moj nalog: uredi ime i promijeni PIN"><i id="menu-user-ini" aria-hidden="true">?</i><span id="menu-user-label">Nije prijavljen</span><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button type="button" class="mdrop-x" onclick="closeMenuDropdown()" aria-label="Zatvori Meni">✕</button></div>
   <div class="mdrop-scroll"><section class="mdrop-section mdrop-server-section">
   <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg>Server</div>
   <button type="button" class="mdrop-item" id="mdrop-server"  onclick="closeMenuDropdown();openSyncQueuePanel()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-server"/></svg></span>Pošalji na server<span id="mdrop-server-cnt" style="display:none;margin-left:auto;padding-left:8px;flex-shrink:0;white-space:nowrap;"><span style="background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;white-space:nowrap;display:inline-block;"></span></span></button>
-  <button type="button" class="mdrop-item" id="mdrop-primljeni" onclick="closeMenuDropdown();primljeniOtvori()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-folders"/></svg></span>Primljeni podaci<span id="mdrop-primljeni-cnt" style="display:none;margin-left:auto;padding-left:8px;flex-shrink:0;"><span style="background:#22c55e;color:#04210f;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;display:inline-block;"></span></span></button>
+  <button type="button" class="mdrop-item" id="mdrop-primljeni" onclick="closeMenuDropdown();primljeniOtvori()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-folders"/></svg></span>Primljeni podaci i poruke<span id="mdrop-primljeni-cnt" style="display:none;margin-left:auto;padding-left:8px;flex-shrink:0;"><span style="background:#22c55e;color:#04210f;font-size:10px;font-weight:700;padding:1px 7px;border-radius:9px;display:inline-block;"></span></span></button>
+  <button type="button" id="menu-azuriraj" class="mdrop-item mdrop-azur" onclick="closeMenuDropdown();azurirajAplikaciju()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-update"/></svg></span>Ažuriraj aplikaciju<span class="mdrop-azur-nova" hidden></span></button>
 </section><div id="spd-menu-launch" hidden aria-label="ŠPD prečice">
     <button type="button" onclick="SpdProfile.open()"><svg class="ic" aria-hidden="true"><use href="#ic-korisnik"/></svg><span>Moj ŠPD profil<small>Zapisi, karte i sigurnosna kopija</small></span>›</button>
     <button type="button" onclick="closeMenuDropdown();switchTab('teren')">Otvori Teren</button>
@@ -6269,6 +6151,7 @@ function _loadLocalVlake() {
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openLayerImport()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-kml"/></svg></span>Dodaj KML fajl / SHP</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openGraniceModal()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-boundaries"/></svg></span>Granice odjela</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showTemModal()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-theme"/></svg></span>Tematska karta</button>
+  <button type="button" class="mdrop-item" id="menu-ozr" onclick="closeMenuDropdown();ozrOtvori()"><span class="mdrop-ico" aria-hidden="true"><svg class="ic" aria-hidden="true"><use href="#ic-slojevi"/></svg></span>Prikaz oznaka u razmjeri</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openStilLinija()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-lines"/></svg></span>Stil linija</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();openVlakaStyle()"><span class="mdrop-ico dm-map-art" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-vlaka-style"/></svg></span>Stil i boja vlaka</button>
 
@@ -6277,7 +6160,7 @@ function _loadLocalVlake() {
   <button type="button" class="mdrop-item" id="menu-field-work" onclick="TerenWorkspace.open()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg></span><span>RAD NA TERENU<small>Pozicija, Explorer, tragovi i bilješke</small></span><span class="mdrop-arrow" aria-hidden="true">›</span></button>
   <button class="mdrop-item" id="field-theme-toggle" type="button" onclick="toggleFieldTheme()" aria-pressed="false"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-sun"/></svg></span>Dnevni mod</button>
   <button type="button" class="mdrop-item" id="menu-share-kretanje" onclick="closeMenuDropdown();shareSheetOpen()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-field"/></svg></span>Dijeljenje kretanja</button>
-  <button type="button" class="mdrop-item" id="menu-explorer-mod" onclick="closeMenuDropdown();TerenWorkspace.explorerMeni()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-guide"/></svg></span><span>Explorer mod<small>Pregled ispred tebe, karta prati smjer</small></span></button>
+  <button type="button" class="mdrop-item" id="menu-explorer-mod" onclick="closeMenuDropdown();TerenWorkspace.explorerMeni()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-guide"/></svg></span><span>Explorer mode - 3D prikaz</span></button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();startLocPhoto()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-camera"/></svg></span>Uslikaj lokaciju</button>
   <button type="button" class="mdrop-item" style="color:#a78bfa;" onclick="closeMenuDropdown();showGuideChoice()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-guide"/></svg></span>Vodi me do odjela/lokacije</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();toggleMjtrgDropdown()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-measure"/></svg></span>Mjerenja i tragovi</button>
@@ -6288,12 +6171,12 @@ function _loadLocalVlake() {
   <button type="button" class="mdrop-item" id="menu-school-report" hidden onclick="closeMenuDropdown();showProjectManagement(true)"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-report"/></svg></span><span>Izvještaj šumarije<small>Projektanti i projekti</small></span><span class="mdrop-arrow" aria-hidden="true">›</span></button>
   <button type="button" class="mdrop-item" id="mdrop-izvjestaji" style="display:none;" onclick="closeMenuDropdown();showIzvjestaji()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-calendar"/></svg></span>Sedmični / mjesečni izvještaji</button>
   <button type="button" class="mdrop-item" onclick="closeMenuDropdown();showPrintModal()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-printer"/></svg></span>Print / štampanje</button>
+  <button type="button" class="mdrop-item" id="menu-refkarta" onclick="closeMenuDropdown();openRefKartaPanel()"><span class="mdrop-ico" aria-hidden="true"><svg class="ic"><use href="#ic-kamera"/></svg></span>Referentna karta</button>
   </section><section class="mdrop-section">
   <div class="mdrop-hdr"><svg class="dm-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-users"/></svg>Račun i pomoć</div>
   <button type="button" class="mdrop-item" id="menu-admin-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();switchTab('admin')"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-users"/></svg></span>Admin — korisnici</button>
+  <button type="button" class="mdrop-item" id="menu-gj-item" style="display:none;" onclick="closeMenuDropdown();gjAdminOtvori()"><span class="mdrop-ico" aria-hidden="true">🌲</span>Gospodarske jedinice</button>
   <button type="button" class="mdrop-item" id="menu-debug-item" style="display:none;color:#f87171;" onclick="closeMenuDropdown();if(sbProfile?.is_admin)switchTab('debug')"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-debug"/></svg></span>DEBUG</button>
-  <button type="button" class="mdrop-item" onclick="closeMenuDropdown();promijeniPin()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-pin"/></svg></span>Promijeni PIN</button>
-  <button type="button" id="menu-azuriraj" class="mdrop-item mdrop-azur" onclick="closeMenuDropdown();azurirajAplikaciju()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-update"/></svg></span>Ažuriraj aplikaciju<span class="mdrop-azur-nova" hidden></span></button>
   <button type="button" class="mdrop-item" id="menu-prebaci-item" style="display:none;color:#fbbf24;" onclick="closeMenuDropdown();racuniPrebaci()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-users"/></svg></span><span id="menu-prebaci-txt">Prebaci na profil administratora</span></button>
   <button type="button" class="mdrop-item" id="menu-dijag-item" style="display:none;color:#38bdf8;" onclick="closeMenuDropdown();dijagOtvori()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-debug"/></svg></span>Dijagnostika</button>
   <button type="button" class="mdrop-item" id="menu-apk-download" style="color:#38bdf8;" onclick="closeMenuDropdown();preuzmiApkAdmin()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-load"/></svg></span><span>Preuzmi APK fajl<small>Najnovija verzija · odmah preuzima</small></span></button>
@@ -6302,10 +6185,49 @@ function _loadLocalVlake() {
   <button type="button" class="mdrop-item" style="color:#f87171;" onclick="closeMenuDropdown();doLogout()"><span class="mdrop-ico" aria-hidden="true"><svg class="dm-menu-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-logout"/></svg></span>Odjava</button>
   </section></div>
   <footer class="mdrop-footer">
-    <div class="mdrop-account"><span>Prijavljeni korisnik</span><strong id="menu-user-label">Nije prijavljen</strong><small id="menu-user-role"></small></div>
+    <div class="mdrop-account"><small id="menu-user-role"></small></div>
     <div class="mdrop-brand"><img src="icon-192.png" width="44" height="44" alt="Logo aplikacije DENDRO MAP"><div><b>DENDRO MAP</b><span id="menu-app-ver"></span></div></div>
   </footer>
   </div>
+</div>
+
+<div id="nalog-modal" class="nalog-bg" hidden role="dialog" aria-modal="true" aria-labelledby="nalog-naslov" onclick="if(event.target===this)nalogZatvori()">
+  <section class="nalog-sheet">
+    <header class="nalog-head"><i id="nalog-ini" class="nalog-av" aria-hidden="true">?</i><div><h2 id="nalog-naslov">Moj nalog</h2><small id="nalog-uloga"></small></div><button type="button" class="nalog-x" onclick="nalogZatvori()" aria-label="Zatvori">✕</button></header>
+    <p id="nalog-offline" class="nalog-upoz" hidden>Nema interneta. Promjene u nalogu traže vezu sa serverom.</p>
+    <div class="nalog-body">
+      <form class="nalog-kartica" onsubmit="nalogSacuvajIme();return false" autocomplete="off">
+        <h3>Ime i prezime</h3>
+        <label for="nalog-ime">Ime</label><input id="nalog-ime" class="nalog-in" type="text" maxlength="40" autocomplete="off" data-lpignore="true" data-1p-ignore="true" enterkeyhint="next">
+        <label for="nalog-prezime">Prezime</label><input id="nalog-prezime" class="nalog-in" type="text" maxlength="40" autocomplete="off" data-lpignore="true" data-1p-ignore="true" enterkeyhint="done">
+        <p class="nalog-nap">Prijava i dalje radi istim PIN-om. Offline prijava novim imenom počinje poslije prve prijave sa internetom.</p>
+        <p id="nalog-ime-msg" class="nalog-msg" role="status" aria-live="polite"></p>
+        <button type="submit" id="nalog-ime-btn" class="nalog-btn">Sačuvaj ime</button>
+      </form>
+      <form id="nalog-rm-kartica" class="nalog-kartica" onsubmit="nalogSacuvajRadnoMjesto();return false" autocomplete="off">
+        <h3>Radno mjesto</h3>
+        <label for="nalog-rm">Na kojem radnom mjestu radiš</label><select id="nalog-rm" class="nalog-in"></select>
+        <p class="nalog-nap">Samo oznaka — adminu pomaže da te poveže sa kolegama. Ne mijenja šta vidiš u aplikaciji.</p>
+        <p id="nalog-rm-msg" class="nalog-msg" role="status" aria-live="polite"></p>
+        <button type="submit" id="nalog-rm-btn" class="nalog-btn">Sačuvaj radno mjesto</button>
+      </form>
+      <form id="nalog-prip-kartica" class="nalog-kartica" hidden onsubmit="nalogSacuvajPripadnost();return false" autocomplete="off">
+        <h3>Pripadnost šumariji</h3>
+        <label for="nalog-prip">Šumarija u kojoj radiš</label><select id="nalog-prip" class="nalog-in"></select>
+        <p class="nalog-nap">Samo oznaka — adminu pomaže da te poveže sa kolegama iz iste šumarije. Ne mijenja šta vidiš u aplikaciji.</p>
+        <p id="nalog-prip-msg" class="nalog-msg" role="status" aria-live="polite"></p>
+        <button type="submit" id="nalog-prip-btn" class="nalog-btn">Sačuvaj pripadnost</button>
+      </form>
+      <form class="nalog-kartica" onsubmit="nalogSacuvajPin();return false" autocomplete="off">
+        <h3>Promjena PIN-a</h3>
+        <label for="nalog-pin1">Novi PIN (4–6 cifara)</label><input id="nalog-pin1" class="nalog-in pin-maska" type="text" inputmode="numeric" maxlength="6" autocomplete="off" data-lpignore="true" data-1p-ignore="true" enterkeyhint="next">
+        <label for="nalog-pin2">Ponovi novi PIN</label><input id="nalog-pin2" class="nalog-in pin-maska" type="text" inputmode="numeric" maxlength="6" autocomplete="off" data-lpignore="true" data-1p-ignore="true" enterkeyhint="done">
+        <button type="button" class="nalog-link" id="nalog-pin-prikazi" onclick="nalogPinPrikazi()">Prikaži PIN</button>
+        <p id="nalog-pin-msg" class="nalog-msg" role="status" aria-live="polite"></p>
+        <button type="submit" id="nalog-pin-btn" class="nalog-btn">Promijeni PIN</button>
+      </form>
+    </div>
+  </section>
 </div>
 
 <div id="department-report" class="dr-modal" hidden role="dialog" aria-modal="true" aria-labelledby="dr-title" onclick="if(event.target===this)DepartmentReport.close()">
@@ -6677,7 +6599,7 @@ function _loadLocalVlake() {
 </div></section>
 <section class="help-sec"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Prenesi vlake s papirne karte</button><div class="help-sec-body">
 <ol class="help-steps">
-<li data-n="1.">U <b>Vlake → Referentna karta</b> učitaj fotografiju ili sken karte.</li>
+<li data-n="1.">U <b>Meni → Referentna karta</b> učitaj fotografiju ili sken karte.</li>
 <li data-n="2.">Poravnaj sliku s odjelom. Za kontrolne tačke biraj isto prepoznatljivo mjesto na slici i digitalnoj karti.</li>
 <li data-n="3.">Uz internet pokreni prepoznavanje. Traže se crne/plave linije uz natpis <b>T + broj</b> da se razlikuju od granica.</li>
 <li data-n="4.">Pregledaj svaki prijedlog prije uvoza. Nečitljiv T natpis možeš označiti ručno.</li>
@@ -6764,7 +6686,7 @@ function _loadLocalVlake() {
 <section class="help-start"><span class="help-eyebrow">Po profilima</span><h3>Slanje i primanje fajlova</h3><p>Vidi samo dio za svoj profil: <b>terenski</b> radnik šalje isključivo šifrom od 5 cifara, <b>projektant</b> šalje i izabranim kolegama.</p></section>
 <section class="help-sec" data-uloge="teren"><button type="button" class="help-sec-hdr" aria-expanded="false" onclick="toggleHelpSec(this)"><span class="h-arrow" aria-hidden="true">▶</span>Terenski profil — slanje i primanje fajlova</button><div class="help-sec-body">
 <div class="help-row"><div class="help-txt"><b>Šta se može slati</b><span>KML fajl, trag, izmjerena linija ili poligon. Otvori <b>Preglednik KML oznaka</b> (dugme 📁 na karti) i uz fajl pritisni <b>Pošalji</b>, ili u popupu fajla na karti pritisni <b>Pošalji</b>. Trag i mjerenje šalješ iz njihovog popupa/kartice.</span></div></div>
-<div class="help-row"><div class="help-txt"><b>Slanje kolegi</b><span>Terenski profil ne vidi sve korisnike. <b>Pošalji</b> nudi tvoje <b>kolege</b> (izaberi jednog ili više) i <b>➕ Dodaj kolegu</b>. Kolegu dodaješ pozivom: pritisneš <b>Pozovi kolegu</b>, dobiješ <b>kod od 5 cifara</b> i pošalješ ga porukom; kolega ga unese u <b>Meni → Primljeni podaci → Kolege → Unesi kod</b>. Kad prihvati, ostaje u spisku za slanje KML-a, traga, mjerenja i fotografija.</span></div></div>
+<div class="help-row"><div class="help-txt"><b>Slanje kolegi</b><span>Terenski profil ne vidi sve korisnike. <b>Pošalji</b> nudi tvoje <b>kolege</b> (izaberi jednog ili više) i <b>➕ Dodaj kolegu</b>. Kolegu dodaješ pozivom: pritisneš <b>Pozovi kolegu</b>, dobiješ <b>kod od 5 cifara</b> i pošalješ ga porukom; kolega ga unese u <b>Meni → Primljeni podaci → Kolege → Unesi kod</b>. Isti kod (važi 1 dan) može unijeti više kolega. Ko ga unese, vidi tebe i ti njega, i ostajete jedno drugom u spisku za slanje KML-a, traga, mjerenja i fotografija.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Slanje šifrom</b><span>Za nekoga ko nije tvoj kolega izaberi <b>Pošalji šifrom</b>: dobiješ <b>šifru od 5 cifara</b> (npr. 48213) koju kopiraš ili podijeliš porukom.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Koliko šifra važi</b><span>Šifra važi <b>2 dana</b> i može je preuzeti <b>više ljudi</b> (cijela ekipa istom šifrom). Poslije isteka nestaje sa servera. Za slanje treba internet.</span></div></div>
 <div class="help-row"><div class="help-txt"><b>Primanje fajla</b><span>Dobio si šifru? <b>Meni → Primljeni podaci → Preuzmi šifrom</b>, ukucaj 5 cifara i pritisni <b>Preuzmi</b>. Fajl se sprema na telefon i poslije toga radi bez interneta. Preuzimanje traži internet.</span></div></div>
@@ -7087,6 +7009,144 @@ function _loadLocalVlake() {
   </div>
 </div>
 
+<!-- ═══ REFERENTNA KARTA (Meni → ispod Print) ═══ -->
+<div id="refkarta-modal" role="dialog" aria-modal="true" aria-labelledby="refkarta-title">
+  <header class="rk-hdr"><div><small>PAPIRNA KARTA 1:10.000</small><h2 id="refkarta-title">Referentna karta</h2></div><div class="rk-acts"><button type="button" id="rk-min-btn" class="rk-close" onclick="_rkMinimiziraj()" aria-label="Sakrij referentnu kartu" aria-pressed="false">—</button><button type="button" class="rk-close" onclick="closeRefKartaPanel()" aria-label="Zatvori referentnu kartu"><svg class="ic"><use href="#ic-zatvori"/></svg></button></div></header>
+  <ol class="rk-steps" aria-label="Koraci"><li><b>1</b> Učitaj sliku</li><li><b>2</b> Poravnaj</li><li><b>3</b> Prepoznaj vlake</li></ol>
+  <div class="rk-body">
+      <div class="sec reference-card" id="reference-card">
+        <input type="file" id="refkarta-file" accept="image/*" style="display:none" onchange="refKartaLoad(event)">
+        <button class="btn g" style="width:100%;margin-bottom:6px;" onclick="document.getElementById('refkarta-file').click()">
+          <svg class="ic"><use href="#ic-kamera"/></svg> Učitaj sliku karte
+        </button>
+        <!-- Kontrole (vidljive tek nakon učitavanja) -->
+        <div id="refkarta-ctrl" style="display:none;">
+          <div style="display:flex;gap:6px;margin-bottom:6px;">
+            <button class="btn" style="flex:1;font-size:11px;" onclick="refKartaFitView()" title="Postavi sliku na trenutni prikaz mape"><svg class="ic"><use href="#ic-uglomjer"/></svg> Fituj u prikaz</button>
+            <button class="btn" style="flex:1;font-size:11px;" onclick="refKartaFitOdjel()" title="Postavi sliku na učitani KML odjel"><svg class="ic"><use href="#ic-uglomjer"/></svg> Fituj u odjel</button>
+          </div>
+          <div style="display:flex;gap:6px;margin-bottom:6px;">
+            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#cbd5e1;cursor:pointer;flex:1;">
+              <input type="checkbox" id="refkarta-clip" onchange="_refToggleClip(this.checked)" style="width:14px;height:14px;accent-color:#38bdf8;">
+              ✂ Isijeci po odjelu
+            </label>
+            <button class="btn" id="refkarta-manfit-btn" style="flex:1;font-size:11px;background:#1e293b;color:#94a3b8;border:1px solid #334155;"
+                    onclick="_refToggleManualFit()" title="Ručno razvuci sliku po uglovima i stranama"><svg class="ic"><use href="#ic-rucno"/></svg> Ručno fitovanje</button>
+          </div>
+          <button class="btn g" id="refkarta-align-btn" style="width:100%;margin-bottom:6px;font-size:12px;"
+                  onclick="refKartaAlign()" title="Pronađi granicu odjela u slici i precizno poravnaj na KML poligon">
+            <svg class="ic"><use href="#ic-meta"/></svg> Precizno poravnaj na granicu odjela
+          </button>
+          <button class="btn" id="refkarta-calib-btn" style="width:100%;margin-bottom:6px;font-size:12px;background:#1e3a5f;color:#38bdf8;"
+                  onclick="_refCalibToggle()" title="Postavi kontrolne tačke (klik na slici → klik gdje treba)">
+            <svg class="ic"><use href="#ic-meta"/></svg> Kalibriraj (kontrolne tačke)
+          </button>
+          <div id="refkarta-calib-hint" style="display:none;font-size:11px;color:#94a3b8;line-height:1.5;background:#0f172a;border:1px solid #1e3a5f;border-radius:6px;padding:6px 8px;margin-bottom:6px;"></div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:#cbd5e1;margin-bottom:6px;cursor:pointer;">
+            <input type="checkbox" id="refkarta-calib-snap" checked onchange="_refCalibSnapChanged(this.checked)" style="width:14px;height:14px;accent-color:#22c55e;">
+            <span>📍 Veži na <b>broj odjela</b> (snap na centar)</span>
+          </label>
+          <div style="font-size:11px;color:#64748b;margin-bottom:3px;">Providnost slike:</div>
+          <input type="range" id="refkarta-opa" min="5" max="95" value="55" style="width:100%;margin-bottom:6px;accent-color:#38bdf8;"
+                 oninput="refKartaSetOpacity(this.value)">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#cbd5e1;margin-bottom:8px;cursor:pointer;">
+            <input type="checkbox" id="refkarta-vis" checked onchange="refKartaSetVisible(this.checked)" style="width:15px;height:15px;accent-color:#38bdf8;">
+            Prikaži sliku karte
+          </label>
+          <!-- Detekcija linija -->
+          <div style="border-top:1px solid #1e293b;padding-top:8px;margin-top:4px;">
+            <h4 class="ref-heading">Vlake označene na papiru</h4><p class="ref-note">U obzir ulaze samo linije uz oznaku <b>T + broj</b>, npr. T12. Granice i izohipse bez takve oznake se odbacuju. Nejasnu vezu oznake i linije provjeri prije uvoza.</p><div class="ref-presets"><button type="button" onclick="ReferenceVlakePreset('dark')">Crne vlake</button><button type="button" onclick="ReferenceVlakePreset('blue')">Plave vlake</button></div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+              <span style="font-size:11px;color:#64748b;white-space:nowrap;">Detektuj po:</span>
+              <select id="refkarta-detect-mode" style="flex:1;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:2px 4px;font-size:11px;"
+                      onchange="_refDetModeChanged()">
+                <option value="dark">Tama (tamni pikseli)</option>
+                <option value="color">Boja (izoliraj boju vlake)</option>
+              </select>
+            </div>
+            <div id="refkarta-dark-opts">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                <span style="font-size:11px;color:#64748b;white-space:nowrap;">Prag tame:</span>
+                <input type="range" id="refkarta-thr" min="30" max="220" value="110" style="flex:1;accent-color:#f97316;"
+                       oninput="document.getElementById('refkarta-thr-val').textContent=this.value">
+                <span id="refkarta-thr-val" style="font-size:11px;color:#f97316;min-width:24px;text-align:right;">110</span>
+              </div>
+            </div>
+            <div id="refkarta-color-opts" style="display:none;">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                <span style="font-size:11px;color:#64748b;white-space:nowrap;">Boja vlake:</span>
+                <input type="color" id="refkarta-detect-color" value="#1e40af" style="width:32px;height:22px;border:1px solid #334155;border-radius:3px;cursor:pointer;padding:0;">
+                <button onclick="_refPickColorFromMap()" style="padding:2px 6px;background:#1e3a5f;color:#38bdf8;border:none;border-radius:4px;font-size:10px;cursor:pointer;" title="Uzmi boju sa slike"><svg class="ic"><use href="#ic-pipeta"/></svg> Uzmi</button>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                <span style="font-size:11px;color:#64748b;white-space:nowrap;">Tolerancija:</span>
+                <input type="range" id="refkarta-color-tol" min="20" max="140" value="70" style="flex:1;accent-color:#a855f7;"
+                       oninput="document.getElementById('refkarta-color-tol-val').textContent=this.value">
+                <span id="refkarta-color-tol-val" style="font-size:11px;color:#a855f7;min-width:24px;text-align:right;">70</span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+              <span style="font-size:11px;color:#64748b;white-space:nowrap;">Min. dužina:</span>
+              <input type="range" id="refkarta-minlen" min="8" max="120" value="25" style="flex:1;accent-color:#f97316;"
+                     oninput="document.getElementById('refkarta-minlen-val').textContent=this.value+'px'">
+              <span id="refkarta-minlen-val" style="font-size:11px;color:#f97316;min-width:28px;text-align:right;">25px</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+              <span style="font-size:11px;color:#64748b;white-space:nowrap;" title="Zadrži samo deblje (olovkom) crtane linije — izbaci tanke štampane izohipse i tekst.">Debljina olovke:</span>
+              <input type="range" id="refkarta-bold" min="0" max="3" value="0" style="flex:1;accent-color:#22c55e;"
+                     oninput="document.getElementById('refkarta-bold-val').textContent=this.value==0?'sve':this.value">
+              <span id="refkarta-bold-val" style="font-size:11px;color:#22c55e;min-width:24px;text-align:right;">sve</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+              <span style="font-size:11px;color:#64748b;white-space:nowrap;" title="Spoji krajeve linija koji su blizu i približno u istom smjeru — vlaka prekinuta na presjeku postaje jedna.">Spoji prekide:</span>
+              <input type="range" id="refkarta-join" min="0" max="40" value="14" style="flex:1;accent-color:#38bdf8;"
+                     oninput="document.getElementById('refkarta-join-val').textContent=this.value==0?'ne':this.value+'px'">
+              <span id="refkarta-join-val" style="font-size:11px;color:#38bdf8;min-width:28px;text-align:right;">14px</span>
+            </div>
+            <button class="btn g" style="width:100%;font-size:12px;" id="refkarta-detect-btn"
+                    onclick="refKartaRunDetect()"><svg class="ic"><use href="#ic-trazi"/></svg> Detektuj vlake uz T + broj</button>
+            <button class="btn ref-manual-label" type="button" onclick="ReferenceVlake.addLabel()">Označi natpis T + broj ručno</button>
+            <p id="refkarta-detect-status" class="ref-note" role="status" aria-live="polite">Prepoznavanje radi uz internet, na uređaju bez slanja fotografije. Za nečitljiv rukopis označi natpis ručno.</p>
+            <div style="border-top:1px dashed #1e293b;margin:8px 0 6px;padding-top:8px;">
+              <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:#cbd5e1;margin-bottom:6px;cursor:pointer;">
+                <input type="checkbox" id="refkarta-chain" checked style="width:14px;height:14px;accent-color:#c084fc;">
+                <span>🔗 Lančano trasiranje (auto sljedeća vlaka)</span>
+              </label>
+              <button class="btn" style="width:100%;font-size:12px;background:#1e293b;color:#c084fc;border:1px solid #6b21a8;"
+                      onclick="_refStartTrace()" title="Tapaj tačke duž vlake preko slike; dupli tap = kraj i (ako je lančano) odmah počni sljedeću."><svg class="ic"><use href="#ic-crtaj"/></svg> Trasiraj vlake preko slike</button>
+            </div>
+          </div>
+          <button id="refkarta-save-btn" class="btn" style="display:none;width:100%;margin-top:6px;background:#164e63;color:#38bdf8;border:1px solid #0e7490;font-size:12px;"
+                  onclick="refKartaSaveToServer()"><svg class="ic"><use href="#ic-server"/></svg> Sačuvaj na server</button>
+          <button class="btn" style="width:100%;margin-top:6px;background:#2d0a0a;color:#f87171;border:1px solid #7f1d1d;font-size:12px;"
+                  onclick="refKartaRemove()"><svg class="ic"><use href="#ic-obrisi"/></svg> Ukloni kartu</button>
+        </div>
+        <!-- Detektovane vlake toggle -->
+        <div id="refkarta-imp-ctrl" style="display:none;margin-top:6px;border-top:1px solid #1e293b;padding-top:8px;">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#cbd5e1;cursor:pointer;">
+            <input type="checkbox" id="refkarta-imp-vis" checked onchange="refKartaImportedVisible(this.checked)" style="width:15px;height:15px;accent-color:#f97316;">
+            <span>Prikaži detektovane vlake <b id="refkarta-imp-count" style="color:#f97316;"></b></span>
+          </label>
+          <div id="refkarta-results" class="ref-results"></div>
+          <button class="btn" style="width:100%;margin-top:5px;font-size:12px;background:#14532d;color:#4ade80;border:1px solid #166534;"
+                  id="refkarta-import-btn" onclick="refKartaImportDetected()"><svg class="ic"><use href="#ic-dodaj"/></svg> Pretvori u vlake</button>
+          <button class="btn" style="width:100%;margin-top:5px;font-size:11px;background:#1c0c02;color:#fb923c;border:1px solid #7c2d12;"
+                  onclick="refKartaClearImported()"><svg class="ic"><use href="#ic-obrisi"/></svg> Briši detektovane</button>
+        </div>
+        <!-- Repozitorij -->
+        <div style="margin-top:10px;border-top:1px solid #1e293b;padding-top:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <span style="font-size:12px;font-weight:700;color:#94a3b8;">☁ Repozitorij slika</span>
+            <button onclick="_refRepoLoad()" style="padding:2px 8px;background:#1e3a5f;color:#38bdf8;border:none;border-radius:5px;font-size:11px;cursor:pointer;"><svg class="ic"><use href="#ic-osvjezi"/></svg> Osvježi</button>
+          </div>
+          <div id="refkarta-repo-list" style="max-height:220px;overflow-y:auto;">
+            <div style="font-size:11px;color:#475569;">Klikni ↺ Osvježi za prikaz.</div>
+          </div>
+        </div>
+      </div>
+  </div>
+</div>
+
 <!-- ═══ UČITAJ KARTU — konsolidirani ekran ═══ -->
 <div id="loadmap-modal" role="dialog" aria-modal="true" aria-labelledby="loadmap-title">
   <header id="loadmap-hdr"><span class="lm-header-icon"><svg class="ic"><use href="#ic-karta"/></svg></span><div><small>KARTE NA TELEFONU</small><h2 id="loadmap-title">Učitaj kartu</h2></div><button id="loadmap-close" onclick="closeLoadMapScreen()" aria-label="Zatvori učitavanje karte"><svg class="ic"><use href="#ic-zatvori"/></svg></button></header>
@@ -7117,11 +7177,12 @@ function _loadLocalVlake() {
     <section id="loadmap-pane-maps" role="tabpanel" aria-labelledby="loadmap-tab-maps" hidden>
       <section class="lm-section" id="loadmap-recent-sec"><div class="lm-section-heading"><div><h3>Brzi pristup</h3><small>Nedavno dodane karte</small></div><span id="loadmap-recent-count"></span></div><div id="loadmap-recent"></div><div id="loadmap-startup-debug" class="lm-startup-diag"></div></section>
       <section class="lm-section"><div class="lm-section-heading"><div><h3>Moje karte</h3><small>Prepoznaj kartu po isječku, prikaži je i podesi njen izgled.</small></div></div>
+        <div id="loadmap-summary" class="lm-summary" hidden></div>
         <div class="lm-library-tools"><svg class="ic"><use href="#ic-trazi"/></svg><input type="search" id="loadmap-search" placeholder="Traži kartu po nazivu…" aria-label="Traži lokalnu kartu" oninput="_loadmapManageSearch(this.value)"></div>
         <div id="loadmap-manage"></div>
       </section>
       <details class="lm-help lm-storage"><summary>Prostor za karte <b id="loadmap-size">–</b></summary><p>Iskorišteni prostor aplikacije: <span id="loadmap-quota">–</span></p><div class="mapmgr-bar"><div class="mapmgr-bar-fill" id="loadmap-bar" style="width:0%"></div></div><p>Brisanje karte uklanja njenu kopiju iz aplikacije. Izvorni fajl sačuvaj za ponovno učitavanje.</p></details>
-      <button class="lm-secondary" onclick="_loadmapTab('add')"><svg class="ic"><use href="#ic-dodaj"/></svg> Dodaj još jednu kartu</button>
+      <button class="lm-secondary" id="loadmap-add-more" onclick="_loadmapTab('add')"><svg class="ic"><use href="#ic-dodaj"/></svg> Dodaj još jednu kartu</button>
     </section>
   </div>
 </div>
@@ -7157,7 +7218,7 @@ function _loadLocalVlake() {
 <div id="tem-modal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="tem-title" onclick="if(event.target===this)closeTemModal()">
   <section class="tem-panel">
     <header class="tem-panel-head"><div><h3 id="tem-title">Tematske karte</h3><small id="tem-file-count">GPKG fajlovi</small></div><button onclick="closeTemModal()" aria-label="Zatvori tematske karte">✕</button></header>
-    <nav class="tem-tabs" role="tablist" aria-label="Pregled tematskih karata"><button role="tab" data-tem-view="files" aria-controls="tem-modal-body" onclick="_temSwitchView('files')">Učitani fajlovi</button><button role="tab" data-tem-view="style" aria-controls="tem-modal-body" onclick="_temSwitchView('style')">Tema i stil</button><button role="tab" data-tem-view="sadnja" aria-controls="tem-modal-body" onclick="_temSwitchView('sadnja')">Sadnja · 7 vrsta</button></nav>
+    <nav class="tem-tabs" role="tablist" aria-label="Pregled tematskih karata"><button role="tab" data-tem-view="files" aria-controls="tem-modal-body" onclick="_temSwitchView('files')">Fajlovi</button><button role="tab" data-tem-view="style" aria-controls="tem-modal-body" onclick="_temSwitchView('style')">Tema i stil</button><button role="tab" data-tem-view="sadnja" aria-controls="tem-modal-body" onclick="_temSwitchView('sadnja')">Sadnja</button></nav>
     <div id="tem-modal-body" role="tabpanel"></div>
     <input type="file" id="tem-file-input" accept=".gpkg" multiple style="display:none;" onchange="_gpkgLoadFiles(this.files);this.value=''">
     <footer class="tem-panel-foot"><button class="tem-ucitaj" onclick="document.getElementById('tem-file-input').click()">＋ Učitaj GPKG fajlove</button><small id="tem-load-status" role="status" aria-live="polite"></small></footer>
@@ -7222,20 +7283,21 @@ function _loadLocalVlake() {
   </div>
 </div>
 <div id="vlaka-popup">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-    <span id="vp-nm" style="font-size:14px;font-weight:bold;color:#60a5fa;"></span>
-    <button onclick="closeVlakaPopup()" style="background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;line-height:1;padding:0 2px;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
+  <div class="vp-head">
+    <span class="vp-sw" id="vp-sw"></span>
+    <div class="vp-title"><span id="vp-nm"></span><small id="vp-sub"></small></div>
+    <button class="vp-x" onclick="closeVlakaPopup()" aria-label="Zatvori"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
   </div>
   <div id="vp-info"></div>
-  <div class="vp-view-actions"><button id="vp-buffer" onclick="vpBuffer()">Prikaži bafer</button><button onclick="vpZoom()">Približi</button><button onclick="vpLabele()" title="Pomjeri i zaokreni labelu"><svg class="ic"><use href="#ic-oznaka"/></svg> Labela</button></div>
+  <div class="vp-view-actions"><button id="vp-buffer" onclick="vpBuffer()">Prikaži bafer</button><button onclick="vpZoom()"><svg class="ic"><use href="#ic-meta"/></svg> Približi</button></div>
+  <button class="vp-lbl-btn" onclick="vpLabele()" title="Pomjeri oznaku duž vlake, zaokreni je ili dodaj novu"><svg class="ic"><use href="#ic-oznaka"/></svg><span>Oznake vlake<small>pomjeri duž vlake · zaokreni · dodaj novu</small></span></button>
   <div class="vp-btns" id="vlaka-popup-btns">
-    <button onclick="vpEdit()" style="background:#1d4ed8;color:#fff;"><svg class="ic"><use href="#ic-alat"/></svg> Edituj</button>
-    <button onclick="vpLager()" style="background:#92400e;color:#fbbf24;"><svg class="ic"><use href="#ic-oznaka"/></svg> Lager</button>
-    <button onclick="vpZoom()" style="background:#0f3460;color:#fff;flex:0.5;"><svg class="ic"><use href="#ic-meta"/></svg></button>
-    <button onclick="vpDelete()" style="background:#7f1d1d;color:#fff;flex:0.5;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
+    <button class="vp-b-edit" onclick="vpEdit()"><svg class="ic"><use href="#ic-alat"/></svg> Edituj</button>
+    <button class="vp-b-lager" onclick="vpLager()"><svg class="ic"><use href="#ic-oznaka"/></svg> Lager</button>
+    <button class="vp-b-del" onclick="vpDelete()" aria-label="Obriši vlaku"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
   </div>
 </div>
-    <!-- IZMJERI PANEL -->
+        <!-- IZMJERI PANEL -->
     <div id="mjtrg-panel">
       <!-- IZMJERA -->
       <div id="mjtrg-sec-msr" class="sec msr-hud" style="border-bottom:none;">
@@ -7290,6 +7352,7 @@ function _loadLocalVlake() {
             <span>Površina</span><b><span id="msr-area-m2">—</span> m² · <span id="msr-area-ha">—</span> ha</b>
           </div>
         </div>
+        <div id="msr-profil" class="msr-pf" style="display:none;"></div>
       </div>
 
       <!-- TRAGOVI + MJERENJA -->
@@ -7567,7 +7630,7 @@ function _loadLocalVlake() {
       <span><b>Omiljene karte</b><small id="mapfav-count"></small></span>
       <button onclick="closeMapFavs()" style="background:none;border:none;color:#475569;font-size:18px;cursor:pointer;padding:0;line-height:1;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
     </h3>
-    <p class="catalog-intro">Tvoje podloge za brzi prelazak. Lokalni fajlovi i online karte jasno su označeni.</p><div id="mapfav-grid"></div>
+    <p class="catalog-intro">Dodir otvara kartu. Na ⋮ je preimenovanje, pomjeranje i uklanjanje. Karta skinuta sa servera se dodaje sama, sa nagibom i ekspozicijom.</p><div id="mapfav-grid"></div>
     <div style="padding:8px 10px;flex-shrink:0;">
       <button onclick="closeMapFavs()" style="width:100%;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:8px;padding:10px;font-size:13px;cursor:pointer;">Zatvori</button>
     </div>
@@ -7612,7 +7675,12 @@ function _loadLocalVlake() {
       <input id="mqm-odjel" style="width:100%;background:#f8fafc;border:1.5px solid #e2e8f0;color:#1e293b;border-radius:10px;padding:9px 11px;font-size:13px;box-sizing:border-box;outline:none;transition:border-color 0.15s;" onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'" placeholder="npr. 14a">
     </div>
   </div>
-  <label style="display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:13px;color:#1e293b;"><input type="checkbox" id="mqm-lbl" style="width:18px;height:18px"> Prikaži oznaku na karti (površina / dužina)</label>
+  <details id="mqm-izgled" class="mqm-izgled" open><summary>🎨 Izgled na karti</summary>
+    <div class="mqm-red"><span>Boja</span><div id="mqm-boje" class="mqm-boje"></div></div>
+    <div class="mqm-red"><span>Debljina <b id="mqm-deb-v">4</b> px</span><input type="range" id="mqm-deb" min="1" max="12" step="1" value="4" oninput="_mqmStil('weight',+this.value)"></div>
+    <div class="mqm-red"><span>Linija</span><select id="mqm-dash" onchange="_mqmStil('dash',this.value)"><option value="">Puna</option><option value="10 6">Crtice</option><option value="2 7">Tačke</option></select></div>
+    <div class="mqm-red" id="mqm-fill-red"><span>Ispuna <b id="mqm-fill-v">18</b>%</span><input type="range" id="mqm-fill" min="0" max="100" step="5" value="18" oninput="_mqmStil('fillOpacity',this.value/100)"></div>
+  </details>
   <div style="display:flex;gap:10px;">
     <button id="mqm-delete-btn" onclick="_mqmDelete()" style="display:none;flex:0 0 auto;background:#fef2f2;color:#dc2626;border:1.5px solid #fecaca;border-radius:12px;padding:12px 14px;font-size:14px;cursor:pointer;"><svg class="ic"><use href="#ic-obrisi"/></svg></button>
     <button onclick="_mqmSave()"
@@ -7728,7 +7796,9 @@ function _loadLocalVlake() {
       <span class="ab-ico"><svg class="ic"><use href="#ic-uglomjer"/></svg></span>
       <span>Izmjeri</span>
     </button>
-    <!-- Podmeni — široka traka iznad donje trake (v1.6.10): četiri pločice u
+  </div>
+  <!-- Podmeni je SESTRA wrap-a, ne dijete: wrap je display:none kad postoji aktivan projekat, a meni (fixed) se otvara i iz modala Moja lokacija. -->
+  <!-- Podmeni — široka traka iznad donje trake (v1.6.10): četiri pločice u
          jednom redu umjesto uske visoke liste. -->
     <div id="ab-izmjeri-menu" class="ab-pop" style="display:none;">
       <div class="abp-tiles">
@@ -7768,7 +7838,6 @@ function _loadLocalVlake() {
         </button>
       </div>
     </div>
-  </div>
   <div id="ab-loc-wrap" style="position:relative;display:flex;align-items:center;justify-content:center;">
     <button id="ab-loc" onclick="_toggleLocPopup()" title="Moja lokacija">
       <span class="ab-ico"><svg class="dm-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="static/icons/navigation.svg#dm-location"/></svg><span class="ab-acc" id="ab-loc-acc"></span></span>
@@ -7781,23 +7850,26 @@ function _loadLocalVlake() {
           <div class="abp-title">Moja lokacija</div>
           <div class="abp-sub"><span id="gps-info">Isključen</span><span id="gps-age"></span></div>
         </div>
-        <button class="abp-chip abp-sumski" id="forest-switch" onclick="_locChipSumski()" onpointerdown="_locLongPress(event)" onpointerup="_locLongPressStop()" onpointerleave="_locLongPressStop()" oncontextmenu="return false" title="Šumski mod — drži prst za objašnjenje">🌲 Šumski mod</button>
+        <button type="button" class="abp-hb abp-prati" id="abp-prati" onclick="_pratiToggle()" title="Prati me: karta ide za tobom" aria-label="Prati me"><svg class="ic"><use href="#ic-gps"/></svg><span>Prati me</span></button>
+        <button type="button" class="abp-hb abp-centar" onclick="if(_pratiKlik())_locPopupCentriraj()" onpointerdown="_pratiDown()" onpointerup="_pratiUp()" onpointerleave="_pratiUp()" onpointercancel="_pratiUp()" title="Centriraj kartu na moju lokaciju (dug dodir: prati me)" aria-label="Centriraj"><svg class="ic"><use href="#ic-meta"/></svg><span>Centriraj</span></button>
         <span class="gps-switch" id="gps-switch" onclick="toggleGPS()" title="GPS uključen / isključen"><span class="gps-switch-knob"></span></span>
       </div>
       <button class="abp-ukljuci" onclick="toggleGPS()">
         <svg class="ic"><use href="#ic-meta"/></svg><span>Uključi lokaciju</span></button>
-      <div class="abp-chips abp-red1">
-        <button type="button" class="abp-chip abp-centar" onclick="if(_pratiKlik())_locPopupCentriraj()" onpointerdown="_pratiDown()" onpointerup="_pratiUp()" onpointerleave="_pratiUp()" onpointercancel="_pratiUp()" title="Centriraj kartu na moju lokaciju (dug dodir: prati me)"><span class="abp-centar-txt">⌖ Centriraj</span><i class="prati-tog" aria-hidden="true"></i></button>
-        <button class="abp-chip" id="compass-switch" onclick="_togCompassSwitch()" title="Kompas / pravac gledanja">🧭 Kompas</button>
-        <button class="abp-chip" id="radius-switch" onclick="_togRadiusRings()" title="Krugovi udaljenosti oko tebe">⊚ Radijus</button>
+      <div class="abp-tiles">
+        <button type="button" id="ab-loc-trag" class="abp-tile2 abp-trag" onclick="_locTragKlik()" title="Snimanje traga / lista tragova">
+          <svg class="ic"><use href="#ic-trag"/></svg><span id="ab-loc-trag-txt">Tragovi</span></button>
+        <button type="button" class="abp-tile2" id="ab-loc-mjerenja" onclick="_locPopupMjerenja(event)" title="Izmjeri: udaljenost, nagib, površina">
+          <svg class="ic"><use href="#ic-uglomjer"/></svg><span>Izmjeri</span></button>
+        <button type="button" class="abp-tile2 abp-samo-gps" id="ab-loc-foto" onclick="_locPopupUslikaj()" title="Uslikaj fotografiju na ovoj lokaciji">
+          <svg class="ic"><use href="#ic-kamera"/></svg><span>Slika</span></button>
+        <button type="button" class="abp-tile2 abp-samo-gps" id="ab-loc-tacka" onclick="_locPopupTacka()" title="Označi tačku na ovoj lokaciji">
+          <svg class="ic"><use href="#ic-pozicija"/></svg><span>Tačka</span></button>
       </div>
-      <div class="abp-acts">
-        <button id="ab-loc-trag" class="abp-act abp-trag" onclick="_locPopupSnimiTrag()">
-          <svg class="ic"><use href="#ic-trag"/></svg><span id="ab-loc-trag-txt">Snimi trag</span></button>
-      </div>
-      <div class="abp-chips abp-lista">
-        <button type="button" class="abp-chip" id="ab-loc-tragovi" onclick="_locPopupTragovi('trg')" title="Lista tragova i snimanje">🥾 Tragovi</button>
-        <button type="button" class="abp-chip" id="ab-loc-mjerenja" onclick="_locPopupTragovi('msr')" title="Sačuvana mjerenja">📏 Mjerenja</button>
+      <div class="abp-chips abp-donji">
+        <button class="abp-chip" id="forest-switch" onclick="_locChipSumski()" onpointerdown="_locLongPress(event)" onpointerup="_locLongPressStop()" onpointerleave="_locLongPressStop()" oncontextmenu="return false" title="Šumski mod — drži prst za objašnjenje"><svg class="ic"><use href="#ic-stablo"/></svg><span>Šumski mod</span></button>
+        <button class="abp-chip" id="compass-switch" onclick="_togCompassSwitch()" title="Kompas / pravac gledanja"><svg class="ic"><use href="#ic-kompas"/></svg><span>Kompas</span></button>
+        <button class="abp-chip" id="radius-switch" onclick="_togRadiusRings()" title="Krugovi udaljenosti oko tebe"><svg class="ic"><use href="#ic-buffer"/></svg><span>Radijus</span></button>
       </div>
     </div>
   </div>
@@ -7858,6 +7930,7 @@ function _loadLocalVlake() {
 <div id="explorer-top" hidden>
   <div><span id="ex-mode">EXPLORER 3D · PRATI ME</span><b id="ex-gps">Tražim GPS signal</b></div>
   <button type="button" onclick="Explorer.requestCompass()" aria-label="Kompas"><span id="ex-north" aria-hidden="true">↑</span><small>S</small></button>
+  <button id="ex-relief" type="button" aria-pressed="false" onclick="_exReljef()" aria-label="Sjenčenje reljefa" title="Reljef: sjenčenje terena">⛰</button>
   <button type="button" onclick="stopTackaNav()" aria-label="Završi navigaciju">×</button>
 </div>
 <div id="explorer-you" hidden aria-hidden="true"><span></span><b>TI</b></div>
@@ -7872,20 +7945,22 @@ function _loadLocalVlake() {
 
 <!-- Tačka modal — unos naziva -->
 <div id="tacka-modal-bg" onclick="_tackaCancelModal()"></div>
-<div id="tacka-modal">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-    <h3 style="margin:0;">📍 Nova tačka</h3>
-    <button onclick="_tackaCancelModal()"
-      style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:4px 8px;line-height:1;"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
+<div id="tacka-modal" role="dialog" aria-modal="true" aria-label="Nova tačka">
+  <div class="tkm-h">
+    <span class="tkm-ik"><svg class="ic"><use href="#ic-pozicija"/></svg></span>
+    <div class="tkm-t"><b>Nova tačka</b><small id="tkm-sub">Tačka 1</small></div>
+    <button type="button" class="tkm-x" onclick="_tackaCancelModal()" aria-label="Zatvori"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
   </div>
-  <input id="tacka-nm-input" type="text" placeholder="" autocomplete="off" maxlength="40"
+  <label class="tkm-l" for="tacka-nm-input">Naziv <i>(nije obavezan)</i></label>
+  <input id="tacka-nm-input" type="text" placeholder="npr. Sabirno mjesto, Izvor, Prelaz" autocomplete="off" maxlength="40"
     onkeydown="if(event.key==='Enter'){_tackaConfirm();}">
+  <div class="tkm-l">Gdje postaviti</div>
   <div class="tacka-modal-btns">
-    <button id="tacka-btn-confirm" onclick="_tackaConfirm()" style="flex:1;background:#16a34a;color:#fff;"><svg class="ic"><use href="#ic-pozicija"/></svg> GPS</button>
-    <button onclick="_tackaAtCenter()" style="flex:1;background:#2563eb;color:#fff;"><svg class="ic"><use href="#ic-meta"/></svg> Centar</button>
-    <button onclick="var nm=document.getElementById('tacka-nm-input').value.trim();_tackaCancelModal();_tackaPlaceOnMap(nm);" style="flex:1;background:#0f3460;color:#60a5fa;"><svg class="ic"><use href="#ic-dodir"/></svg> Karta</button>
-    <button id="tacka-btn-cancel" onclick="_tackaCancelModal()"><svg class="ic"><use href="#ic-zatvori"/></svg></button>
+    <button id="tacka-btn-confirm" type="button" class="tkm-k tkm-gps" onclick="_tackaConfirm()"><svg class="ic"><use href="#ic-pozicija"/></svg><b>Moja pozicija</b><small id="tkm-gps-txt">GPS</small></button>
+    <button type="button" class="tkm-k" onclick="_tackaAtCenter()"><svg class="ic"><use href="#ic-meta"/></svg><b>Centar karte</b><small>na križić</small></button>
+    <button type="button" class="tkm-k" onclick="var nm=document.getElementById('tacka-nm-input').value.trim();_tackaCancelModal();_tackaPlaceOnMap(nm);"><svg class="ic"><use href="#ic-dodir"/></svg><b>Dodirni kartu</b><small>prstom</small></button>
   </div>
+  <button id="tacka-btn-cancel" type="button" class="tkm-odustani" onclick="_tackaCancelModal()">Odustani</button>
 </div>
 <!-- Tačka place-on-map banner -->
 <div id="tacka-place-banner">📍 Tapni na karti za postavljanje tačke</div>
@@ -7981,9 +8056,6 @@ function _loadLocalVlake() {
       <button class="layer-opt" id="lo-google" onclick="setLayer('📡 Google')">
         <span class="layer-ico"><svg class="ic"><use href="#ic-globus"/></svg></span>Google<span class="lopt-sub">Satelit HD</span>
       </button>
-      <button class="layer-opt" id="lo-eox" onclick="setLayer('🌍 Sentinel')">
-        <span class="layer-ico"><svg class="ic"><use href="#ic-satelit"/></svg></span>Pokrivenost<span class="lopt-sub">WorldCover, bez ključa</span>
-      </button>
       <button class="layer-opt" id="lo-nagib" onclick="setLayer('_nagib')">
         <span class="layer-ico"><svg class="ic"><use href="#ic-uglomjer"/></svg></span>Nagib<span class="lopt-sub">Topo + nagibi</span>
       </button>
@@ -8024,8 +8096,9 @@ function _loadLocalVlake() {
 
   <!-- Tab: Instalirane karte -->
   <div id="ls-pane-inst" style="display:none;">
-    <div class="catalog-hero"><h3>Instalirane karte</h3></div>
-    <section class="catalog-section"><header><h4>Slojevi terena</h4><span>DEM / keš</span></header><div class="installed-grid"><article class="inst-layer-row" id="inst-slope-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/slope.svg" alt="Ilustracija nagiba terena"><span class="installed-preview-tag">&gt;30%</span></span><span class="installed-toggle"><input type="checkbox" id="inst-slope-cb" onchange="_instToggle('slope',this.checked)"><span class="catalog-copy"><b>Nagib terena</b><small>Nagibi >30% · cijeli prikaz karte</small><span class="catalog-status" id="inst-slope-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('slope')" aria-label="Obriši keš: Nagib terena" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-ekspo-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/ekspo.svg" alt="Ilustracija ekspozicije"><span class="installed-preview-tag">S · I · J · Z</span></span><span class="installed-toggle"><input type="checkbox" id="inst-ekspo-cb" onchange="_instToggle('ekspo',this.checked)"><span class="catalog-copy"><b>Ekspozicija</b><small>Smjer padine · Sjever / Istok / Jug / Zapad</small><span class="catalog-status" id="inst-ekspo-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('ekspo')" aria-label="Obriši keš: Ekspozicija" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-elev-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/elev.svg" alt="Ilustracija reljefa"><span class="installed-preview-tag">Reljef</span></span><span class="installed-toggle"><input type="checkbox" id="inst-elev-cb" onchange="_instToggle('elev',this.checked)"><span class="catalog-copy"><b>Sjenčenje reljefa</b><small>Hillshade · prikaz oblika terena</small><span class="catalog-status" id="inst-elev-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('elev')" aria-label="Obriši keš: Sjenčenje reljefa" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-nv-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/nv.svg" alt="Ilustracija nadmorskih visina"><span class="installed-preview-tag">Visine</span></span><span class="installed-toggle"><input type="checkbox" id="inst-nv-cb" onchange="_instToggle('nv',this.checked)"><span class="catalog-copy"><b>Nadmorske visine</b><small>Visinski pojasevi u bojama</small><span class="catalog-status" id="inst-nv-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('nv')" aria-label="Obriši keš: Nadmorske visine" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-kont-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/kont.svg" alt="Ilustracija izohipsa"><span class="installed-preview-tag">20 m</span></span><span class="installed-toggle"><input type="checkbox" id="inst-kont-cb" onchange="_instToggle('kont',this.checked)"><span class="catalog-copy"><b>Konture (izohipse)</b><small>Visinske linije · korak 20 m</small><span class="catalog-status" id="inst-kont-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('kont')" aria-label="Obriši keš: Konture (izohipse)" title="Obriši keš">🗑</button></article></div><p class="catalog-intro">Izvor: Mapzen / Copernicus EU-DEM. Nagib, visine, ekspozicija i konture koriste isti DEM keš. Brisanje tog keša utiče na sva četiri sloja.</p><button type="button" class="catalog-wide" onclick="nvDemPreuzmiUi()">Preuzmi teren za offline</button></section>    <section class="catalog-section"><header><h4>Lokalne karte</h4><small id="installed-local-count"></small></header><div id="installed-local-list"></div><button class="catalog-wide" type="button" onclick="closeLayerSheet();openLoadMapScreen()">＋ Učitaj lokalnu kartu</button></section><section class="catalog-section"><h4>Online karte i memorija</h4><p class="catalog-intro">Pregledaj sačuvane pločice po podlozi i njihovo zauzeće.</p><button type="button" class="catalog-wide" onclick="closeLayerSheet();showCacheMgr()">Upravljaj offline kešom</button></section>
+    <header class="inst-head"><div><h3>Instalirane karte</h3><small>Slojevi terena iz DEM-a · rade bez interneta kad su sačuvani · offline karte su u tabu Offline</small></div></header>
+    
+    <section class="catalog-section"><header><h4>Slojevi terena</h4><span>DEM / keš</span></header><div class="installed-grid"><article class="inst-layer-row" id="inst-slope-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/slope.svg" alt="Ilustracija nagiba terena"><span class="installed-preview-tag">&gt;30%</span></span><span class="installed-toggle"><input type="checkbox" id="inst-slope-cb" onchange="_instToggle('slope',this.checked)"><span class="catalog-copy"><b>Nagib terena</b><small>Nagibi >30% · cijeli prikaz karte</small><span class="catalog-status" id="inst-slope-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('slope')" aria-label="Obriši keš: Nagib terena" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-ekspo-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/ekspo.svg" alt="Ilustracija ekspozicije"><span class="installed-preview-tag">S · I · J · Z</span></span><span class="installed-toggle"><input type="checkbox" id="inst-ekspo-cb" onchange="_instToggle('ekspo',this.checked)"><span class="catalog-copy"><b>Ekspozicija</b><small>Smjer padine · Sjever / Istok / Jug / Zapad</small><span class="catalog-status" id="inst-ekspo-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('ekspo')" aria-label="Obriši keš: Ekspozicija" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-elev-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/elev.svg" alt="Ilustracija reljefa"><span class="installed-preview-tag">Reljef</span></span><span class="installed-toggle"><input type="checkbox" id="inst-elev-cb" onchange="_instToggle('elev',this.checked)"><span class="catalog-copy"><b>Sjenčenje reljefa</b><small>Hillshade · prikaz oblika terena</small><span class="catalog-status" id="inst-elev-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('elev')" aria-label="Obriši keš: Sjenčenje reljefa" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-nv-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/nv.svg" alt="Ilustracija nadmorskih visina"><span class="installed-preview-tag">Visine</span></span><span class="installed-toggle"><input type="checkbox" id="inst-nv-cb" onchange="_instToggle('nv',this.checked)"><span class="catalog-copy"><b>Nadmorske visine</b><small>Visinski pojasevi u bojama</small><span class="catalog-status" id="inst-nv-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('nv')" aria-label="Obriši keš: Nadmorske visine" title="Obriši keš">🗑</button></article><article class="inst-layer-row" id="inst-kont-row"><label><span class="installed-preview"><img loading="lazy" decoding="async" src="static/img/map-previews/kont.svg" alt="Ilustracija izohipsa"><span class="installed-preview-tag">20 m</span></span><span class="installed-toggle"><input type="checkbox" id="inst-kont-cb" onchange="_instToggle('kont',this.checked)"><span class="catalog-copy"><b>Konture (izohipse)</b><small>Visinske linije · korak 20 m</small><span class="catalog-status" id="inst-kont-stat">Provjeravam keš…</span></span></span></label><button type="button" onclick="_instClear('kont')" aria-label="Obriši keš: Konture (izohipse)" title="Obriši keš">🗑</button></article></div><p class="catalog-intro">Izvor: Mapzen / Copernicus EU-DEM. Nagib, visine, ekspozicija i konture koriste isti DEM keš. Brisanje tog keša utiče na sva četiri sloja.</p><button type="button" class="catalog-wide" onclick="nvDemPreuzmiUi()">Preuzmi teren za offline</button></section>    <section class="catalog-section"><h4>Online karte i memorija</h4><p class="catalog-intro">Pregledaj sačuvane pločice po podlozi i njihovo zauzeće.</p><button type="button" class="catalog-wide" onclick="closeLayerSheet();showCacheMgr()">Upravljaj offline kešom</button></section>
   </div><!-- /ls-pane-inst -->
 
   <!-- Tab: Granice -->
@@ -8135,8 +8208,8 @@ function _loadLocalVlake() {
     <div class="sp-project-context"><span class="sp-context-label">AKTIVNI PROJEKAT</span><b id="server-project-label"></b><div id="server-identity"></div></div>
     <div id="server-exchange-status" role="status" aria-live="polite" class="sp-exchange-status"></div>
     <div id="server-send-preview"></div>
-    <section id="data-server-received" class="sp-transfer-section"><h3>Primljeni podaci</h3><p class="sp-note">Posljednja 3 projekta. Dodirni projekat za stavke i projektante.</p><div class="sp-group-controls"><label for="server-group-mode">Pregled</label><select id="server-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-received-items"></div><div id="syncq-primljeno" hidden></div></section>
-    <section id="data-server-sent" class="sp-transfer-section" hidden><h3>Poslani podaci</h3><p class="sp-note">Potvrđeno slanje s ovog telefona za posljednja 3 projekta.</p><div class="sp-group-controls"><label for="server-sent-group-mode">Pregled</label><select id="server-sent-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-sent-items"></div></section>
+    <section id="data-server-received" class="sp-transfer-section"><h3>Primljeni podaci</h3><p class="sp-note">Posljednja 3 projekta · spisak zadnjih 7 dana (podaci ostaju na telefonu). Dodirni projekat za stavke i projektante.</p><div class="sp-group-controls"><label for="server-group-mode">Pregled</label><select id="server-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-received-items"></div><div id="syncq-primljeno" hidden></div></section>
+    <section id="data-server-sent" class="sp-transfer-section" hidden><h3>Poslani podaci</h3><p class="sp-note">Potvrđeno slanje s ovog telefona za posljednja 3 projekta · spisak zadnjih 7 dana (podaci ostaju na telefonu).</p><div class="sp-group-controls"><label for="server-sent-group-mode">Pregled</label><select id="server-sent-group-mode" onchange="_serverTransferGroup(this.value)"><option value="project">Po projektu</option><option value="day">Po danima</option></select></div><div id="server-sent-items"></div></section>
     <details id="server-queue-details" class="sp-recovery"><summary>Detalji i greške slanja</summary>
     <div id="syncq-list" style="padding:4px 0;"></div><div id="data-server-empty" class="data-context"></div><div id="data-server-pager"></div>
     </details>

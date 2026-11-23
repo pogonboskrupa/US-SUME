@@ -39,7 +39,7 @@ let _aktivniProjektId='P',_activeTab='karta',vlake=[],_projekti=[{id:'P',odjel:'
 const switchTab=(t)=>{_activeTab=t;document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',(b.getAttribute('onclick')||'').includes("switchTab('"+t+"')")));};
 const isVodeci=()=>false,isAdmin=()=>!!sbProfile?.is_admin,isSpdField=()=>false,getOdjelBounds=()=>null,showToast=()=>{};
 const map={options:{zoomSnap:1},center:{lat:44.9,lng:16},zoom:13,getCenter(){return this.center;},getZoom(){return this.zoom;},setView(c,z){this.center=c;this.zoom=z;},invalidateSize(){}};
-''' + '\n'.join(function(n) for n in ['_escHtml','_niceScaleLen','_fmtScaleLen','_menuIdentityRender','toggleMenuDropdown','closeMenuDropdown']) + '\n' + print_js
+''' + '\n'.join(function(n) for n in ['_escHtml','_niceScaleLen','_fmtScaleLen','_nalogInicijali','_menuIdentityRender','toggleMenuDropdown','closeMenuDropdown']) + '\n' + print_js
 javascript += '\n' + (ROOT / 'static/js/field-design.js').read_text()
 pm_start=SOURCE.index('<div id="pm-modal"')
 pm_html=SOURCE[pm_start:SOURCE.index('<!-- ─── IZVJEŠTAJI',pm_start)]

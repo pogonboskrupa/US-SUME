@@ -104,7 +104,7 @@ t('ime fajla zadržava dijakritiku, a izbacuje znakove zabranjene u imenu fajla'
 t('kartica traga, popup na karti i Teren nude KML izbor (Podijeli / Sačuvaj)', () => {
   assert.ok(/_tragKmlMeni\('\$\{t\.id\}'\)[^>]*>[\s\S]{0,80}KML/.test(extractFn('_tragoviRowHtml')));
   assert.ok(/_tragKmlMeni\(/.test(extractFn('_tragPopupHtml')));
-  const meni = extractFn('_tragKmlMeni');
+  const meni = extractFn('_tragIzvozIzvrsi');
   assert.ok(/_tragRegShare\(id\)/.test(meni) && /_tragKmlSacuvaj\(id\)/.test(meni));
   assert.ok(!/confirm\(/.test(extractFn('_tragPopupHtml').replace(/_dlgConfirm/g, '')), 'bez native confirm()');
 });

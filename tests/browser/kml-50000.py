@@ -9,7 +9,7 @@ const map=L.map('map',{zoomControl:false,preferCanvas:true}).setView([44.5,16.5]
 const kmlLs=[];let _dozKmlSelMode=false,_dozDrawType=null;const opened=[];
 const _kmlOpenPopup=(l,ll)=>opened.push(l._kmlName);
 '''
-for n in ['_escHtml','pcs','_parseKmlExtData','_coordsCentroid','_kmlLabelMarker','_kmlPointClick','_kmlGrpClick','_kmlGrpTip','_bindKmlPopup','pkmlStyled','pkml','_kmlHitTest','_kmlRingDistPx','_distToSegPx','kmlPoints']:
+for n in ['_escHtml','_pcsRazmak','pcs','_parseKmlExtData','_coordsCentroid','_kmlLabelMarker','_kmlPointClick','_kmlGrpClick','_kmlGrpTip','_bindKmlPopup','pkmlStyled','pkml','_kmlHitTest','_kmlRingDistPx','_distToSegPx','kmlPoints']:
     try: js+='\n'+b.function(n)
     except Exception as e: print('preskočeno',n,file=sys.stderr)
 html='<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/static/libs/leaflet.min.css"><style>#map{position:fixed;inset:0}</style></head><body><div id="map"></div><script src="/static/libs/leaflet.min.js"></script><script>'+js+'</script></body></html>'

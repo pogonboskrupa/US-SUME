@@ -6,5 +6,6 @@ assert(/id <> auth\.uid\(\)/.test(sql)&&/lower\(k\.ime\)/.test(sql),'jedinstveno
 assert(!/login_email\s*=/.test(sql),'login_email se ne dira');
 const f=src.slice(src.indexOf('async function urediImePrezime'),src.indexOf('async function doLogout'));
 assert(/promijeni_svoje_ime/.test(f)&&/_OL\.save\(_OL\.PROFILE/.test(f)&&/_SAVED_USER_KEY/.test(f));
-assert(/urediImePrezime\(\)/.test(src.slice(src.indexOf('async function promijeniPin'),src.indexOf('async function urediImePrezime'))));
+assert(/nalogOtvori\(\)/.test(src.slice(src.indexOf('function promijeniPin'),src.indexOf('function _nalogInicijali'))),'promijeniPin otvara modal');
+assert(/urediImePrezime\(i, p\)/.test(src.slice(src.indexOf('async function nalogSacuvajIme'),src.indexOf('async function nalogSacuvajPin'))),'modal čuva ime kroz urediImePrezime');
 console.log('OK promjena imena');

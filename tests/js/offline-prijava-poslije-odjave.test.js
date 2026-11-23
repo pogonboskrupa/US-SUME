@@ -22,7 +22,7 @@ vm.createContext(ctx); vm.runInContext(kod, ctx);
   assert.ok(!logout.includes('_OFFCRED_KEY') && !logout.includes('_offCred'), 'doLogout ne dira offline provjeru');
   const login = blok("async function doLogin()", "// --- Register ---");
   assert.ok(login.includes('_offCredProvjeri') && login.includes('_offCredSpremi'), 'doLogin koristi provjeru');
-  assert.equal((login.match(/await prijavaIzKesa\(\)/g) || []).length, 3, 'sva tri poziva čekaju async provjeru');
+  assert.equal((login.match(/await prijavaIzKesa\(\)/g) || []).length, 4, 'svi pozivi čekaju async provjeru');
   console.log('offline-prijava-poslije-odjave: OK');
 })().catch(e => { console.error(e); process.exit(1); });
 

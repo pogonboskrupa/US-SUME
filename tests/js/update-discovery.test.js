@@ -19,3 +19,15 @@ async function main(){
  console.log('OK update discovery: published APK only, pending/draft skipped, version/dismissal/offline, web SW');
 }
 main().catch(e=>{console.error(e);process.exit(1)});
+
+// v4.3.2: provjera se stvarno pokreće (ranije _checkLatestVersion nije zvalo ništa), uz razmak i čekanje snimanja.
+{
+  const src=require('./_izvor').izvor(),assert=require('assert');
+  assert(/setTimeout\(\(\) => _azurProvjeriAkoTreba\(false\), 20000\)/.test(src),'provjera poslije pokretanja');
+  assert(/setInterval\(\(\) => _azurProvjeriAkoTreba\(false\)/.test(src),'periodična provjera');
+  assert(/_AZUR_RAZMAK_MS = 6 \* 3600000/.test(src),'najviše jednom u 6 h');
+  const f=src.slice(src.indexOf('function _azurPrikazi('),src.indexOf('// Redovna provjera nove verzije'));
+  assert(/_anyRecOn\(\)\) \{ _azurCekaSnimanje = latest; return; \}/.test(f),'ne prekida snimanje');
+  assert(/24 \* 3600000/.test(f),'zatvaranje vrijedi 24 h');
+  console.log('OK azuriranje zakazano');
+}

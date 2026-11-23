@@ -10,7 +10,7 @@ function make(o) {
   const sb = {
     rpc: async () => ({ data: 'a@b.c' }),
     auth: {
-      signInWithPassword: async ({ password }) => { calls.signin.push(password); return { error: o.ok === password ? null : { message: 'x' } }; },
+      signInWithPassword: async ({ password }) => { calls.signin.push(password); return { data: { user: o.ok === password ? { id: o.uid || 'u1' } : null }, error: o.ok === password ? null : { message: 'x' } }; },
       getUser: async () => ({ data: { user: { id: o.uid || 'u1' } } })
     }
   };

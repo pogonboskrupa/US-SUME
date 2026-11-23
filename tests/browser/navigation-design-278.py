@@ -37,7 +37,7 @@ async def main():
    sb={auth:{signOut:async()=>({error:null})},rpc:async name=>{rpcCalls.push(name);if(name==='vodeci_projekti_pregled'&&holdReport)await new Promise(r=>window.reportRelease=r);return {data:name==='vodeci_projekti_pregled'?reportRows:name==='vodeci_doznaka_pregled'?[{id:'D',name:'Doznaka 108',status:'active',known_area_ha:30,clanova:4,kreirao:'Amir Kolega'}]:[],error:null}},from:table=>{
     let filters=[];const query={select(){return this},eq(k,v){filters.push([k,v]);return this},neq(){return this},in(){return this},order(){return this},single:async()=>({data:fixtureProfile,error:null}),then(resolve,reject){if(fixtureOffline){reject(Error('offline'));return;}let data=[];
      if(table==='projekti')data=filters.some(([k])=>k==='korisnik_id')?[personal[0]]:[personal[1]];
-     if(table==='projekt_clanovi')data=filters.some(([k])=>k==='korisnik_id')?[{projekt_id:'Q'}]:[{korisnik_id:sbUser.id}];
+     if(table==='projekt_clanovi')data=filters.some(([k])=>k==='korisnik_id')?[{projekt_id:'Q'}]:[{projekt_id:'Q',korisnik_id:sbUser.id}];
      if(table==='korisnici')data=[{id:'B',ime:'Amir',prezime:'Kolega',sumarija:'Krupa',je_vodeci:true}];
      resolve({data,error:null});}};return query;}};
    sbInitData=async()=>{};_revealApp();

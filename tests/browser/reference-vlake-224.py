@@ -18,7 +18,7 @@ window.AndroidReferenceOcr={recognize:(id,data)=>{ocrId=id;if(!holdOCR)setTimeou
 function makePaper(){const c=document.createElement('canvas');c.width=800;c.height=600;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,800,600);x.lineWidth=4;x.strokeStyle='#111';x.strokeRect(30,40,730,520);x.beginPath();x.moveTo(70,160);x.lineTo(350,160);x.stroke();x.strokeStyle='#1e40af';x.beginPath();x.moveTo(440,360);x.lineTo(740,360);x.moveTo(70,450);x.lineTo(330,450);x.stroke();x.font='bold 30px Arial';x.fillStyle='#111';x.fillText('T12',180,130);x.fillStyle='#1e40af';x.fillText('T3',550,338);x.fillStyle='#111';x.fillText('ODJEL 105',90,75);x.fillText('T7',120,435);return c.toDataURL();}
 window.refReady=new Promise(resolve=>window.addEventListener('DOMContentLoaded',async()=>{await fixtureReady;map.createPane('refKarte');map.getPane('refKarte').style.zIndex='620';_refImg=new Image();await new Promise(r=>{_refImg.onload=r;_refImg.src=makePaper()});_refBounds=[[44.89,16],[44.91,16.03]];document.querySelector('#refkarta-ctrl').style.display='';_placeRefOverlay();_puteviLayerFg=L.geoJSON({type:'FeatureCollection',features:[{type:'Feature',geometry:{type:'LineString',coordinates:[[16,44.899],[16,44.904]]}}]});resolve();},{once:true}));
 '''
-ref=b.section('      <!-- REFERENTNA KARTA -->','    </div><!-- /panel -->')
+ref=b.section('<!-- ═══ REFERENTNA KARTA (Meni','<!-- ═══ UČITAJ KARTU')
 quick=b.section('      <div id="reference-quick-controls">','      <!-- Kolege live indicator -->')
 fixture=u.fixture.replace("switchTab=()=>{},selI","switchTab=()=>{document.querySelector('#fixture-ref').style.display='none'},selI").replace('</body>','<div id="fixture-ref" style="display:none;position:fixed;inset:12px 0 88px;overflow:auto;background:var(--field-card);z-index:1800;padding:12px">'+ref+'</div>'+quick+'<script>'+code+'</script><script src="/static/js/reference-vlake.js"></script><script src="/static/js/vlaka-direction.js"></script></body>')
 async def main():
@@ -72,7 +72,7 @@ async def main():
   await page.evaluate("()=>{window.dirV=vlake.find(v=>v.nm==='T12');_vpIdx=vlake.indexOf(dirV);_vpSharedKey=null;const p=ptAtFrac(dirV.pts,.2),atM=VlakaDirection.routeProjection(dirV.pts,p).atM;localStorage.setItem(VlakaDirection.storeKey('P'),JSON.stringify({[VlakaDirection.identity(dirV)]:{mode:'both',split:{...p,atM}}}));VlakaDirection.draw(dirV);}")
   assert await page.evaluate('dirV._directionMarkers.length')==3
   await page.evaluate("VlakaDirection.setPopup('start')");assert await page.evaluate('dirV._directionMarkers.length')==2
-  await page.evaluate("sbUser={id:'B'}");assert await page.evaluate('VlakaDirection.modeFor(dirV)')=='auto';await page.evaluate("sbUser={id:'A'}")
+  await page.evaluate("sbUser={id:'B'}");assert await page.evaluate('VlakaDirection.modeFor(dirV)')=='off';await page.evaluate("sbUser={id:'A'}")
   # Stvarni Leaflet Canvas: tačke su krugovi, crtice imaju kratke vidljive razmake.
   for z in [13,15,17]:
    for mode in ['dash','dot']:

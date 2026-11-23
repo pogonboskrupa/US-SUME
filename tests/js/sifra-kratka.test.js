@@ -10,8 +10,8 @@ assert(/gen_random_uuid/.test(sql),'CSPRNG izvor');
 // Klijent: terenski bira iz SVOJIH kolega (dodanih pozivom), ne iz spiska svih korisnika
 const f=src.slice(src.indexOf('async function podaciPosalji'),src.indexOf('// Admin šalje BILO KOM'));
 assert(/const teren = !admin && isSpdField\(\)/.test(f));
-assert(/teren \? _kontaktiLista\(\)/.test(f),'terenski vidi samo svoje kolege');
-assert(/_kontaktiLista\(\)\.forEach/.test(f),'ostali dobijaju i kolege iz poziva');
+assert(/let kolege = teren \? moji :/.test(f)&&/moji = admin \? \[\] : await _kontaktiSvjezi\(\)/.test(f),'terenski vidi samo svoje kolege (svjež spisak)');
+assert(/moji\.forEach\(k => \{ if \(!ima\.has/.test(f),'ostali dobijaju i kolege iz poziva');
 assert(/kontaktiDodaj\(\); return podaciPosalji/.test(f),'dodaj kolegu pa ponovo izbor');
 // Unos: 5 cifara (i stara 8)
 const u=src.slice(src.indexOf('async function primljeniPreuzmiSifrom'),src.indexOf('async function primljeniPreuzmiSifrom')+900);

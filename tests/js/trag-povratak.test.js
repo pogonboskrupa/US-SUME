@@ -56,10 +56,11 @@ function env(opts) {
   const toasts = [];
   const imena = ['dst', '_addTragPoint'].concat(
     ['_rtLa', '_rtLo', '_vlRetraceSirina', '_vlRetraceTest', '_vlUgaoSkretanja', '_vlVrhSumnjiv',
-     '_vlRetraceObreziVrh', '_vlRetraceSkiniSiljak', '_tragRetraceReset', '_tragLineSync', '_tragRetraceKorak'].filter(imaFn));
+     '_vlRetraceObreziVrh', '_vlRetraceSkiniSiljak', '_tragRetraceReset', '_tragLineSync', '_tragRetraceKorak', '_tragAccReset', '_tragAccPrag'].filter(imaFn));
   const src =
     'const MPDEG = 111320, _VL_RETRACE_MIN_W = 6, _VL_RETRACE_MAX_W = 9, _TRAG_RETRACE_MAX_M = ' +
     konst('_TRAG_RETRACE_MAX_M', '30') + ', _TRAG_AUTOPAUSE_MS = ' + konst('_TRAG_AUTOPAUSE_MS') + ';\n' +
+    'const GPS_STAB_ACC = 12, _TRAG_ACC_POCETAK_MS = 60000, _TRAG_ACC_PROZOR_MS = 60000; let _tragAccHist = [], _tragAccPocetak = 0, _tragAccDobar = false;\n' +
     'let _tragOn = true, _tragPaused = false, _tragPts = ' + JSON.stringify(opts.pocetne || []) +
     ', _tragBuf = [], _tragLastT = 0, _tragLastMoveT = 0, _tragLiveSeg = { setLatLngs() {} }, _tragRetrace = null, _tragRetraceBaza = ' +
     (opts.baza || 0) + ';\n' +

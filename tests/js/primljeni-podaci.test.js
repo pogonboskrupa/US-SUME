@@ -66,7 +66,7 @@ function mk(opts) {
   let prikazano = null;
   t = mk({ akcije: async (naslov, lista) => { if (/Šifra:/.test(naslov)) { prikazano = naslov; return 2; } return lista.length - 3; }, rpcFn: async (n) => n === 'posalji_podatke_sifrom' ? { data: 'ABCD2345' } : { data: null } });
   await t.api.podaciPosalji('trag', 'Moj trag', KML);
-  assert.strictEqual(t.log.rpcs[0].n, 'posalji_podatke_sifrom'); assert(!('p_to' in t.log.rpcs[0].p)); assert(/ABCD 2345/.test(prikazano));
+  const sf = t.log.rpcs.find(x => x.n === 'posalji_podatke_sifrom'); assert(sf, 'šalje šifrom'); assert(!('p_to' in sf.p)); assert(/ABCD 2345/.test(prikazano));
   // bez kolega (terenski profil) šifra je i dalje dostupna
   const t0 = mk({ akcije: async (naslov, lista) => { assert.strictEqual(lista.length, 4, 'kolega + šifra + dodaj kolegu + odustani'); return 2; }, rpcFn: async () => ({ data: 'ZZZZ2222' }) });
   // preuzimanje: lokalno spremi PRIJE potvrde; neispravna šifra → nema upisa

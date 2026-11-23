@@ -56,13 +56,24 @@ jobs:
           psql -h localhost -U postgres -d codex_fixture -f tests/sql/doz-atomic-delete-272.sql
           psql -h localhost -U postgres -d codex_fixture -f tests/sql/user-activity-273.sql
           psql -h localhost -U postgres -d codex_fixture -f tests/sql/verzija-aplikacije.sql
+          psql -h localhost -U postgres -d codex_fixture -f tests/sql/pripadnost-sumarija.sql
+          psql -h localhost -U postgres -d codex_fixture -f tests/sql/radno-mjesto.sql
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Pregled Menija, projekata, Dnevnog moda i štampe
         run: |
           python -m pip install playwright==1.55.0
-          python -m playwright install --with-deps chromium
+          # apt mirror (azure.archive.ubuntu.com) zna ne odgovarati: run 317 i 403 pali na exit 100, a run 404
+          # je visio preko 38 min. Zato svaki apt korak ima tvrd rok, a ako ne uspije preglednik se
+          # instalira bez sistemskih paketa (runner ih većinom već ima).
+          ok=0
+          for i in 1 2; do
+            timeout 60 sudo apt-get update -o Acquire::Retries=1 -o Acquire::http::Timeout=15 || true
+            if timeout 240 python -m playwright install --with-deps chromium; then ok=1; break; fi
+            echo "Pokušaj $i instalacije preglednika nije uspio"; sleep 10
+          done
+          if [ "$ok" != 1 ]; then timeout 300 python -m playwright install chromium; fi
           bash tests/browser/run-ci.sh
       - uses: actions/upload-artifact@v4
         if: always()
@@ -112,10 +123,9 @@ jobs:
             -Dorg.gradle.internal.repository.max.retries=6 \
             -Dorg.gradle.internal.repository.initial.backoff=3000 \
             assembleDebug
-      - name: Provjeri sadržaj APK-a (index.html, GRANICE.kml) i ispiši veličinu
-        # copy-assets.sh kopira GRANICE.kml sa "|| true" (ne ruši build ako fajl
-        # nedostaje) — to znači da APK može biti "uspješno" izgrađen a da mu
-        # ipak fali ključni sadržaj (mala, tiho nepotpuna karta na terenu).
+      - name: Provjeri sadržaj APK-a (index.html) i ispiši veličinu
+        # GRANICE.kml se više ne pakuje u APK (v4.6.7) — dolazi sa GitHub releasea.
+        # Provjera i dalje gleda STVARNI APK da build ne prođe tiho nepotpun.
         # Provjera raspakuje STVARNI APK i gleda šta je unutra, ne pretpostavlja
         # na osnovu toga da je gradle vratio exit 0.
         run: |
@@ -133,7 +143,7 @@ jobs:
           echo "Veličina raspakovanog APK-a: $(du -sh /tmp/apk-check | cut -f1)"
 
           MISSING=0
-          for f in assets/index.html assets/GRANICE.kml; do
+          for f in assets/index.html; do
             if [ ! -s "/tmp/apk-check/$f" ]; then
               echo "NEDOSTAJE ili je prazan: $f"
               MISSING=1
