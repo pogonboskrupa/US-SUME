@@ -9161,6 +9161,24 @@ function _shareCiljevi() {
 // kolege-birač ne nudimo, samo link/QR.
 function _shareImaKolege() { return !isSpdField(); }
 
+// "Lov": dok je uključen, paljenje lokacije samo pokreće dijeljenje kretanja sa kolegama.
+// Van lova (zadano) lokacija se NE dijeli dok korisnik sam ne klikne Dijeli.
+var _lovAutoDijeli = false;
+function _lovMod() { try { return localStorage.getItem('tvlake_lov_mod') === '1'; } catch (e) { return false; } }
+function _lovToggle() {
+  const on = !_lovMod();
+  try { localStorage.setItem('tvlake_lov_mod', on ? '1' : '0'); } catch (e) {}
+  if (on && typeof gpsOn !== 'undefined' && gpsOn) _lovPokreni();
+  showToast(on ? '🦌 Lov uključen — dijeljenje kretanja kreće čim je lokacija upaljena' : 'Lov isključen — lokacija se ne dijeli sama');
+  _shareSheetRender();
+}
+function _lovPokreni() {
+  try {
+    if (!_lovMod() || _shareLiveOn || !_shareImaKolege() || !sbUser) return;
+    _lovAutoDijeli = true;
+    _startShareLive();
+  } catch (e) {}
+}
 function _shareNoviSid() {
   if (!_shareSid) _shareSid = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
@@ -9264,6 +9282,7 @@ function _shareOpisPrimalaca() {
 }
 
 function _updShareLiveIndicator() {
+  try { const _lb = document.getElementById('ab-loc'); if (_lb) _lb.classList.toggle('dijeli', !!_shareLiveOn); } catch (e) {}
   let el = document.getElementById('share-live-ind');
   if (_shareLiveOn) {
     const opis0 = _shareOpisPrimalaca();
@@ -9617,6 +9636,10 @@ function _shareSheetRender() {
     + '<small>' + (_shareLiveOn ? _escHtml(_shareOpisPrimalaca()) + (_vide.length ? ' · 👁 vide te: ' + _vide.join(', ') : ' · još te niko ne gleda') : 'Izaberi kolege ili napravi link / QR kod') + '</small>'
     + '<small class="shr-gps">' + _gpsTxt + '</small></div></section>';
 
+  if (_shareImaKolege()) {
+    h += '<section class="shr-card"><label class="shr-lov" onclick="_lovToggle()"><span><b>🦌 Lov</b><small>Kad je uključen, dijeljenje kretanja kreće samo čim upališ lokaciju. Isključen: lokacija se ne dijeli dok ne klikneš Dijeli.</small></span>'
+      + '<span class="shr-lov-sw' + (_lovMod() ? ' on' : '') + '" role="switch" aria-checked="' + _lovMod() + '"></span></label></section>';
+  }
   // 1) Kolege iz iste šumarije
   if (_shareImaKolege()) {
     h += '<section class="shr-card">';
@@ -16707,8 +16730,10 @@ function startGPS() {
   wid = navigator.geolocation.watchPosition(onP, onPE, {
     enableHighAccuracy: true, maximumAge: 0, timeout: 20000
   });
+  try { _lovPokreni(); } catch (e) {}
 }
 function stopGPS() {
+  try { if (_lovAutoDijeli) { _lovAutoDijeli = false; _stopShareKolege(); } } catch (e) {}
   if (typeof _pratiMe !== 'undefined' && _pratiMe) _pratiPostavi(false);
   if (wid) navigator.geolocation.clearWatch(wid);
   gpsOn = false; wid = null; lastP = null;

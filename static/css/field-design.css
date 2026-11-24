@@ -2129,3 +2129,14 @@ html #loadmap-modal [hidden],html #loadmap-modal #loadmap-recent-sec[hidden],htm
 .lm-sort {display:flex;gap:4px;padding:3px;border:1px solid var(--field-border);border-radius:10px;background:var(--field-card);}
 .lm-sort button {min-height:36px;padding:4px 10px;border:0;border-radius:7px;background:transparent;color:var(--field-muted);font:650 12px system-ui;cursor:pointer;}
 .lm-sort button[aria-pressed=true] {background:var(--lm-tone);color:var(--lm-accent);}
+
+/* v4.9.8: Moja lokacija je tirkizna dok se kretanje dijeli */
+html #action-bar #ab-loc.dijeli {background:linear-gradient(135deg,#0f766e,#14b8a6);color:#fff;border-color:#5eead4;}
+html #action-bar #ab-loc.dijeli .ab-ico {background:#99f6e4;color:#0f766e;box-shadow:inset 0 0 0 1.5px #0f766e;}
+html[data-field-theme=day] #action-bar #ab-loc.dijeli {color:#fff;}
+.shr-lov {display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;min-height:48px;}
+.shr-lov small {display:block;font-size:12px;opacity:.8;margin-top:2px;}
+.shr-lov-sw {flex:none;width:44px;height:26px;border-radius:13px;background:#475569;position:relative;transition:background .15s;}
+.shr-lov-sw::after {content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .15s;}
+.shr-lov-sw.on {background:#14b8a6;}
+.shr-lov-sw.on::after {transform:translateX(18px);}
