@@ -5265,3 +5265,11 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 
 ### Štednja besplatnog Supabase naloga (v4.9.7)
 - Periodični otkucaj od 60 s (token, realtime samoizlječenje, sandučić) se preskače dok je `document.hidden`; `_primljeniSync` rezerva (polling) ide svakih 5 otkucaja (~5 min) jer sandučić stiže realtime-om. Realtime kanal `clanovi-rt` ima server-side filter `korisnik_id=eq.<moj id>` (ranije je svaki klijent primao SVAKO dodavanje člana u cijeloj bazi — poruke se broje u kvoti). `doznaka-rt-global` (`doz_area_markings`) i dalje nema filter (lista odjela nije fiksna) — kandidat za sljedeći korak. Nije dirano: `select('*')` na `vlake` (`pts` je potreban), izbor ostalih kanala.
+
+### Snimanje traga — izlet, mali krug, šum, kraj traga (v5.0.0)
+- Detaljan nalaz i tabela mjerenja: `docs/TRAG_SNIMANJE.md`. Ukratko, u `_tragRetraceKorak`: izlazak sa snimljene linije U STRANU (`uStranu`, `izaZ ≥ 2`) zadržava vrh izleta i nastavlja od mjesta silaska. Ranije je `_vlRetraceSkiniSiljak` brisao stvarni kraj izleta (10 m → 3 m).
+- Ulaz u povratak traži da se od vrha prešlo bar koliko je tačka iza vrha (+3 m). Dalje od koridora traži i kretanje > 120° suprotno od linije (`_tragIdeUnazad`). Zatvaranje kruga Ø 6–10 m i presijecanje starog traga više nisu "povratak".
+- Filtar 3 fiksa odbacuje najdalji od centroida i USREDNJI preostala dva: ravnih 70 m uz ±1,5 m šuma sada izlazi ~73 m (ranije ~80 m).
+- `_tragZavrsiVrh()` pri "Završi" i ručnoj pauzi dopisuje zadnju poziciju: tačku na liniji tokom povratka, inače zadnji neupisani fiks (`_tragKand`, ≥ 1,5 m, nikad speed-gate skok).
+- Granica: krug < ~8 m i izlet od 10 m pod krošnjama se ne razlikuju pouzdano od okreta sa GPS pomakom u stranu. Sužavanje koridora bi vratilo petlje iz v1.9.1. Funkcije `_vlRetrace*` dijeli i vlaka, pa ponašanje vlake nije mijenjano.
+- Test: `tests/js/trag-povratak.test.js` (16; 6 novih pada na starom kodu).

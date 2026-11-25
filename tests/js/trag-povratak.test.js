@@ -56,19 +56,19 @@ function env(opts) {
   const toasts = [];
   const imena = ['dst', '_addTragPoint'].concat(
     ['_rtLa', '_rtLo', '_vlRetraceSirina', '_vlRetraceTest', '_vlUgaoSkretanja', '_vlVrhSumnjiv',
-     '_vlRetraceObreziVrh', '_vlRetraceSkiniSiljak', '_tragRetraceReset', '_tragLineSync', '_tragRetraceKorak', '_tragAccReset', '_tragAccPrag'].filter(imaFn));
+     '_vlRetraceObreziVrh', '_vlRetraceSkiniSiljak', '_tragRetraceReset', '_tragLineSync', '_tragIdeUnazad', '_tragRetraceKorak', '_tragZavrsiVrh', '_tragAccReset', '_tragAccPrag'].filter(imaFn));
   const src =
     'const MPDEG = 111320, _VL_RETRACE_MIN_W = 6, _VL_RETRACE_MAX_W = 9, _TRAG_RETRACE_MAX_M = ' +
     konst('_TRAG_RETRACE_MAX_M', '30') + ', _TRAG_AUTOPAUSE_MS = ' + konst('_TRAG_AUTOPAUSE_MS') + ';\n' +
     'const GPS_STAB_ACC = 12, _TRAG_ACC_POCETAK_MS = 60000, _TRAG_ACC_PROZOR_MS = 60000; let _tragAccHist = [], _tragAccPocetak = 0, _tragAccDobar = false;\n' +
     'let _tragOn = true, _tragPaused = false, _tragPts = ' + JSON.stringify(opts.pocetne || []) +
-    ', _tragBuf = [], _tragLastT = 0, _tragLastMoveT = 0, _tragLiveSeg = { setLatLngs() {} }, _tragRetrace = null, _tragRetraceBaza = ' +
+    ', _tragBuf = [], _tragKand = null, _tragLastT = 0, _tragLastMoveT = 0, _tragLiveSeg = { setLatLngs() {} }, _tragRetrace = null, _tragRetraceBaza = ' +
     (opts.baza || 0) + ';\n' +
     'const _activeTab = "karta", _lineStyle = { tragW: 3 }, _tragPauseWin = [];\nfunction _pauziOtvoriProzor(w, t) { w.push({ start: t || Date.now(), end: null }); }\nfunction _crashSaveTrag() {}\n' +
     'const _tragLine = { setLatLngs() {}, addLatLng() {} };\n' +
     'function _updTragStats() {} function terenUpdTragStats() {} function _tragLiveClear() {} function _terenUpdTragUI() {}\n' +
     imena.map(extractFn).join('\n') +
-    '\nreturn { run: _addTragPoint, pts: () => _tragPts, pauza: () => _tragPaused };';
+    '\nreturn { run: _addTragPoint, pts: () => _tragPts, pauza: () => _tragPaused, zavrsi: () => (typeof _tragZavrsiVrh === "function" ? _tragZavrsiVrh() : false) };';
   const api = new Function('showToast', 'document', 'L', 'map', src)(
     m => toasts.push(m), { getElementById: () => null },
     { polyline: () => ({ addTo() { return this; }, setLatLngs() {} }) }, {});
@@ -189,6 +189,103 @@ t('hod NAZAD po snimljenom jeste kretanje — auto-pauza ne okida usred povratka
   e.pusti([{ x: 0, y: 0 }].concat(hod(0, 0, 60, 0, 1, 0.5, r)));
   e.pusti(hod(60, 0, 35, 0, 1, 0.5, r, { x: 0, y: 2 }), 4, 6000);   // sporo nazad: 25 m za 2,5 min
   assert.strictEqual(e.api.pauza(), false, 'auto-pauza okinula dok se hoda nazad');
+});
+
+
+// ── v5.0.0: mali krug / izlet do 10 m pa nazad, usrednjavanje, kraj traga ──
+function linija(a, b) { const L = Math.hypot(b.x - a.x, b.y - a.y), n = Math.max(1, Math.round(L)), o = [];
+  for (let k = 1; k <= n; k++) o.push({ x: a.x + (b.x - a.x) * k / n, y: a.y + (b.y - a.y) * k / n }); return o; }
+function krug(c, r, start) { const n = Math.max(8, Math.round(2 * Math.PI * r)), o = [];
+  for (let k = 1; k <= n; k++) { const a = start + 2 * Math.PI * k / n; o.push({ x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a) }); } return o; }
+function dSeg(p, a, b) { const dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy;
+  const t = L2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2)) : 0; return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy); }
+function dPoly(p, P) { let m = Infinity; for (let i = 1; i < P.length; i++) m = Math.min(m, dSeg(p, P[i - 1], P[i])); return m; }
+// Najveći promašaj: koliko daleko je stvarni hod od snimljene linije.
+function promasaj(tru, xy) { let m = 0; for (const q of tru) m = Math.max(m, dPoly(q, xy)); return m; }
+function snimi(tru, seed, sum, ac, zavrsi) {
+  const r = rnd(seed), e = env();
+  e.pusti([{ x: 0, y: 0 }].concat(tru.map(q => ({ x: q.x + sum * r() * 2, y: q.y + sum * r() * 2 }))), ac);
+  if (zavrsi) e.api.zavrsi();
+  return mjere(e.api.pts());
+}
+const ULAZ = linija({ x: 0, y: 0 }, { x: 40, y: 0 });
+
+t('KLJUČNO: izlet 10 m u stranu pa nazad pa dalje — vrh izleta ostaje (bio 3 m)', () => {
+  const tru = ULAZ.concat(linija({ x: 40, y: 0 }, { x: 40, y: 10 }), linija({ x: 40, y: 10 }, { x: 40, y: 0 }), linija({ x: 40, y: 0 }, { x: 70, y: 0 }));
+  const lose = [];
+  for (let s = 1; s <= 30; s++) {
+    const m = snimi(tru, s * 97, 0.5, 3);
+    const vrh = Math.max(...m.xy.map(p => p.y));
+    const p = promasaj(tru, m.xy);
+    if (vrh < 7.5 || p > 4) lose.push(s + ':vrh ' + vrh.toFixed(1) + '/prom ' + p.toFixed(1));
+  }
+  assert.deepStrictEqual(lose, []);
+});
+
+t('KLJUČNO: krug Ø 10 m i Ø 8 m ostaje cijel (zatvaranje kruga nije povratak)', () => {
+  const lose = [];
+  for (const R of [5, 4]) for (let s = 1; s <= 30; s++) {
+    const tru = ULAZ.concat(krug({ x: 40, y: R }, R, -Math.PI / 2), linija({ x: 40, y: 0 }, { x: 70, y: 0 }));
+    const p = promasaj(tru, snimi(tru, s * 97, 0.5, 3, true).xy);
+    if (p > 3.5) lose.push('Ø' + 2 * R + '/' + s + ':' + p.toFixed(1));
+  }
+  assert.deepStrictEqual(lose, []);
+});
+
+t('krug Ø 10 m pa NAZAD istim putem — krug ostaje, a trag završava gdje korisnik stoji', () => {
+  const lose = [];
+  for (let s = 1; s <= 30; s++) {
+    const tru = ULAZ.concat(krug({ x: 40, y: 5 }, 5, -Math.PI / 2), linija({ x: 40, y: 0 }, { x: 20, y: 0 }));
+    const m = snimi(tru, s * 97, 0.5, 3, true);
+    const p = promasaj(tru, m.xy), kraj = m.xy[m.xy.length - 1];
+    if (p > 3 || Math.hypot(kraj.x - 20, kraj.y) > 3) lose.push(s + ':' + p.toFixed(1) + '/kraj ' + kraj.x.toFixed(0));
+  }
+  assert.deepStrictEqual(lose, []);
+});
+
+t('"Završi" usred povratka: trag dobija tačku NA liniji gdje korisnik stoji', () => {
+  const r = rnd(21), e = env();
+  e.pusti([{ x: 0, y: 0 }].concat(hod(0, 0, 40, 0, 1, 0.4, r)));
+  e.pusti(hod(40, 0, 28, 0, 1, 0.4, r, { x: 0, y: 2 }));   // 12 m nazad — ne upisuje se dvaput
+  const prije = mjere(e.api.pts()), dodano = e.api.zavrsi(), m = mjere(e.api.pts()), kraj = m.xy[m.xy.length - 1];
+  assert.ok(dodano, 'kraj nije dopisan');
+  assert.ok(Math.abs(kraj.x - 28) < 3 && Math.abs(kraj.y) < 1, 'kraj ' + kraj.x.toFixed(1) + ',' + kraj.y.toFixed(1) + ' — nije na liniji kod korisnika');
+  assert.ok(prije.unazad < 1.5, 'povratak upisan kao petlja');
+});
+
+t('"Završi" bez kretanja ne dodaje GPS šum (< 1,5 m)', () => {
+  const r = rnd(4), e = env();
+  e.pusti([{ x: 0, y: 0 }].concat(hod(0, 0, 30, 0, 1, 0.3, r)));
+  e.pusti([{ x: 30.4, y: 0.2 }, { x: 30.2, y: -0.3 }, { x: 30.5, y: 0.1 }]);
+  const n = e.api.pts().length;
+  e.api.zavrsi();
+  assert.ok(e.api.pts().length - n <= 1);
+  const m = mjere(e.api.pts());
+  assert.ok(m.len < 32, 'dužina ' + m.len.toFixed(1));
+});
+
+t('usrednjavanje: ravnih 70 m uz ±1,5 m šuma — dužina blizu stvarne (bilo ~80 m)', () => {
+  const lens = [];
+  for (let s = 1; s <= 30; s++) lens.push(snimi(linija({ x: 0, y: 0 }, { x: 70, y: 0 }), s * 97, 1.5, 5).len);
+  const avg = lens.reduce((a, b) => a + b, 0) / lens.length;
+  assert.ok(avg < 76, 'prosječna dužina ' + avg.toFixed(1) + ' m');
+  assert.ok(avg > 64, 'prosječna dužina ' + avg.toFixed(1) + ' m');
+});
+
+t('jedan GPS skok od 25 m ne ulazi u trag', () => {
+  const e = env();
+  const put = [{ x: 0, y: 0 }].concat(linija({ x: 0, y: 0 }, { x: 40, y: 0 }));
+  put.splice(20, 1, { x: 19, y: 25 });
+  e.pusti(put);
+  assert.ok(Math.max(...mjere(e.api.pts()).xy.map(p => Math.abs(p.y))) < 1, 'skok upisan');
+});
+
+t('prelaz preko starijeg dijela traga (krst) se snima, ne guta', () => {
+  const tru = linija({ x: 0, y: 0 }, { x: 40, y: 0 }).concat(linija({ x: 40, y: 0 }, { x: 40, y: 20 }),
+    linija({ x: 40, y: 20 }, { x: 20, y: 20 }), linija({ x: 20, y: 20 }, { x: 20, y: -20 }));
+  const lose = [];
+  for (let s = 1; s <= 20; s++) { const p = promasaj(tru, snimi(tru, s * 97, 0.5, 3, true).xy); if (p > 3) lose.push(s + ':' + p.toFixed(1)); }
+  assert.deepStrictEqual(lose, []);
 });
 
 console.log('\n' + pass + ' prošlo, ' + fail + ' palo');

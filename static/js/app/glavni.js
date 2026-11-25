@@ -17269,7 +17269,7 @@ function _vlRetraceTest(pts, la, lo, w, minIza, od) {
   let iza = (1 - best.t) * segL[best.i];
   for (let k = best.i + 1; k < n - 1; k++) iza += segL[k];
   if (iza < (minIza ?? 2)) return null;
-  return { la: la + best.py / ky, lo: lo + best.px / kx, d: best.d, iza };
+  return { la: la + best.py / ky, lo: lo + best.px / kx, d: best.d, iza, i: best.i };
 }
 // Ugao skretanja u tački b (0° = pravo, 180° = potpuni povratak).
 function _vlUgaoSkretanja(a, b, c) {
@@ -19188,6 +19188,7 @@ function fabLokacija() {
 
 function fabSnimTrag() {
   if (_tragOn) {
+    if (!_tragPaused) { try { _tragZavrsiVrh(); } catch(e) {} }
     if (_tragPts.length > 1) {
       const pts3d = _tragPts.map(([la, lo, al, t, ac]) => ({la, lo, al, t, ac}));
       // Blaga tolerancija (0.8 m) — čuva vrhove zavoja da se vijugav put ne
@@ -19221,7 +19222,7 @@ function fabSnimTrag() {
     _updFabVisibility();
     if (typeof _terenUpdTragUI === 'function') _terenUpdTragUI();
     _tragPts = [];
-    _tragBuf = [];
+    _tragBuf = []; _tragKand = null;
     _tragLastT = 0;
     _tragRetraceReset(0);
     _tragLiveMeta = null;
@@ -19241,7 +19242,7 @@ function _fabSnimTragBegin() {
     _tragPaused = false;
     _pauziResetuj(_tragPauseWin);  // zaostala pauza prethodne sesije ne smije suditi novim tačkama
     _tragPts = [];
-    _tragBuf = [];
+    _tragBuf = []; _tragKand = null;
     _tragAccReset();
     _tragLastT = 0;
     _tragRetraceReset(0);
@@ -19264,6 +19265,7 @@ function _fabSnimTragBegin() {
 function togTragPause() {
   if (!_tragOn) return;
   _tragPaused = !_tragPaused;
+  if (_tragPaused) { try { _tragZavrsiVrh(); } catch(e) {} }
   if (_tragPaused) _pauziOtvoriProzor(_tragPauseWin); else _pauziZatvoriProzor(_tragPauseWin);
   if (_tragPaused) _crashSaveTrag(true);  // tačke do pauze — periodični upis u pauzi stoji
   const ico = document.getElementById('ab-trag-pauza-ico');
@@ -19374,7 +19376,7 @@ function _tragUkloniZadnje(metri) {
   // Brzinska kapija mjeri od nove zadnje tačke — sa njenim STVARNIM vremenom,
   // inače bi sljedeći fiks izgledao kao nemoguć skok i trag bi stao.
   _tragLastT = (last && last[3]) || 0;
-  _tragBuf = [];
+  _tragBuf = []; _tragKand = null;
   _tragRetraceReset(Math.min(_tragRetraceBaza, _tragPts.length - 1));
   _tragLiveClear();
   _tragLineSync();
@@ -19387,12 +19389,52 @@ function _tragUkloniZadnje(metri) {
   return n;
 }
 function _tragRetraceReset(baza) { _tragRetrace = null; _tragRetraceBaza = baza > 0 ? baza : 0; }
+// Pri "Završi" i ručnoj pauzi trag dobija zadnju poziciju korisnika: tačku NA
+// liniji ako upravo hoda po snimljenom (povratak se inače ne bi vidio ni u
+// dužini ni na karti — trag bi završio na okretu, a korisnik stoji 20 m dalje),
+// inače zadnji neupisani fiks. Ispod 1,5 m se ništa ne dodaje (GPS šum u mjestu).
+function _tragZavrsiVrh() {
+  const tip = _tragPts[_tragPts.length - 1];
+  const q = (_tragRetrace && _tragRetrace.zadnja) || _tragKand;
+  _tragRetrace = null; _tragKand = null;
+  if (!q || !tip || dst(tip[0], tip[1], q[0], q[1]) < 1.5) return false;
+  _tragPts.push(q);
+  if (_tragLine) _tragLine.addLatLng([q[0], q[1]]);
+  return true;
+}
 function _tragLineSync() { if (_tragLine) _tragLine.setLatLngs(_tragPts.map(p => [p[0], p[1]])); }
 // Vraća true kad se tačka upisuje normalno, false kad je hod po snimljenom.
+// Ulaz u povratak DALEKO iza vrha (više od w) traži da se korisnik stvarno
+// kreće UNAZAD duž snimljene linije (v5.0.0). Bez toga je zatvaranje malog
+// kruga (≤ 10 m) — koji prirodno prolazi kroz koridor od 6–9 m oko svog
+// početka — proglašavano povratkom i zadnji dio kruga je nestajao. Krug se
+// zatvara krećući se NAPRIJED (u smjeru linije), povratak ide unazad. Blizu
+// vrha (okret) smjer se ne gleda: tu GPS na samom okretu zna skočiti u stranu
+// i naprijed, a ulaz u povratak je ono što taj šiljak i skida.
+function _tragIdeUnazad(osnova, proj, la, lo) {
+  const a = osnova[proj.i], b = osnova[proj.i + 1], tip = _tragPts[_tragPts.length - 1];
+  if (!a || !b || !tip) return true;
+  const kx = Math.cos(la * Math.PI / 180);
+  const sx = (_rtLo(b) - _rtLo(a)) * kx, sy = _rtLa(b) - _rtLa(a);
+  const mx = (lo - tip[1]) * kx, my = la - tip[0];
+  const n = Math.hypot(sx, sy) * Math.hypot(mx, my);
+  // Unazad = više od 120° od smjera linije. Bočni prilaz liniji (zatvaranje
+  // kruga odozgo) nije povratak, iako ima malu komponentu unazad.
+  return n > 0 && (sx * mx + sy * my) / n < -0.5;
+}
 function _tragRetraceKorak(la, lo, ac, al, now) {
   const w = _vlRetraceSirina(ac), baza = _tragRetraceBaza, uToku = !!_tragRetrace;
   const osnova = !uToku && _vlVrhSumnjiv(_tragPts, w, baza) ? _tragPts.slice(0, -1) : _tragPts;
-  const proj = _vlRetraceTest(osnova, la, lo, w, uToku ? 0.3 : 2, baza);
+  let proj = _vlRetraceTest(osnova, la, lo, w, uToku ? 0.3 : 2, baza);
+  if (proj && !uToku) {
+    // Povratak počinje od vrha: da bi tačka bila X m iza vrha duž linije, od
+    // vrha se mora preći bar toliko (uz 3 m za GPS). Mali krug (Ø 6–10 m) i
+    // presijecanje starijeg dijela traga "skoče" daleko iza vrha uz pomak od
+    // par metara — to nije povratak nego nov hod pored/preko snimljenog.
+    const kraj = osnova[osnova.length - 1];
+    if (proj.iza > dst(_rtLa(kraj), _rtLo(kraj), la, lo) + 3) proj = null;
+    else if (proj.iza > w && !_tragIdeUnazad(osnova, proj, la, lo)) proj = null;
+  }
   const naLiniji = proj ? [proj.la, proj.lo, al, now, Math.round(ac)] : null;
   if (proj && proj.iza > _TRAG_RETRACE_MAX_M) {
     // Dug povratak: od ovog mjesta je to nov dio hoda. Prva tačka ide NA liniju
@@ -19414,12 +19456,18 @@ function _tragRetraceKorak(la, lo, ac, al, now) {
     const s = _tragRetrace.sidro;
     if (!s || dst(s[0], s[1], proj.la, proj.lo) >= 2) { _tragLastMoveT = now; _tragRetrace.sidro = naLiniji; }
     _tragRetrace.zadnja = naLiniji;
+    _tragRetrace.izaZ = proj.iza;
     return false;
   }
   if (uToku) {
-    const z = _tragRetrace.zadnja, tip = _tragPts[_tragPts.length - 1];
+    const z = _tragRetrace.zadnja, izaZ = _tragRetrace.izaZ || 0, tip = _tragPts[_tragPts.length - 1];
     _tragRetrace = null;
-    if (z && tip && dst(tip[0], tip[1], la, lo) > 2 * w) {
+    // Silazak sa linije U STRANU (dalje od w), a ne prolaz pored vrha: izlet
+    // (npr. 10 m od puta pa nazad) je bio stvaran hod — vrh izleta ostaje, a
+    // linija nastavlja od mjesta gdje se sišlo (v5.0.0). Ranije je skidanje
+    // šiljka brisalo stvarni kraj izleta (10 m → 3 m) i crtalo tetivu preko šume.
+    const uStranu = !_vlRetraceTest(_tragPts, la, lo, w, 0, baza);
+    if (z && tip && (dst(tip[0], tip[1], la, lo) > 2 * w || (uStranu && izaZ >= 2))) {
       // Sišao sa linije daleko od vrha — linija se vraća do mjesta silaska.
       _tragPts.push(z);
       if (_tragLine) _tragLine.addLatLng([z[0], z[1]]);
@@ -19430,6 +19478,7 @@ function _tragRetraceKorak(la, lo, ac, al, now) {
   return true;
 }
 
+let _tragKand = null;   // zadnja neupisana pozicija (vidi _tragZavrsiVrh)
 let _tragBuf = [];      // kružni buffer zadnja 3 raw GPS fixa za median filtar
 // Prag tačnosti fiksa za trag (v4.1.3). Ranije je vrijedilo "sve do 50 m" čim istekne 9 s stabilizacije,
 // pa je prvih minut-dva (GPS se tek smiruje, ±15-40 m, posebno među zgradama) ulazilo u trag kao
@@ -19470,24 +19519,26 @@ function _addTragPoint(la, lo, ac, al, sp, nowOverride, bypassPauzu) {
   // ogroman skok u trenutku vraćanja u app.
   const now = nowOverride || Date.now();
 
-  // 2. Median filtar od 3 fiksa — biramo STVARNI fix najbliži centroidu
-  //    (median po odvojenim osama bi mogao stvoriti tačku koja ne postoji → artefakt)
+  // 2. Filtar od 3 fiksa (v5.0.0): odbaci fiks NAJDALJI od centroida (jedan
+  //    GPS skok među tri ne ulazi u trag), a preostala dva USREDNJI. Ranije se
+  //    birao jedan stvarni fiks (najbliži centroidu) — skok je i tad bio
+  //    odbačen, ali bočni šum nije bio ništa manji, pa je na ±1,5 m šuma trag
+  //    od 70 m izlazio ~80 m (cik-cak). Usrednjena dva susjedna fiksa (≤ 2 s
+  //    hoda) leže na istoj krivini — krug Ø 6 m se ne izobličuje.
   _tragBuf.push({ la, lo });
   if (_tragBuf.length > 3) _tragBuf.shift();
   let mla = la, mlo = lo;
   if (_tragBuf.length === 3) {
     const cla = (_tragBuf[0].la + _tragBuf[1].la + _tragBuf[2].la) / 3;
     const clo = (_tragBuf[0].lo + _tragBuf[1].lo + _tragBuf[2].lo) / 3;
-    let best = _tragBuf[0], bd = Infinity;
-    for (const p of _tragBuf) {
-      const dd = (p.la - cla) ** 2 + (p.lo - clo) ** 2;
-      if (dd < bd) { bd = dd; best = p; }
-    }
-    mla = best.la; mlo = best.lo;
+    let far = 0, fd = -1;
+    _tragBuf.forEach((p, k) => { const dd = (p.la - cla) ** 2 + (p.lo - clo) ** 2; if (dd > fd) { fd = dd; far = k; } });
+    const ost = _tragBuf.filter((_, k) => k !== far);
+    mla = (ost[0].la + ost[1].la) / 2; mlo = (ost[0].lo + ost[1].lo) / 2;
   }
 
   // 3. Odluka o commit-u tačke u trajni trag
-  let commit = true;
+  let commit = true, skok = false;
   if (_tragPts.length > 0) {
     const last = _tragPts[_tragPts.length - 1];
     const d    = dst(last[0], last[1], mla, mlo);
@@ -19510,7 +19561,7 @@ function _addTragPoint(la, lo, ac, al, sp, nowOverride, bypassPauzu) {
       // odnosu na već snimljeni trag (korak 3b), a dug povratak ostaje
       // snimljen kao stvarno kretanje.
       const dtS = _tragLastT ? Math.max(0.5, (now - _tragLastT) / 1000) : 1;
-      if (d / dtS > 35) commit = false;
+      if (d / dtS > 35) { commit = false; skok = true; }
     }
   }
 
@@ -19521,6 +19572,10 @@ function _addTragPoint(la, lo, ac, al, sp, nowOverride, bypassPauzu) {
   //     i vrati se) je stvarno kretanje i snima se — inače bi dužina traga
   //     tiho izgubila pola pređenog.
   if (commit) commit = _tragRetraceKorak(mla, mlo, ac, al, now);
+  // Zadnja izmjerena pozicija koja nije upisana (premalo pomaka od vrha) —
+  // "Završi"/pauza je dopisuju, da trag završi gdje korisnik stoji, a ne do
+  // 2–4 m ranije (v5.0.0). Skok (speed-gate) se ne pamti.
+  _tragKand = (!commit && !skok && !_tragRetrace) ? [mla, mlo, al, now, Math.round(ac)] : null;
 
   if (commit) {
     _tragPts.push([mla, mlo, al, now, Math.round(ac)]);  // [la, lo, alt, timestamp, accuracy_m]
@@ -19542,7 +19597,7 @@ function _addTragPoint(la, lo, ac, al, sp, nowOverride, bypassPauzu) {
     _pauziOtvoriProzor(_tragPauseWin, now);
     if (!bypassPauzu) _crashSaveTrag(true);
     _tragLiveClear();
-    _tragBuf = [];
+    _tragBuf = []; _tragKand = null;
     _tragLastT = 0;
     _tragRetrace = null;
     const ico = document.getElementById('ab-trag-pauza-ico');
