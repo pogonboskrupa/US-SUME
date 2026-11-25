@@ -2129,3 +2129,51 @@ html #loadmap-modal [hidden],html #loadmap-modal #loadmap-recent-sec[hidden],htm
 .lm-sort {display:flex;gap:4px;padding:3px;border:1px solid var(--field-border);border-radius:10px;background:var(--field-card);}
 .lm-sort button {min-height:36px;padding:4px 10px;border:0;border-radius:7px;background:transparent;color:var(--field-muted);font:650 12px system-ui;cursor:pointer;}
 .lm-sort button[aria-pressed=true] {background:var(--lm-tone);color:var(--lm-accent);}
+/* Omiljene karte — brzi izbor (v5.0.1): Google satelit + do 2 offline karte sa dugmadima nagib/ekspozicija */
+html #mapfav-grid{gap:9px}
+.mfav-sek{margin-top:10px}
+.mfav-sek:first-child{margin-top:0}
+html .mfav-card.mfav-brzo{display:flex;flex-direction:column}
+.mfav-brzo .mfav-copy{padding-right:12px}
+.mfav-chips{display:flex;gap:6px;padding:8px 10px 10px;border-top:1px solid var(--field-border)}
+.mfav-chip{flex:1 1 0;min-width:0;min-height:40px;border:1px solid var(--field-border);background:var(--field-card);color:var(--field-ink);border-radius:999px;font:700 12px/1.2 system-ui,sans-serif;cursor:pointer;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mfav-chip.on{background:#166534;border-color:#166534;color:#fff}
+.mfav-chip[data-ovl=slope].on{background:#b45309;border-color:#b45309}
+.mfav-chip[data-ovl=ekspo].on{background:#6d28d9;border-color:#6d28d9}
+.mfav-preview[data-kind=off] .mfav-tag{background:#166534e6}
+.mfav-prazno{grid-column:1/-1;display:flex;flex-direction:column;gap:6px;align-items:flex-start;padding:14px;border:1px dashed var(--field-border);border-radius:13px;background:var(--field-bg);color:var(--field-ink)}
+.mfav-prazno b{font-size:14px}.mfav-prazno span{font-size:12px;line-height:1.5;color:var(--field-muted)}
+.mfav-prazno button{min-height:44px;margin-top:4px;padding:0 16px;border-radius:10px;border:1px solid #166534;background:#166534;color:#fff;font:700 13px system-ui,sans-serif;cursor:pointer}
+@media(min-width:560px){.mfav-brzo .mfav-copy{padding-right:14px}}
+/* Instalirane karte (v5.0.1): stanje offline terena na vrhu, prekidači bez brisanja po redu, memorija na dnu */
+html #ls-pane-inst .inst-teren{display:flex;align-items:center;gap:11px;margin:2px 0 4px;padding:12px;border-radius:14px;border:1px solid var(--field-border);background:var(--field-card)}
+html #ls-pane-inst .inst-teren[data-stanje=ok]{border-color:#16a34a;background:linear-gradient(90deg,#16a34a1f,transparent 70%),var(--field-card)}
+html #ls-pane-inst .inst-teren[data-stanje=nema]{border-color:#d97706;background:linear-gradient(90deg,#d977061f,transparent 70%),var(--field-card)}
+.inst-teren-ico{width:42px;height:42px;flex-shrink:0;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--field-bg);color:var(--field-ink);font-size:20px}
+[data-stanje=ok] .inst-teren-ico{background:#166534;color:#fff}
+[data-stanje=nema] .inst-teren-ico{background:#b45309;color:#fff}
+.inst-teren-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.inst-teren-txt b{font:750 14px/1.35 system-ui,sans-serif;color:var(--field-ink)}
+.inst-teren-txt small{font-size:11.5px;line-height:1.45;color:var(--field-muted)}
+.inst-teren-btn{flex-shrink:0;min-height:44px;padding:0 13px;border-radius:11px;border:1px solid #166534;background:#166534;color:#fff;font:700 12.5px system-ui,sans-serif;cursor:pointer}
+[data-stanje=ok] .inst-teren-btn{background:var(--field-bg);color:var(--field-ink);border-color:var(--field-border)}
+html #ls-pane-inst .catalog-section>header span#inst-aktivno{font-weight:700}
+html #ls-pane-inst .inst-layer-row{padding-right:12px}
+html #ls-pane-inst .inst-layer-row .catalog-status{font-weight:600}
+html #ls-pane-inst .inst-layer-row .catalog-status[data-offline="1"]{color:#4ade80}
+html #ls-pane-inst .inst-layer-row .catalog-status[data-offline="0"]{color:#fbbf24}
+html[data-field-theme=day] #ls-pane-inst .inst-layer-row .catalog-status[data-offline="1"]{color:#166534}
+html[data-field-theme=day] #ls-pane-inst .inst-layer-row .catalog-status[data-offline="0"]{color:#92400e}
+.inst-mem-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--field-border)}
+.inst-mem-row>span{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.inst-mem-row b{font-size:13px;color:var(--field-ink)}
+.inst-mem-row small{font-size:11px;line-height:1.5;color:var(--field-muted)}
+.inst-mem-row>button{flex-shrink:0;width:44px;height:44px;border-radius:10px;border:1px solid #7f1d1d;background:#dc262614;color:#f87171;cursor:pointer;display:flex;align-items:center;justify-content:center}
+html[data-field-theme=day] .inst-mem-row>button{color:#b91c1c;border-color:#fca5a5;background:#fef2f2}
+.inst-mem .catalog-intro{margin:10px 0 0}
+/* Pregled Google satelita bez mreže (v5.0.1): pločice sa interneta bi trošile podatke pri svakom otvaranju */
+.mfav-sat-art{display:block;width:100%;height:100%;min-height:inherit;background:
+ radial-gradient(ellipse 38% 30% at 28% 32%,#2f5a2c 0 60%,transparent 62%),
+ radial-gradient(ellipse 30% 24% at 72% 70%,#3d6b34 0 58%,transparent 60%),
+ linear-gradient(118deg,transparent 46%,#c9b98f 46.5% 49%,transparent 49.5%),
+ linear-gradient(28deg,#6f7d4a 0 30%,#4d6a39 30% 55%,#8a8a5c 55% 72%,#3f5c33 72%)}

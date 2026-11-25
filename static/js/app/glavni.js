@@ -13380,6 +13380,9 @@ function _mapFavPomjeri(i, d) {
 function openMapFavs() {
   _mapFavRender();
   if (typeof _mapFavMigrirajServer === 'function') _mapFavMigrirajServer().then(p => { if (p) _mapFavRender(); }).catch(() => {});
+  // Redoslijed "zadnje skinuta" traži datum spremanja iz liste karata (IndexedDB) — lista je jeftina
+  // (bez bafera, v1.1.5), pa se čita pri svakom otvaranju i prikaz se osvježi kad stigne.
+  try { if (typeof MapCatalog !== 'undefined' && MapCatalog.setRecent && typeof _sqlWCall === 'function') _sqlWCall({ type: 'list' }).then(r => { if (r && r.rows) { MapCatalog.setRecent(r.rows); _mapFavRender(); } }).catch(() => {}); } catch (e) {}
   document.getElementById('mapfav-modal').classList.add('open');
 }
 function closeMapFavs() {
@@ -23877,6 +23880,7 @@ function _instToggle(id, on) {
   localStorage.setItem('tvlake_ovl_state', JSON.stringify(_ovlState));
   if(id==='slope'&&!on){try{const last=JSON.parse(localStorage.getItem(_LASTMAP_KEY)||'null');if(last?.type==='tl'&&last.key==='_nagib')_saveLastMap('tl','⛰ Topo');}catch(e){}}
   _demLegendUpdate();
+  if (typeof _instAktivnoSync === 'function') _instAktivnoSync();
 }
 
 // Explorer: sjenčenje terena (postojeći sloj 'elev') daje utisak reljefa na nagnutoj 3D karti. Ugašeno zadano, bez troška dok je isključeno.
@@ -23951,27 +23955,49 @@ async function _instClear(id) {
   showToast('Keš obrisan');
 }
 
+// Broj uključenih slojeva terena u zaglavlju sekcije (v5.0.1).
+function _instAktivnoSync() {
+  const el = document.getElementById('inst-aktivno');
+  if (!el || typeof _ovlState === 'undefined') return;
+  const n = ['slope', 'ekspo', 'elev', 'nv', 'kont'].filter(id => _ovlState[id]).length;
+  el.textContent = n ? n + ' ' + (n === 1 ? 'uključen' : 'uključena') : 'ništa uključeno';
+}
+// Stanje offline terena po sloju i ukupno (v5.0.1). Ranije je svaki red pisao "N pločica" — broj
+// bez značenja za korisnika, a četiri reda su pokazivala ISTI broj jer dijele DEM keš. Sad red kaže
+// da li sloj radi bez interneta, a brojke i brisanje su na jednom mjestu (Memorija).
 async function _instUpdateStats() {
   if(typeof MapCatalog!=='undefined')MapCatalog.renderInstalled();
+  if (typeof _instAktivnoSync === 'function') _instAktivnoSync();
   if (!('caches' in window)) return;
-  const pairs = [
-    ['elev',  _ELEV_CACHE],
-    ['slope', _TERR_CACHE],
-    ['nv',    _TERR_CACHE],
-    ['ekspo', _TERR_CACHE],
-    ['kont',  _TERR_CACHE]
-  ];
-  const counts = {};
-  for (const [, cn] of pairs) {
-    if (cn in counts) continue;
-    try { const c = await caches.open(cn); counts[cn] = (await c.keys()).length; }
-    catch { counts[cn] = -1; }
+  const info = {};
+  for (const cn of [_TERR_CACHE, _ELEV_CACHE]) {
+    try {
+      const c = await caches.open(cn), keys = await c.keys();
+      const bytes = typeof _cmgrSampleSize === 'function' ? await _cmgrSampleSize(c, keys, 12) : 0;
+      info[cn] = { n: keys.length, bytes };
+    } catch (e) { info[cn] = { n: -1, bytes: 0 }; }
   }
-  for (const [id, cn] of pairs) {
+  const mb = b => typeof _cmgrFmtMb === 'function' ? _cmgrFmtMb(b) : Math.round(b / 1048576) + ' MB';
+  const opis = x => x.n < 0 ? 'nije dostupno' : x.n ? x.n.toLocaleString('bs') + ' pločica · ≈ ' + mb(x.bytes) : 'ništa sačuvano';
+  const dem = info[_TERR_CACHE], elev = info[_ELEV_CACHE];
+  [['slope', dem], ['ekspo', dem], ['nv', dem], ['kont', dem], ['elev', elev]].forEach(([id, x]) => {
     const el = document.getElementById('inst-' + id + '-stat');
-    if (!el) continue;
-    const n = counts[cn];
-    el.textContent = n < 0 ? '—' : n ? n + ' pločica' : 'Prazno';
+    if (!el) return;
+    el.textContent = x.n > 0 ? '✓ Radi offline' : x.n < 0 ? '—' : 'Treba internet';
+    el.dataset.offline = x.n > 0 ? '1' : '0';
+  });
+  const setTxt = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+  setTxt('inst-mem-dem', opis(dem));
+  setTxt('inst-mem-elev', opis(elev));
+  setTxt('inst-mem-sum', '≈ ' + mb((dem.bytes || 0) + (elev.bytes || 0)));
+  const hero = document.getElementById('inst-teren');
+  if (hero) {
+    const ima = dem.n > 0;
+    hero.dataset.stanje = ima ? 'ok' : 'nema';
+    setTxt('inst-teren-t', ima ? 'Teren je sačuvan za offline' : 'Teren nije preuzet');
+    setTxt('inst-teren-s', ima ? opis(dem) + ' · dopuni ako ideš na novo područje' : 'Nagib, visine i konture rade samo uz internet dok ne preuzmeš teren za područje rada');
+    const b = hero.querySelector('.inst-teren-btn');
+    if (b) b.textContent = ima ? 'Dopuni teren' : 'Preuzmi teren';
   }
 }
 

@@ -4,7 +4,7 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 spec=importlib.util.spec_from_file_location('project',Path(__file__).with_name('project-vlake-220.py'))
 u=importlib.util.module_from_spec(spec);spec.loader.exec_module(u);b=u.b
-code=Path('static/js/dem-quality.js').read_text()+'\n'+'\n'.join(b.function(n) for n in ['_getTerrariumTile','_terrariumDecodeTile','_aspColor','_instUpdateStats','_instClear','_mapFavRender','openMapFavs','closeMapFavs','_loadmapThumbData','_mapFavThumbHtml','_tileThumbUrl','setLayerSqlite','_saveLastMap','_sqlmapMetaAutoZoom','_sqlMapPrefs','_sqlMapSaveView'])
+code=Path('static/js/dem-quality.js').read_text()+'\n'+'\n'.join(b.function(n) for n in ['_getTerrariumTile','_terrariumDecodeTile','_aspColor','_instAktivnoSync','_instUpdateStats','_instClear','_mapFavRender','openMapFavs','closeMapFavs','_loadmapThumbData','_mapFavThumbHtml','_tileThumbUrl','setLayerSqlite','_saveLastMap','_sqlmapMetaAutoZoom','_sqlMapPrefs','_sqlMapSaveView'])
 code+='''
 const _TERR_CACHE='fixture-terr-222',_ELEV_CACHE='fixture-elev-222',_LASTMAP_KEY='fixture-last';
 activeTool='select'; // isto početno stanje kao aplikacija; osnovni popup fixture ima null
@@ -95,7 +95,7 @@ async def main():
     assert await page.locator('.mfav-edit-btn').first.evaluate('(e)=>Number(getComputedStyle(e).opacity)===1')
     await page.screenshot(path=str(b.OUT/f'favorite-maps-{theme}-{w}-{h}.png'));await page.evaluate('closeMapFavs()')
   await page.set_viewport_size({'width':390,'height':800});await page.evaluate('openMapFavs()')
-  await page.locator('[data-fav-action=open]').first.click();assert await page.evaluate('_sqlLayers[0].visible')
+  await page.locator('.mfav-activate[data-brzo=off]').first.click();assert await page.evaluate('_sqlLayers[0].visible')
   # Oblik iz Cache Storage i lokalna geometrija preživita reload bez mreže.
   await page.context.set_offline(True);await page.reload();await page.evaluate('terrainReady');await page.wait_for_function("tileAlphas('projectSlope')?.[1]>0")
   assert await page.evaluate('ProjectTerrain.dataFor().ring.length')==4

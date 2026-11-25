@@ -47,22 +47,59 @@
     const available=!!TL[fav.tlKey]||['_granice','_nagib','_ekspo'].includes(fav.tlKey);
     return {active:fav.tlKey===_activeLayerKey(),available,subtitle:['_granice','_nagib','_ekspo'].includes(fav.tlKey)?'Topo + '+(fav.tlKey==='_nagib'?'nagib terena':fav.tlKey==='_ekspo'?'ekspozicija':'granice odjela'):'Online podloga · offline samo sačuvani dijelovi',label:available?'Online / keš':'Sloj nedostupan'};
   }
+  // Brzi izbor (v5.0.1): Google satelit UVIJEK, pa do dvije offline karte sa telefona — zadnje
+  // skinuta/učitana prva (savedAt iz liste karata, setRecent). Nagib i ekspozicija su dugmad na
+  // kartici offline karte, ne zasebne kartice. Ispod su karte koje je korisnik sam dodao.
+  const GOOGLE='📡 Google',BRZO_MAX=2;let recent=null;
+  function setRecent(rows){recent=(rows||[]).filter(r=>r&&r.name).sort((a,b)=>(b.savedAt||0)-(a.savedAt||0)).map(r=>({name:r.name,savedAt:r.savedAt||0,srv:!!r.meta?._nativeId}));}
+  function offlineNajnovije(){
+    const naTel=new Set(local().map(sl=>sl.name));for(const r of deferred())if(!r.error)naTel.add(r.name);
+    let red=[];
+    if(recent)red=recent.filter(r=>naTel.has(r.name));
+    else{let srv=[];try{srv=JSON.parse(localStorage.getItem('tvlake_mapfav_srv_v1')||'[]');}catch(e){}
+      red=[...srv].reverse().filter(n=>naTel.has(n)).map(name=>({name,savedAt:0,srv:true}));}
+    for(const n of naTel)if(!red.some(r=>r.name===n))red.push({name:n,savedAt:0});
+    return red.slice(0,BRZO_MAX);
+  }
+  const datum=t=>{if(!t)return '';const d=new Date(t);return d.getDate()+'.'+(d.getMonth()+1)+'.'+d.getFullYear()+'.';};
+  const ovlNa=id=>typeof _OVL!=='undefined'&&!!_OVL[id]&&map.hasLayer(_OVL[id]);
+  function googleCard(){
+    const ok=typeof TL!=='undefined'&&!!TL[GOOGLE],akt=ok&&_activeLayerKey()===GOOGLE;
+    return '<article class="mfav-card mfav-brzo'+(akt?' active':'')+(!ok?' nedostupna':'')+'"><button type="button" class="mfav-activate" data-brzo="google" '+(ok?'':'disabled')+' aria-label="Otvori Google satelit" aria-pressed="'+akt+'"><span class="mfav-preview" data-kind="sat"><span class="mfav-sat-art" aria-hidden="true"></span><i class="mfav-tag">SATELIT</i></span><span class="mfav-copy"><span class="catalog-status">'+(akt?'✓ Prikazana':'Online podloga')+'</span><b>Google satelit</b><small>Treba internet · već gledani dijelovi rade i offline</small></span></button></article>';
+  }
+  function offlineCard(r,i){
+    const sl=local().find(x=>x.name===r.name),akt=!!sl&&!!sl.visible&&map.hasLayer(sl.layer),nag=akt&&ovlNa('slope'),eks=akt&&ovlNa('ekspo'),n=esc(r.name);
+    // Korisnik je kartu možda već dodao u omiljene pod svojim nazivom — taj naziv ima prednost.
+    const svoj=_mapFavs.find(f=>f.type==='sqlite'&&!f.ovl&&f.auto!=='srv'&&f.sqliteId===r.name),naziv=esc(svoj?svoj.name:r.name);
+    const chip=(ovl,txt,on)=>'<button type="button" class="mfav-chip'+(on?' on':'')+'" data-brzo="off" data-map-name="'+n+'" data-ovl="'+ovl+'" aria-pressed="'+on+'">'+txt+'</button>';
+    return '<article class="mfav-card mfav-brzo'+(akt?' active':'')+'"><button type="button" class="mfav-activate" data-brzo="off" data-map-name="'+n+'" data-ovl="" aria-label="'+esc('Otvori '+r.name)+'" aria-pressed="'+(akt&&!nag&&!eks)+'"><span class="mfav-preview" data-kind="off">'+_mapFavThumbHtml({type:'sqlite',sqliteId:r.name,name:r.name})+'<i class="mfav-tag">'+(i===0?'NAJNOVIJA':'OFFLINE')+'</i></span><span class="mfav-copy"><span class="catalog-status">'+(akt?'✓ Prikazana'+(nag?' · nagib':eks?' · ekspozicija':''):'Radi bez interneta')+'</span><b>'+naziv+'</b><small>'+(svoj&&svoj.name!==r.name?n+' · ':'')+(r.savedAt?(r.srv?'Skinuta ':'Učitana ')+datum(r.savedAt):'Sačuvana na telefonu')+'</small></span></button><div class="mfav-chips" role="group" aria-label="'+esc('Prikaz karte '+r.name)+'">'+chip('','Samo karta',akt&&!nag&&!eks)+chip('slope','+ Nagib',nag)+chip('ekspo','+ Ekspozicija',eks)+'</div></article>';
+  }
   function renderFavorites(){
     const el=document.getElementById('mapfav-grid');if(!el)return;
-    const count=document.getElementById('mapfav-count');if(count)count.textContent=_mapFavs.length+' sačuvanih karata';
-    const kind=fav=>fav.type==='tl'&&fav.tlKey==='📡 Google'?'sat':fav.type==='sqlite'?'off':'tl';
+    const kind=fav=>fav.type==='tl'&&fav.tlKey===GOOGLE?'sat':fav.type==='sqlite'?'off':'tl';
     const tag=fav=>fav.ovl==='slope'?'NAGIB':fav.ovl==='ekspo'?'EKSPOZ.':kind(fav)==='sat'?'SATELIT':kind(fav)==='off'?'OFFLINE':'ONLINE';
     const card=fav=>{
       const s=favoriteState(fav),key=esc(identity(fav));
-      return '<article class="mfav-card'+(s.active?' active':'')+(!s.available?' nedostupna':'')+'"><button type="button" class="mfav-activate" data-fav-action="open" data-fav-key="'+key+'" '+(!s.available?'disabled':'')+' aria-label="'+esc('Otvori '+fav.name)+'" aria-pressed="'+s.active+'"><span class="mfav-preview" data-kind="'+kind(fav)+'"'+(fav.ovl?' data-ovl="'+fav.ovl+'"':'')+'>'+_mapFavThumbHtml(fav)+'<i class="mfav-tag">'+tag(fav)+'</i></span><span class="mfav-copy"><span class="catalog-status">'+(s.active?'✓ Aktivna karta':esc(s.label))+'</span><b>'+esc(fav.name)+'</b><small>'+esc(s.subtitle)+'</small></span></button><button type="button" class="mfav-edit-btn" data-fav-action="edit" data-fav-key="'+key+'" aria-label="'+esc('Uredi '+fav.name)+'">⋮</button></article>';
+      return '<article class="mfav-card'+(s.active?' active':'')+(!s.available?' nedostupna':'')+'"><button type="button" class="mfav-activate" data-fav-action="open" data-fav-key="'+key+'" '+(!s.available?'disabled':'')+' aria-label="'+esc('Otvori '+fav.name)+'" aria-pressed="'+s.active+'"><span class="mfav-preview" data-kind="'+kind(fav)+'"'+(fav.ovl?' data-ovl="'+fav.ovl+'"':'')+'>'+_mapFavThumbHtml(fav)+'<i class="mfav-tag">'+tag(fav)+'</i></span><span class="mfav-copy"><span class="catalog-status">'+(s.active?'✓ Prikazana':esc(s.label))+'</span><b>'+esc(fav.name)+'</b><small>'+esc(s.subtitle)+'</small></span></button><button type="button" class="mfav-edit-btn" data-fav-action="edit" data-fav-key="'+key+'" aria-label="'+esc('Uredi '+fav.name)+'">⋮</button></article>';
     };
-    // Brzi izbor = zadnja skinuta karta sa servera, Google satelit i kombinacije sa nagibom/ekspozicijom;
-    // ostalo su karte koje je korisnik sam dodao. Kad je redoslijed ručno mijenjan, ide jedan spisak.
-    const brza=fav=>fav.auto==='srv'||(fav.type==='tl'&&fav.tlKey==='📡 Google');
-    const rucno=_mapFavs.some(fav=>fav.rucno),brze=rucno?[]:_mapFavs.filter(brza),moje=rucno?_mapFavs:_mapFavs.filter(fav=>!brza(fav));
-    const sek=(naslov,opis,lista)=>lista.length?'<h4 class="mfav-sek"><b>'+naslov+'</b><span>'+opis+'</span></h4>'+lista.map(card).join(''):'';
-    el.innerHTML=(_mapFavs.length?sek('Brzi izbor','karta sa servera · satelit · nagib · ekspozicija',brze)+sek(rucno?'Moj redoslijed':'Moje karte',rucno?'⋮ na kartici: preimenuj, pomjeri, ukloni':'dodane ručno',moje):'<div class="catalog-empty"><b>Tvoje najčešće karte na jednom mjestu</b><p>Aktiviraj kartu pa je dodaj ovdje za brži pristup.</p></div>')+'<button type="button" class="mfav-add-card" onclick="mapFavAddCurrent()"><span>＋</span><span>Dodaj trenutnu kartu</span></button>';
-    if(typeof _loadmapThumb==='function')for(const fav of _mapFavs)if(fav.type==='sqlite')_loadmapThumb(fav.sqliteId);
+    // Automatske stavke (karta sa servera i njene kombinacije, Google) su u Brzom izboru — u
+    // "Moje karte" ostaje samo ono što je korisnik sam dodao.
+    const off=offlineNajnovije(),uBrzom=new Set(off.map(r=>r.name));
+    // Ista offline karta (bez nagiba/ekspozicije) koja je već u Brzom izboru se ne ponavlja.
+    const moje=_mapFavs.filter(fav=>fav.auto!=='srv'&&!(fav.type==='tl'&&fav.tlKey===GOOGLE)&&!(fav.type==='sqlite'&&!fav.ovl&&uBrzom.has(fav.sqliteId)));
+    const count=document.getElementById('mapfav-count');
+    if(count)count.textContent='Satelit · '+off.length+' offline '+(off.length===1?'karta':'karte')+' · '+moje.length+' '+(moje.length===1?'moja':'mojih');
+    const prazno='<div class="mfav-prazno"><b>Nema offline karte na telefonu</b><span>Skini kartu sa servera ili učitaj MBTiles — zadnja skinuta se pojavi ovdje.</span><button type="button" onclick="closeMapFavs();openLoadMapScreen()">Učitaj kartu</button></div>';
+    el.innerHTML='<h4 class="mfav-sek"><b>Brzi izbor</b><span>satelit i zadnje skinute offline karte</span></h4>'+googleCard()+(off.length?off.map(offlineCard).join(''):prazno)
+      +'<h4 class="mfav-sek"><b>Moje karte</b><span>'+(moje.length?'⋮ preimenuj, pomjeri, ukloni':'dodaj kartu koju često koristiš')+'</span></h4>'+moje.map(card).join('')
+      +'<button type="button" class="mfav-add-card" onclick="mapFavAddCurrent()"><span>＋</span><span>Dodaj trenutnu kartu</span></button>';
+    if(typeof _loadmapThumb==='function'){for(const r of off)_loadmapThumb(r.name);for(const fav of moje)if(fav.type==='sqlite')_loadmapThumb(fav.sqliteId);}
+  }
+  async function brzoAction(btn){
+    if(btn.dataset.brzo==='google'){if(typeof TL!=='undefined'&&TL[GOOGLE]){setLayer(GOOGLE);if(typeof _mapFavPrimijeniOvl==='function')_mapFavPrimijeniOvl(null);}closeMapFavs();return;}
+    await openLocal(btn.dataset.mapName);
+    if(typeof _mapFavPrimijeniOvl==='function')_mapFavPrimijeniOvl(btn.dataset.ovl||null);
+    closeMapFavs();
   }
   async function favoriteAction(action,key){
     const i=findFav(key);if(i<0){renderFavorites();return;}const fav=_mapFavs[i];
@@ -71,10 +108,11 @@
     if(fav.type==='sqlite'){await openLocal(fav.sqliteId);if(typeof _mapFavPrimijeniOvl==='function')_mapFavPrimijeniOvl(fav.ovl||null);}else setLayer(fav.tlKey);
     closeMapFavs();
   }
-  root.MapCatalog={renderInstalled,renderOffline,renderFavorites,openLocal,localRows,favoriteState,identity};
+  root.MapCatalog={renderInstalled,renderOffline,renderFavorites,openLocal,localRows,favoriteState,identity,setRecent,offlineNajnovije};
   document.addEventListener('click',e=>{
-    const button=e.target.closest('[data-map-action],[data-fav-action]');if(!button)return;
-    if(button.dataset.mapAction==='open')openLocal(button.dataset.mapName);
+    const button=e.target.closest('[data-map-action],[data-fav-action],[data-brzo]');if(!button)return;
+    if(button.dataset.brzo){if(!button.disabled)brzoAction(button);}
+    else if(button.dataset.mapAction==='open')openLocal(button.dataset.mapName);
     else if(button.dataset.favAction)favoriteAction(button.dataset.favAction,button.dataset.favKey);
   });
 })(window);
