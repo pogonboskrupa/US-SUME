@@ -5281,3 +5281,7 @@ Bitmap keš SQLite karte ima tvrdu granicu 300 objekata. APK build obavezno pokr
 - **Instalirane karte** (`#ls-pane-inst`): kartica stanja offline terena na vrhu (`#inst-teren`, `data-stanje` ok/nema, dugme Preuzmi/Dopuni teren). Slojevi su samo prekidači sa stanjem "✓ Radi offline"/"Treba internet". Brisanje po redu je uklonjeno: četiri sloja dijele ISTI DEM keš, pa je bilo četiri dugmeta za isto brisanje. Sekcija "Memorija na telefonu" ima DEM i sjenčenje sa veličinom i jednim brisanjem. `_instAktivnoSync` broji uključene slojeve.
 - Testovi: `tests/js/map-catalog.test.js` (brzi izbor), `tests/browser/project-terrain-222.py` (klik na brzu offline karticu).
 - **Lokalno pokretanje browser testova**: `pip install playwright==1.55.0`, pa `UI_CHROMIUM=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome`. Stara putanja `chromium-1194` više ne postoji.
+
+### Admin → Korisnici: kolege iz kartice, vodeći samo za projektante (v5.0.2)
+- U "Upravljaj" kartici korisnika dugme **🤝 Kolege — s kim se može povezati** otvara postojeći `_zadaneUredi(uid)` (isti uređivač kao u Grupama → Zadane), pa se zadane kolege (uklj. dvosmjerno) mogu dodati odmah, bez odlaska u Grupe.
+- Kvačica **Vodeći projektant** se prikazuje samo za projektante; terenski profil (`_jeTerenski`) je nema.

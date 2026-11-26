@@ -3941,12 +3941,14 @@ function _admKarticaHtml(u, saSumarijom) {
           <select onchange="_admPripIzbor('${uid}',this,'${nmJs}')">${_pripadnostOpcije(u.pripadnost || '')}</select></label>` : ''}
         <button onclick="adminAzurirajKorisnika('${uid}')" title="Pošalji obavijest o novoj verziji u Primljene podatke ovog korisnika"
           style="width:100%;margin-bottom:8px;padding:7px 10px;background:#3f2d0c;border:1px solid #f59e0b;border-radius:6px;color:#fde68a;font-size:12px;cursor:pointer;">📢 Pošalji obavijest o ažuriranju</button>
-        <label style="display:flex;align-items:center;gap:7px;font-size:11px;color:#94a3b8;cursor:pointer;margin-bottom:8px;">
+        <button onclick="_zadaneUredi('${uid}')" title="Zadaj s kim ovaj korisnik može dijeliti podatke"
+          style="width:100%;margin-bottom:8px;padding:7px 10px;background:#12362a;border:1px solid #34d399;border-radius:6px;color:#a7f3d0;font-size:12px;cursor:pointer;">🤝 Kolege — s kim se može povezati</button>
+        ${_jeTerenski(u) ? '' : `<label style="display:flex;align-items:center;gap:7px;font-size:11px;color:#94a3b8;cursor:pointer;margin-bottom:8px;">
           <input type="checkbox" ${u.je_vodeci ? 'checked' : ''}
             onchange="adminSetVodeci('${uid}',this.checked,'${nmJs}')"
             style="width:15px;height:15px;accent-color:#a78bfa;cursor:pointer;">
           👁 Vodeći projektant — nadzorni pregled cijele šumarije
-        </label>
+        </label>`}
         <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
           <button onclick="adminUrediIme('${uid}')"
             style="flex:1;padding:7px 11px;background:#1e3a5f;border:1px solid #475569;border-radius:6px;color:#cbd5e1;font-size:12px;cursor:pointer;white-space:nowrap;"><svg class="ic"><use href="#ic-crtaj"/></svg> Uredi ime i prezime</button>
